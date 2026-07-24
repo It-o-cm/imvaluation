@@ -1,0 +1,80 @@
+/*
+ * Offer area: the schema-driven specification editor and the offer list toolbar.
+ *
+ * Depends on the custom properties declared in base.css.
+ */
+
+/* ---------- Schema-driven form ---------- */
+
+.schema-form { display: block; }
+
+/* ---------- Mode switch / JSON ---------- */
+
+.mode-switch { display: inline-flex; gap: 2px; padding: 2px; background: #eef0f4; border-radius: 7px; }
+.mode-switch .btn { border: none; background: transparent; padding: 5px 12px; }
+.mode-switch .btn.is-active { background: var(--im-surface); box-shadow: 0 1px 2px rgba(0, 0, 0, .08); font-weight: 600; }
+
+.json-editor textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--im-line);
+    border-radius: 6px;
+    background: #fbfcfd;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.55;
+    resize: vertical;
+}
+
+.json-editor textarea:focus { outline: none; border-color: var(--im-red); }
+
+.is-hidden { display: none !important; }
+
+/* ---------- Repeaters ---------- */
+
+.repeater { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.repeater-rows { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+.repeater-row { display: flex; gap: 8px; align-items: center; }
+
+.repeater-object-row {
+    padding: 14px;
+    border: 1px solid var(--im-line);
+    border-radius: 6px;
+    background: #fafbfc;
+}
+
+.repeater-object-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.repeater-index {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    color: var(--im-ink-soft);
+}
+
+/* ---------- Nested object group ---------- */
+
+.nested-object {
+    padding: 12px 14px;
+    border: 1px solid var(--im-line);
+    border-left: 3px solid #cfd5df;
+    border-radius: 6px;
+    background: #fcfdfe;
+}
+
+.nested-object .field-grid { gap: 12px; }
+
+/* ---------- List toolbar and notices ---------- */
+
+.page-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+

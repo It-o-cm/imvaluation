@@ -259,6 +259,35 @@ public class ProductFamily extends BaseEntity {
         this.flags = String.join(",", flagSet);
     }
 
+    /**
+     * Collects every distinct flag token defined across the families.
+     * <p>
+     * Flags are stored as a comma separated string on each family, so the values are
+     * split and de-duplicated in memory. The result is sorted alphabetically.
+     *
+     * @param query An optional fragment the flag must contain, may be null or blank.
+     * @param limit The maximum number of flags to return.
+     * @return The matching flags, never null.
+     */
+    public static List<String> searchFlags(String query, int limit) {
+        String term = query == null ? "" : query.trim().toLowerCase();
+        TreeSet<String> distinct = new TreeSet<>();
+        for (ProductFamily family : ProductFamily.<ProductFamily>list("flags is not null")) {
+            for (String flag : family.flags.split(",")) {
+                String trimmed = flag.trim();
+                if (!trimmed.isEmpty() && (term.isEmpty() || trimmed.toLowerCase().contains(term))) {
+                    distinct.add(trimmed);
+                }
+            }
+        }
+        return distinct.stream().limit(limit).collect(Collectors.toList());
+    }
+
+    /**
+     * Calculates a checksum based on the family's code, description and flags.
+     *
+     * @return Checksum integer value.
+     */
     @Override
     public int getChecksum() {
         // Excluding children from checksum for performance and stability.

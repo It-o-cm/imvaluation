@@ -21,6 +21,159 @@ import java.util.Map;
  */
 public class Basket {
 
+    /**
+     * JSON Schema describing an acceptable valuation request.
+     * <p>
+     * Offer specifications have been validated against a schema from the start; baskets,
+     * which come from outside the application, were not. This schema closes that gap: it
+     * is enforced by the valuation endpoint before the engine runs, so a malformed
+     * request fails immediately with a precise message instead of surfacing later as an
+     * {@link IllegalStateException} from deep inside a factory.
+     * <p>
+     * It is also the source of truth for the administration test form, which renders its
+     * fields from these declarations.
+     * <p>
+     * {@code additionalProperties} is left permissive on purpose: rejecting unknown
+     * fields would break existing callers sending attributes this version ignores.
+     */
+    public static final String BASKET_SCHEMA = """
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Basket Valuation Request",
+      "description": "A shopping basket submitted for valuation.",
+      "type": "object",
+      "required": [
+        "storeCode",
+        "items"
+      ],
+      "properties": {
+        "customerCode": {
+          "type": "string",
+          "description": "Identifier of the customer owning the basket.",
+          "x-label": "Customer code"
+        },
+        "storeCode": {
+          "type": "string",
+          "description": "Code of the store where the purchase takes place.",
+          "minLength": 1,
+          "x-widget": "store-code",
+          "x-label": "Store"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp of the basket, ISO-8601.",
+          "x-label": "Created at"
+        },
+        "deliveryMode": {
+          "type": "string",
+          "enum": ["HOME_DELIVERY", "PICKUP", "IN_STORE"],
+          "description": "How the basket is handed over to the customer.",
+          "x-label": "Delivery mode"
+        },
+        "deliveryAddress": {
+          "type": "object",
+          "description": "Destination of the delivery. Required when the mode is HOME_DELIVERY.",
+          "x-widget": "object",
+          "x-label": "Delivery address",
+          "properties": {
+            "streetLine1": { "type": "string", "x-label": "Street line 1" },
+            "streetLine2": { "type": "string", "x-label": "Street line 2" },
+            "postalCode": { "type": "string", "x-label": "Postal code" },
+            "city": { "type": "string", "x-label": "City" },
+            "country": { "type": "string", "x-label": "Country" },
+            "latitude": {
+              "type": "number",
+              "minimum": -90,
+              "maximum": 90,
+              "description": "Required to price a home delivery.",
+              "x-label": "Latitude"
+            },
+            "longitude": {
+              "type": "number",
+              "minimum": -180,
+              "maximum": 180,
+              "description": "Required to price a home delivery.",
+              "x-label": "Longitude"
+            }
+          }
+        },
+        "instructions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Special instructions, e.g. \"Deposit basket\".",
+          "x-widget": "string-list",
+          "x-label": "Instructions"
+        },
+        "vignettes": {
+          "type": "object",
+          "description": "Number of vignettes available per product EAN.",
+          "additionalProperties": { "type": "integer", "minimum": 0 },
+          "x-widget": "ean-quantity-map",
+          "x-label": "Vignettes"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "description": "The lines of the basket.",
+          "x-widget": "object-list",
+          "x-label": "Items",
+          "x-item-label": "line",
+          "items": {
+            "type": "object",
+            "required": ["produceEan", "quantity"],
+            "properties": {
+              "lineId": {
+                "type": "integer",
+                "description": "Line number, unique within the basket.",
+                "x-widget": "quantity",
+                "x-label": "Line"
+              },
+              "produceEan": {
+                "type": "string",
+                "description": "EAN of the scanned product.",
+                "minLength": 1,
+                "x-widget": "ean",
+                "x-label": "Product"
+              },
+              "quantity": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Units for a UNIT product, kilograms or litres otherwise.",
+                "x-label": "Quantity"
+              },
+              "pricePerUnitExclTax": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Overrides the catalog price. Requires the two other price fields.",
+                "x-widget": "money",
+                "x-label": "Unit price (excl. tax)"
+              },
+              "pricePerUnitInclTax": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Overrides the catalog price. Requires the two other price fields.",
+                "x-widget": "money",
+                "x-label": "Unit price (incl. tax)"
+              },
+              "vatRate": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Overrides the catalog price. Requires the two other price fields.",
+                "x-widget": "rate",
+                "x-label": "VAT rate"
+              },
+              "priceDate": {
+                "type": "string",
+                "description": "Date used to look the price up, ISO-8601. Defaults to now.",
+                "x-label": "Price date"
+              }
+            }
+          }
+        }
+      }
+    }
+    """;
+
     public Basket() {}
 
     /**

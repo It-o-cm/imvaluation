@@ -1,0 +1,150 @@
+/*
+ * Authentication area: sign-in page and the identity controls of the application header.
+ *
+ * Depends on the custom properties declared in base.css.
+ */
+
+/* ---------- Header identity ---------- */
+
+.app-identity {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.app-identity-name {
+    font-size: 13px;
+    color: var(--im-ink-soft);
+}
+
+/* ---------- Login page ---------- */
+
+.login-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    margin: 0;
+    background: var(--im-bg);
+}
+
+.login-panel {
+    width: 100%;
+    max-width: 360px;
+    padding: 32px;
+    background: var(--im-surface);
+    border: 1px solid var(--im-line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.login-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.login-form .field input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--im-line);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 14px;
+}
+
+.login-form .field input:focus {
+    outline: none;
+    border-color: var(--im-red);
+    box-shadow: 0 0 0 3px rgba(226, 0, 26, .1);
+}
+
+.login-submit { width: 100%; margin-top: 4px; }
+
+/* ---------- Identity controls ---------- */
+
+.app-identity-form { display: inline; margin: 0; }
+
+.app-identity-link {
+    border: none;
+    background: none;
+    padding: 0;
+    font: inherit;
+    font-size: 13px;
+    color: var(--im-ink-soft);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.app-identity-link:hover { color: var(--im-red); }
+
+.alert-warn {
+    background: #fff8ed;
+    border: 1px solid #f2dfc0;
+    color: var(--im-warn);
+}
+
+.badge-warn { background: #fff8ed; color: var(--im-warn); }
+
+/* ---------- Centred authentication panel ---------- */
+
+.auth-panel {
+    max-width: 420px;
+    margin: 24px auto 0;
+    padding: 28px 32px;
+    background: var(--im-surface);
+    border: 1px solid var(--im-line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.auth-title {
+    margin: 0 0 4px;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -.2px;
+}
+
+.auth-sub {
+    margin: 0 0 20px;
+    color: var(--im-ink-soft);
+    font-size: 14px;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.auth-form .field input {
+    width: 100%;
+    padding: 9px 12px;
+    border: 1px solid var(--im-line);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 14px;
+}
+
+.auth-form .field input:focus {
+    outline: none;
+    border-color: var(--im-red);
+    box-shadow: 0 0 0 3px rgba(226, 0, 26, .1);
+}
+
+.auth-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.auth-submit { flex: 1; }

@@ -38,6 +38,31 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
     /**
      * JSON Schema definition for validating Immediate Voucher specifications.
      */
+    /**
+     * The offer type discriminator handled by this factory.
+     */
+    public static final String OFFER_TYPE = "IMMEDIATE_VOUCHER";
+
+    /**
+     * Returns the offer type handled by this factory.
+     *
+     * @return The "IMMEDIATE_VOUCHER" discriminator.
+     */
+    @Override
+    public String getOfferType() {
+        return OFFER_TYPE;
+    }
+
+    /**
+     * Returns the JSON Schema describing the immediate voucher specification.
+     *
+     * @return The JSON Schema as a string.
+     */
+    @Override
+    public String getSchema() {
+        return OFFER_SCHEMA;
+    }
+
     private static final String OFFER_SCHEMA = """
     {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -56,23 +81,31 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
             { "type": "string" },
             { "type": "array", "items": { "type": "string" } }
           ],
-          "description": "The name(s) of the target offer class."
+          "description": "The name(s) of the target offer class.",
+          "x-widget": "string-list",
+          "x-label": "Target offer classes"
         },
         "targetEans": {
           "oneOf": [
             { "type": "string" },
             { "type": "array", "items": { "type": "string" } }
           ],
-          "description": "A list of EANs of the products on which the discount applies."
+          "description": "A list of EANs of the products on which the discount applies.",
+          "x-widget": "ean-list",
+          "x-label": "Discounted products"
         },
         "discountType": {
           "type": "string",
           "enum": ["FIXED_AMOUNT", "PERCENTAGE"],
-          "description": "The type of discount."
+          "description": "The type of discount.",
+          "x-label": "Discount type"
         },
         "value": {
           "type": "number",
-          "description": "The discount value (amount or percentage)."
+          "description": "The discount value (amount or percentage).",
+          "x-widget": "discount-value",
+          "x-label": "Discount value",
+          "x-unit-from": "discountType"
         }
       },
       "additionalProperties": false

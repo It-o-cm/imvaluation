@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign in &mdash; Valuation admin</title>
+    <link rel="stylesheet" href="/ui/base.css">
+    <link rel="stylesheet" href="/ui/auth.css">
+</head>
+<body class="login-body">
+<main class="login-panel">
+    <div class="login-brand">
+        <span class="app-brand-mark"></span>
+        <span class="app-brand-text">Valuation<b>admin</b></span>
+    </div>
+
+    {#if error}
+    <div class="alert alert-error" role="alert">{error}</div>
+    {/if}
+    {#if notice}
+    <div class="alert alert-ok" role="status">{notice}</div>
+    {/if}
+
+    <form class="login-form" method="post" action="/j_security_check">
+        <label class="field">
+            <span class="field-label">Username</span>
+            <input type="text" name="j_username" autocomplete="username" required autofocus>
+        </label>
+
+        <label class="field">
+            <span class="field-label">Password</span>
+            <input type="password" name="j_password" autocomplete="current-password" required>
+        </label>
+
+        <button class="btn btn-primary login-submit" type="submit">Sign in</button>
+    </form>
+</main>
+</body>
+</html>

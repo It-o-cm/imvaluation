@@ -19,4 +19,28 @@ public interface OfferApplierFactory {
      */
     Collection<OfferApplier> buildAppliers(BasketEvaluation basketEvaluation);
 
+    /**
+     * Returns the offer type handled by this factory (e.g., "DELIVERY", "N+M").
+     * <p>
+     * The value must match the {@code type} column of the offers targeted by this factory.
+     * Factories that are not driven by a database offer type return {@code null}.
+     *
+     * @return The offer type discriminator, or {@code null} if this factory has no type.
+     */
+    default String getOfferType() {
+        return null;
+    }
+
+    /**
+     * Returns the JSON Schema describing the specification accepted by this factory.
+     * <p>
+     * The schema is the single source of truth: it is used at runtime to validate
+     * offer specifications, and by the administration UI to render an edition form.
+     * Factories without a configurable specification return {@code null}.
+     *
+     * @return The JSON Schema as a string, or {@code null} if this factory has no schema.
+     */
+    default String getSchema() {
+        return null;
+    }
 }

@@ -36,6 +36,11 @@ import java.util.List;
 public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, EngineTrait {
 
     /**
+     * The offer type discriminator handled by this factory.
+     */
+    public static final String OFFER_TYPE = "MEAL_VOUCHER";
+
+    /**
      * ObjectMapper instance used to parse the JSON specification from the Offer entity.
      */
     private static final ObjectMapper mapper = new ObjectMapper();
@@ -53,17 +58,41 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
         "flag": {
           "type": "string",
           "description": "The product family flag required for a product to be eligible (e.g., 'FOOD').",
-          "minLength": 1
+          "minLength": 1,
+          "x-widget": "product-family-flag",
+          "x-label": "Eligibility flag"
         },
         "threshold": {
           "type": "number",
           "description": "The maximum amount (cap) that can be paid using meal vouchers.",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "x-widget": "money",
+          "x-label": "Payment cap"
         }
       },
       "additionalProperties": false
     }
     """;
+
+    /**
+     * Returns the offer type handled by this factory.
+     *
+     * @return The "MEAL_VOUCHER" discriminator.
+     */
+    @Override
+    public String getOfferType() {
+        return OFFER_TYPE;
+    }
+
+    /**
+     * Returns the JSON Schema describing the meal voucher specification.
+     *
+     * @return The JSON Schema as a string.
+     */
+    @Override
+    public String getSchema() {
+        return OFFER_SCHEMA;
+    }
 
     /**
      * Builds a collection of {@link AdvantageApplier} instances based on the provided basket evaluation context.

@@ -1,0 +1,57 @@
+{#include ui/layout}
+
+{#title}Users{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>Users</h1>
+        <p class="page-sub">{users.size} account{#if users.size != 1}s{/if}</p>
+    </div>
+    <a class="btn btn-primary" href="/ui/users/new">New user</a>
+</div>
+
+{#if notice}
+<div class="alert {#if noticeOk}alert-ok{#else}alert-error{/if}" role="status">{notice}</div>
+{/if}
+
+<table class="data-table">
+    <thead>
+    <tr>
+        <th>Username</th>
+        <th>Display name</th>
+        <th>Roles</th>
+        <th>Status</th>
+        <th class="col-actions"></th>
+    </tr>
+    </thead>
+    <tbody>
+    {#for user in users}
+    <tr>
+        <td>
+            <a class="link-strong" href="/ui/users/{user.id}">{user.username}</a>
+            {#if user.username == currentUser}<span class="chip chip-self">you</span>{/if}
+        </td>
+        <td class="col-muted">{user.displayName ?: '&mdash;'}</td>
+        <td>
+            {#for role in user.roleSet}<span class="chip chip-role">{role}</span>{/for}
+        </td>
+        <td>
+            {#if user.active}<span class="badge badge-ok">Active</span>
+            {#else}<span class="badge badge-off">Disabled</span>{/if}
+            {#if user.mustChangePassword}<span class="badge badge-warn">Password pending</span>{/if}
+        </td>
+        <td class="col-actions">
+            <a class="btn btn-small" href="/ui/users/{user.id}">Edit</a>
+            {#if user.username != currentUser}
+            <form method="post" action="/ui/users/{user.id}/delete"
+                  onsubmit="return confirm('Delete account {user.username} ?');">
+                <button class="btn btn-small btn-danger" type="submit">Delete</button>
+            </form>
+            {/if}
+        </td>
+    </tr>
+    {/for}
+    </tbody>
+</table>
+{/body}

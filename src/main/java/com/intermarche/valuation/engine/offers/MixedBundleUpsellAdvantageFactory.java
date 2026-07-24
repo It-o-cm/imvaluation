@@ -35,6 +35,21 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
     /**
      * JSON Schema definition for validating Mixed Bundle specifications.
      */
+    /**
+     * The offer type discriminator handled by this factory.
+     */
+    public static final String OFFER_TYPE = "MIXED_BUNDLE";
+
+    /**
+     * Returns the offer type handled by this factory.
+     *
+     * @return The "MIXED_BUNDLE" discriminator.
+     */
+    @Override
+    public String getOfferType() {
+        return OFFER_TYPE;
+    }
+
     private static final String OFFER_SCHEMA = """
     {
       "$schema": "http://json-schema.org/draft-07/schema#",

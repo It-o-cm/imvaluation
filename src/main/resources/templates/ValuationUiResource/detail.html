@@ -1,0 +1,58 @@
+{#include ui/layout}
+
+{#title}Valuation {trace.id}{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>Valuation</h1>
+        <p class="page-sub">{trace.createdAt} &middot; {trace.summary}</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn" href="/ui/valuations/new?replay={trace.id}">Replay</a>
+        <a class="btn btn-ghost" href="/ui/valuations">Back to list</a>
+    </div>
+</div>
+
+<section class="card">
+    <div class="meta-grid">
+        <div class="meta-item">
+            <span class="meta-label">Status</span>
+            {#if trace.success}<span class="badge badge-ok">Success</span>
+            {#else}<span class="badge badge-error">{trace.status}</span>{/if}
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">HTTP</span>
+            <span class="meta-value">{trace.httpStatus}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Duration</span>
+            <span class="meta-value">{#if trace.durationMs}{trace.durationMs} ms{#else}&mdash;{/if}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Total incl. tax</span>
+            <span class="meta-value">{#if trace.totalIncludingTax}{trace.totalIncludingTax} &euro;{#else}&mdash;{/if}</span>
+        </div>
+    </div>
+
+    {#if trace.errorMessage}
+    <div class="alert alert-error" role="alert">{trace.errorMessage}</div>
+    {/if}
+</section>
+
+<div class="payload-grid">
+    <section class="card">
+        <h2 class="card-title">Request</h2>
+        <pre class="payload">{trace.requestPayload}</pre>
+    </section>
+
+    <section class="card">
+        <h2 class="card-title">Response</h2>
+        {#if trace.responsePayload}
+        <pre class="payload">{trace.responsePayload}</pre>
+        {#else}
+        <p class="placeholder-note">No response was produced.</p>
+        {/if}
+    </section>
+</div>
+{/body}

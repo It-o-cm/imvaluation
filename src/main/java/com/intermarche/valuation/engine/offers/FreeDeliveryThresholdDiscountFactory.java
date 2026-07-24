@@ -45,6 +45,31 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
     /**
      * JSON Schema definition for validating Free Delivery Threshold specifications.
      */
+    /**
+     * The offer type discriminator handled by this factory.
+     */
+    public static final String OFFER_TYPE = "FREE_DELIVERY_THRESHOLD";
+
+    /**
+     * Returns the offer type handled by this factory.
+     *
+     * @return The "FREE_DELIVERY_THRESHOLD" discriminator.
+     */
+    @Override
+    public String getOfferType() {
+        return OFFER_TYPE;
+    }
+
+    /**
+     * Returns the JSON Schema describing the free delivery threshold specification.
+     *
+     * @return The JSON Schema as a string.
+     */
+    @Override
+    public String getSchema() {
+        return OFFER_SCHEMA;
+    }
+
     private static final String OFFER_SCHEMA = """
     {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -58,6 +83,9 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
         "tiers": {
           "type": "array",
           "minItems": 1,
+          "x-widget": "object-list",
+          "x-label": "Threshold tiers",
+          "x-item-label": "tier",
           "items": {
             "type": "object",
             "required": [
@@ -68,16 +96,22 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
             "properties": {
               "threshold": {
                 "type": "number",
-                "description": "Minimum basket amount required."
+                "description": "Minimum basket amount required.",
+                "x-widget": "money",
+                "x-label": "Basket minimum"
               },
               "value": {
                 "type": "number",
-                "description": "The discount value."
+                "description": "The discount value.",
+                "x-widget": "discount-value",
+                "x-label": "Discount value",
+                "x-unit-from": "type"
               },
               "type": {
                 "type": "string",
                 "enum": ["PERCENTAGE", "FIXED_AMOUNT"],
-                "description": "The type of discount."
+                "description": "The type of discount.",
+                "x-label": "Discount type"
               }
             }
           }

@@ -10,6 +10,9 @@ import jakarta.persistence.Index;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 
+import io.quarkus.panache.common.Page;
+
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -80,6 +83,25 @@ public class Store extends BaseEntity {
      */
     public static Store findByCode(String code) {
         return find("code", code).firstResult();
+    }
+
+    /**
+     * Searches stores by code prefix or by name fragment.
+     * <p>
+     * An empty query returns the first stores by code, so the caller can offer a starting
+     * selection rather than an empty dropdown.
+     *
+     * @param query The raw search term, may be null or blank.
+     * @param limit The maximum number of stores to return.
+     * @return The matching stores, never null.
+     */
+    public static List<Store> search(String query, int limit) {
+        String term = query == null ? "" : query.trim().toLowerCase();
+        if (term.isEmpty()) {
+            return find("order by code").page(Page.ofSize(limit)).list();
+        }
+        return find("lower(code) like ?1 or lower(name) like ?2 order by code",
+                term + "%", "%" + term + "%").page(Page.ofSize(limit)).list();
     }
 
     /**

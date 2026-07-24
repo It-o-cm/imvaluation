@@ -36,6 +36,31 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
     /**
      * JSON Schema definition for validating Vignette Discount specifications.
      */
+    /**
+     * The offer type discriminator handled by this factory.
+     */
+    public static final String OFFER_TYPE = "VIGNETTE_DISCOUNT";
+
+    /**
+     * Returns the offer type handled by this factory.
+     *
+     * @return The "VIGNETTE_DISCOUNT" discriminator.
+     */
+    @Override
+    public String getOfferType() {
+        return OFFER_TYPE;
+    }
+
+    /**
+     * Returns the JSON Schema describing the vignette discount specification.
+     *
+     * @return The JSON Schema as a string.
+     */
+    @Override
+    public String getSchema() {
+        return OFFER_SCHEMA;
+    }
+
     private static final String OFFER_SCHEMA = """
     {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -49,6 +74,9 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
         "catalog": {
           "type": "array",
           "minItems": 1,
+          "x-widget": "object-list",
+          "x-label": "Vignette catalog",
+          "x-item-label": "entry",
           "items": {
             "type": "object",
             "required": [
@@ -59,15 +87,21 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
             "properties": {
               "ean": {
                 "type": "string",
-                "description": "The product EAN."
+                "description": "The product EAN.",
+                "x-widget": "ean",
+                "x-label": "Product"
               },
               "vignettesRequired": {
                 "type": "integer",
                 "description": "Number of vignettes required.",
-                "minimum": 0
+                "minimum": 0,
+                "x-widget": "quantity",
+                "x-label": "Vignettes required"
               },
               "discount": {
                 "type": "object",
+                "x-widget": "object",
+                "x-label": "Discount",
                 "required": [
                   "type",
                   "value"
@@ -76,11 +110,15 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
                   "type": {
                     "type": "string",
                     "enum": ["PERCENTAGE", "FIXED_AMOUNT"],
-                    "description": "Type of discount calculation."
+                    "description": "Type of discount calculation.",
+                    "x-label": "Discount type"
                   },
                   "value": {
                     "type": "number",
-                    "description": "The discount value."
+                    "description": "The discount value.",
+                    "x-widget": "discount-value",
+                    "x-label": "Discount value",
+                    "x-unit-from": "type"
                   }
                 }
               }

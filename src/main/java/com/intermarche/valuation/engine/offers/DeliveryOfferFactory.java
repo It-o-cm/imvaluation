@@ -39,6 +39,11 @@ import java.util.List;
 public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
 
     /**
+     * The offer type discriminator handled by this factory.
+     */
+    public static final String OFFER_TYPE = "DELIVERY";
+
+    /**
      * JSON Schema definition for validating Delivery specifications.
      */
     private static final String OFFER_SCHEMA = """
@@ -55,11 +60,16 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
         "vatRate": {
           "type": "number",
           "description": "The VAT rate applied to the delivery price.",
-          "minimum": 0
+          "minimum": 0,
+          "x-widget": "rate",
+          "x-label": "VAT rate"
         },
         "tiers": {
           "type": "array",
           "minItems": 1,
+          "x-widget": "object-list",
+          "x-label": "Distance tiers",
+          "x-item-label": "tier",
           "items": {
             "type": "object",
             "required": [
@@ -70,12 +80,16 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
               "maxDistance": {
                 "type": "number",
                 "description": "Maximum distance in kilometers for this tier.",
-                "exclusiveMinimum": 0
+                "exclusiveMinimum": 0,
+                "x-widget": "distance",
+                "x-label": "Up to"
               },
               "price": {
                 "type": "number",
                 "description": "The price (TTC) for this tier.",
-                "exclusiveMinimum": 0
+                "exclusiveMinimum": 0,
+                "x-widget": "money",
+                "x-label": "Price (incl. tax)"
               }
             }
           }
@@ -84,6 +98,26 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
       "additionalProperties": false
     }
     """;
+
+    /**
+     * Returns the offer type handled by this factory.
+     *
+     * @return The "DELIVERY" discriminator.
+     */
+    @Override
+    public String getOfferType() {
+        return OFFER_TYPE;
+    }
+
+    /**
+     * Returns the JSON Schema describing the delivery specification.
+     *
+     * @return The JSON Schema as a string.
+     */
+    @Override
+    public String getSchema() {
+        return OFFER_SCHEMA;
+    }
 
     /**
      * Builds a collection of offer appliers based on the provided basket.

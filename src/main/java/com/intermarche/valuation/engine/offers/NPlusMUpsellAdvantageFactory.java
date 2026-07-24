@@ -27,6 +27,11 @@ import java.util.*;
 public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, EngineTrait {
 
     /**
+     * The offer type discriminator handled by this factory.
+     */
+    public static final String OFFER_TYPE = "N+M";
+
+    /**
      * JSON Schema definition for validating N+M specifications.
      */
     private static final String OFFER_SCHEMA = """
@@ -49,36 +54,57 @@ public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, En
             { "type": "string" },
             { "type": "array", "items": { "type": "string" } }
           ],
-          "description": "List of EANs included in the offer."
+          "description": "List of EANs included in the offer.",
+          "x-widget": "ean-list",
+          "x-label": "Eligible products"
         },
         "quantityToPay": {
           "type": "integer",
           "description": "The quantity N to pay for.",
-          "minimum": 1
+          "minimum": 1,
+          "x-widget": "quantity",
+          "x-label": "Quantity to pay (N)"
         },
         "discountedQuantity": {
           "type": "integer",
           "description": "The quantity M to discount.",
-          "minimum": 0
+          "minimum": 0,
+          "x-widget": "quantity",
+          "x-label": "Discounted quantity (M)"
         },
         "selectionStrategy": {
           "type": "string",
           "enum": ["CHEAPEST", "MOST_EXPENSIVE"],
-          "description": "Strategy to select items for discount."
+          "description": "Strategy to select items for discount.",
+          "x-label": "Selection strategy"
         },
         "discountType": {
           "type": "string",
           "enum": ["PERCENTAGE", "FIXED_AMOUNT"],
-          "description": "Type of discount calculation."
+          "description": "Type of discount calculation.",
+          "x-label": "Discount type"
         },
         "discountValue": {
           "type": "number",
-          "description": "The discount value."
+          "description": "The discount value.",
+          "x-widget": "discount-value",
+          "x-label": "Discount value",
+          "x-unit-from": "discountType"
         }
       },
       "additionalProperties": false
     }
     """;
+
+    /**
+     * Returns the offer type handled by this factory.
+     *
+     * @return The "N+M" discriminator.
+     */
+    @Override
+    public String getOfferType() {
+        return OFFER_TYPE;
+    }
 
     /**
      * Builds a collection of {@link AdvantageApplier} instances based on the basket evaluation.

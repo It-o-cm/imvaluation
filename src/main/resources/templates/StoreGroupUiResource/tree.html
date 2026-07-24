@@ -1,0 +1,39 @@
+{#include ui/layout}
+
+{#title}Hierarchy{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>Hierarchy</h1>
+        <p class="page-sub">Groups without a parent, and everything below them</p>
+    </div>
+    <a class="btn btn-ghost" href="/ui/store-groups">Back to list</a>
+</div>
+
+{#if roots.isEmpty()}
+<div class="empty-state">
+    <p>No group defined yet.</p>
+</div>
+{#else}
+<div class="card">
+    <ul class="tree">
+        {#for root in roots}
+        {#include StoreGroupUiResource/node group=root depth=1 /}
+        {/for}
+    </ul>
+</div>
+{/if}
+
+{#if !orphans.isEmpty()}
+<div class="card">
+    <h2 class="card-title">Stores in no group</h2>
+    <p class="card-sub">These stores are not reachable through any group.</p>
+    <div>
+        {#for store in orphans}
+        <span class="chip chip-store">{store.code} &mdash; {store.name}</span>
+        {/for}
+    </div>
+</div>
+{/if}
+{/body}

@@ -31,9 +31,9 @@ public class OfferImporterClient {
         // Column 5: store_group_code (Target StoreGroup)
         String csvData = """
             offer_code|offer_type|specification|store_code|store_group_code
-            PROMO_STORE_101|DISCOUNT|{"rate": 15, "unit": "PERCENT"}|0101|
-            PROMO_STORE_102|FLASH_SALE|{"newPrice": 1.99, "currency": "EUR"}|0102|
-            PROMO_GROUP_NORD|SPECIAL|{"description": "Free delivery"}||REGION_NORTH
+            PROMO_STORE_101|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer"], "targetEans": ["3300000000001"], "discountType": "PERCENTAGE", "value": 15.0}|0101|
+            PROMO_STORE_102|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer"], "targetEans": ["3300000000004"], "discountType": "FIXED_AMOUNT", "value": 1.99}|0102|
+            PROMO_GROUP_NORD|FREE_DELIVERY_THRESHOLD|{"tiers": [{"threshold": 30.0, "value": 100.0, "type": "PERCENTAGE"}]}||REGION_NORTH
             PROMO_2FOR1_3300|N+M|{"targetEans": ["3300000000001"], "quantityToPay": 2, "discountedQuantity": 1, "selectionStrategy": "CHEAPEST", "discountType": "PERCENTAGE", "discountValue": 100.0}|0101|
             PROMO_COFFEE_PACK|MIXED_BUNDLE|{"bundlePrice": 4.50, "vatRate": 0.20, "contents": [{"ean": "3300000000004", "quantity": 1.0}, {"ean": "3300000000013", "quantity": 1.0, "substituteEans": ["3300000000014"]}]}|0101|
             DELIVERY_HOME_0101|DELIVERY|{"tiers": [{"maxDistance": 8.0, "price": 5.90}, {"maxDistance": 16.0, "price": 9.90}], "vatRate": 0.20}|0101|

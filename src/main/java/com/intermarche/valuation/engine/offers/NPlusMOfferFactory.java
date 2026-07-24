@@ -34,6 +34,31 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
 
+    /**
+     * The offer type discriminator handled by this factory.
+     */
+    public static final String OFFER_TYPE = "N+M";
+
+    /**
+     * Returns the offer type handled by this factory.
+     *
+     * @return The "N+M" discriminator.
+     */
+    @Override
+    public String getOfferType() {
+        return OFFER_TYPE;
+    }
+
+    /**
+     * Returns the JSON Schema describing the N+M specification.
+     *
+     * @return The JSON Schema as a string.
+     */
+    @Override
+    public String getSchema() {
+        return OFFER_SCHEMA;
+    }
+
     private static final String OFFER_SCHEMA = """
     {
       "$schema": "http://json-schema.org/draft-07/schema#",
@@ -54,31 +79,42 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
             { "type": "string" },
             { "type": "array", "items": { "type": "string" } }
           ],
-          "description": "List of EANs included in the offer."
+          "description": "List of EANs included in the offer.",
+          "x-widget": "ean-list",
+          "x-label": "Eligible products"
         },
         "quantityToPay": {
           "type": "integer",
           "description": "The quantity N to pay for.",
-          "minimum": 0
+          "minimum": 0,
+          "x-widget": "quantity",
+          "x-label": "Quantity to pay (N)"
         },
         "discountedQuantity": {
           "type": "integer",
           "description": "The quantity M to discount.",
-          "minimum": 0
+          "minimum": 0,
+          "x-widget": "quantity",
+          "x-label": "Discounted quantity (M)"
         },
         "selectionStrategy": {
           "type": "string",
           "enum": ["CHEAPEST", "MOST_EXPENSIVE"],
-          "description": "Strategy to select items for discount."
+          "description": "Strategy to select items for discount.",
+          "x-label": "Selection strategy"
         },
         "discountType": {
           "type": "string",
           "enum": ["PERCENTAGE", "FIXED_AMOUNT"],
-          "description": "Type of discount calculation."
+          "description": "Type of discount calculation.",
+          "x-label": "Discount type"
         },
         "discountValue": {
           "type": "number",
-          "description": "The discount value."
+          "description": "The discount value.",
+          "x-widget": "discount-value",
+          "x-label": "Discount value",
+          "x-unit-from": "discountType"
         }
       },
       "additionalProperties": false

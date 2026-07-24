@@ -1,0 +1,60 @@
+{#include ui/layout}
+
+{#title}Test a valuation{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>Test a valuation</h1>
+        <p class="page-sub">Build a basket and submit it to the engine</p>
+    </div>
+    <a class="btn btn-ghost" href="/ui/valuations">Back to list</a>
+</div>
+
+{#if error}
+<div class="alert alert-error" role="alert">{error}</div>
+{/if}
+
+<form id="offer-form" class="stacked-form" method="post" action="/ui/valuations/new">
+    <section class="card">
+        <div class="card-title-row">
+            <h2 class="card-title">Basket</h2>
+            <div class="mode-switch">
+                <button type="button" class="btn btn-small is-active" data-mode="form">Form</button>
+                <button type="button" class="btn btn-small" data-mode="json">JSON</button>
+            </div>
+        </div>
+
+        <div id="schema-form" class="schema-form"></div>
+
+        <div id="json-editor" class="json-editor is-hidden">
+            <textarea id="specification-raw" spellcheck="false" rows="18"></textarea>
+            <p class="field-hint">Edits are synchronised with the form when switching back.</p>
+        </div>
+
+        <div id="spec-errors" class="spec-errors is-hidden"></div>
+
+        <input type="hidden" id="specification" name="request" value="">
+    </section>
+
+    <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Value this basket</button>
+    </div>
+</form>
+
+{#if responseJson}
+<section class="card">
+    <h2 class="card-title">Result</h2>
+    <pre class="payload">{responseJson}</pre>
+</section>
+{/if}
+
+<!--
+    The generator keys its schemas by offer type; the basket is registered under a
+    single fixed key and the selector is hidden, since there is nothing to choose.
+-->
+<script id="offer-schemas" type="application/json">{ "BASKET": {schemaJson.raw} }</script>
+<script id="offer-specification" type="application/json">{requestJson.raw}</script>
+<select id="offer-type" class="is-hidden"><option value="BASKET" selected>BASKET</option></select>
+<script src="/ui/schema-form.js"></script>
+{/body}

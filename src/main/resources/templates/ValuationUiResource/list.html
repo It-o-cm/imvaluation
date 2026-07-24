@@ -1,0 +1,148 @@
+{#include ui/layout}
+
+{#title}Valuations{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>Valuations</h1>
+        <p class="page-sub">{view.summary}</p>
+    </div>
+    <div class="page-actions">
+        <a class="btn btn-primary" href="/ui/valuations/new">New test</a>
+    </div>
+</div>
+
+{#if view.hasNotice}
+<div class="alert {#if view.noticeOk}alert-ok{#else}alert-error{/if}" role="status">{view.notice}</div>
+{/if}
+
+{#if !config.enabled}
+<div class="alert alert-warn" role="status">
+    Recording is turned off: valuations run normally but leave no trace.
+</div>
+{/if}
+
+{#if view.canWrite}
+<section class="card">
+    <h2 class="card-title">Recording</h2>
+    <form class="inline-form" method="post" action="/ui/valuations/config">
+        <label class="toggle-row">
+            <input type="checkbox" name="enabled" {#if config.enabled}checked{/if}>
+            <span>Record valuations</span>
+        </label>
+        <label class="field field-inline">
+            <span class="field-label">Keep for (days)</span>
+            <input type="number" name="retentionDays" min="1" max="365" value="{config.retentionDays}">
+        </label>
+        <button class="btn" type="submit">Save</button>
+    </form>
+    <form method="post" action="/ui/valuations/purge"
+          onsubmit="return confirm('Delete every recorded valuation ?');">
+        <button class="btn btn-small btn-danger" type="submit">Purge all now</button>
+    </form>
+</section>
+{/if}
+
+<form class="filter-bar" method="get" action="/ui/valuations">
+    <input type="hidden" name="sort" value="{view.sort}">
+    <input type="hidden" name="dir" value="{view.direction}">
+
+    <div class="filter-field">
+        <span class="filter-label">Store</span>
+        <div data-lookup="store" data-name="store" data-value="{view.filter('store')}"></div>
+    </div>
+
+    <label class="filter-field">
+        <span class="filter-label">Customer</span>
+        <input type="search" name="customer" placeholder="Any fragment" value="{view.filter('customer')}">
+    </label>
+
+    <label class="filter-field">
+        <span class="filter-label">Status</span>
+        <select name="status">
+            <option value="">All</option>
+            <option value="SUCCESS" {#if view.filter('status') == 'SUCCESS'}selected{/if}>Success</option>
+            <option value="REJECTED" {#if view.filter('status') == 'REJECTED'}selected{/if}>Rejected</option>
+            <option value="FAILED" {#if view.filter('status') == 'FAILED'}selected{/if}>Failed</option>
+        </select>
+    </label>
+
+    <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Filter</button>
+        {#if view.filtered}
+        <a class="btn btn-ghost" href="/ui/valuations">Reset</a>
+        {/if}
+    </div>
+</form>
+
+{#if view.rows.isEmpty()}
+<div class="empty-state">
+    <p>No valuation recorded yet.</p>
+    <p class="empty-hint">Submit a test basket, or wait for a client to call the endpoint.</p>
+</div>
+{#else}
+<table class="data-table">
+    <thead>
+    <tr>
+        <th class="{#if view.isSortedOn('createdAt')}is-sorted{/if}">
+            <a class="col-sort" href="{view.sortUrl('createdAt')}">When <span class="sort-arrow">{view.sortIndicator('createdAt')}</span></a>
+        </th>
+        <th class="{#if view.isSortedOn('storeCode')}is-sorted{/if}">
+            <a class="col-sort" href="{view.sortUrl('storeCode')}">Store <span class="sort-arrow">{view.sortIndicator('storeCode')}</span></a>
+        </th>
+        <th>Customer</th>
+        <th>Status</th>
+        <th class="{#if view.isSortedOn('totalIncludingTax')}is-sorted{/if}">
+            <a class="col-sort" href="{view.sortUrl('totalIncludingTax')}">Total <span class="sort-arrow">{view.sortIndicator('totalIncludingTax')}</span></a>
+        </th>
+        <th class="{#if view.isSortedOn('durationMs')}is-sorted{/if}">
+            <a class="col-sort" href="{view.sortUrl('durationMs')}">Time <span class="sort-arrow">{view.sortIndicator('durationMs')}</span></a>
+        </th>
+        <th class="col-actions"></th>
+    </tr>
+    </thead>
+    <tbody>
+    {#for trace in view.rows}
+    <tr>
+        <td><a class="link-strong" href="/ui/valuations/{trace.id}">{trace.createdAt}</a></td>
+        <td>{trace.storeCode ?: '&mdash;'}</td>
+        <td class="col-muted">{trace.customerCode ?: '&mdash;'}</td>
+        <td>
+            {#if trace.success}<span class="badge badge-ok">Success</span>
+            {#else}<span class="badge badge-error">{trace.status}</span>{/if}
+        </td>
+        <td class="col-muted">{#if trace.totalIncludingTax}{trace.totalIncludingTax} &euro;{#else}&mdash;{/if}</td>
+        <td class="col-muted">{#if trace.durationMs}{trace.durationMs} ms{#else}&mdash;{/if}</td>
+        <td class="col-actions">
+            <a class="btn btn-small" href="/ui/valuations/{trace.id}">View</a>
+            <a class="btn btn-small" href="/ui/valuations/new?replay={trace.id}">Replay</a>
+        </td>
+    </tr>
+    {/for}
+    </tbody>
+</table>
+
+{#if view.paged}
+<nav class="pager" aria-label="Pagination">
+    {#if view.hasPrevious}
+    <a class="btn btn-small" href="{view.pageUrl(1)}">First</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.currentPage - 1)}">Previous</a>
+    {#else}
+    <span class="btn btn-small is-disabled">First</span>
+    <span class="btn btn-small is-disabled">Previous</span>
+    {/if}
+    <span class="pager-status">Page {view.currentPage} of {view.pageCount}</span>
+    {#if view.hasNext}
+    <a class="btn btn-small" href="{view.pageUrl(view.currentPage + 1)}">Next</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.pageCount)}">Last</a>
+    {#else}
+    <span class="btn btn-small is-disabled">Next</span>
+    <span class="btn btn-small is-disabled">Last</span>
+    {/if}
+</nav>
+{/if}
+{/if}
+
+<script src="/ui/list-filters.js"></script>
+{/body}

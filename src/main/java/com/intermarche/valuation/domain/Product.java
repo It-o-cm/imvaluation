@@ -1,11 +1,14 @@
 package com.intermarche.valuation.domain;
 
 import com.intermarche.valuation.engine.AmountEvaluation;
+import io.quarkus.panache.common.Page;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -154,6 +157,43 @@ public class Product extends BaseEntity {
      */
     public static Product findActiveByEan(String ean) {
         return find("ean = ?1 and active = true", ean).firstResult();
+    }
+
+    /**
+     * Searches products by EAN prefix or by name and brand fragment.
+     * <p>
+     * A purely numeric query is treated as an EAN prefix, which lets a barcode scanner
+     * feed the field directly. Any other query is matched against the name and the brand.
+     * An empty query returns the first products by EAN, so the caller can offer a
+     * starting selection rather than an empty dropdown.
+     *
+     * @param query The raw search term, may be null or blank.
+     * @param limit The maximum number of products to return.
+     * @return The matching products, never null.
+     */
+    public static List<Product> search(String query, int limit) {
+        String term = query == null ? "" : query.trim().toLowerCase();
+        if (term.isEmpty()) {
+            return find("order by ean").page(Page.ofSize(limit)).list();
+        }
+        if (term.chars().allMatch(Character::isDigit)) {
+            return find("ean like ?1 order by ean", term + "%").page(Page.ofSize(limit)).list();
+        }
+        return find("lower(name) like ?1 or lower(brand) like ?1 or ean like ?2 order by name",
+                "%" + term + "%", term + "%").page(Page.ofSize(limit)).list();
+    }
+
+    /**
+     * Finds every product whose EAN belongs to the given collection.
+     *
+     * @param eans The EANs to resolve.
+     * @return The matching products, never null.
+     */
+    public static List<Product> findByEans(Collection<String> eans) {
+        if (eans == null || eans.isEmpty()) {
+            return List.of();
+        }
+        return list("ean in ?1", eans);
     }
 
     /**

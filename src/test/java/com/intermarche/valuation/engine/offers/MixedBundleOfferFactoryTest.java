@@ -144,6 +144,11 @@ public class MixedBundleOfferFactoryTest {
     // Tests for Schema Validation
     // --------------------------------------------------
 
+    /**
+     * Tests that a specification declaring no pricing mode at all is rejected.
+     * <p>
+     * The schema requires exactly one of "bundlePrice" or "discount".
+     */
     @Test
     void testBuildAppliers_MissingBundlePrice() {
         setUpDatabase();
@@ -155,6 +160,45 @@ public class MixedBundleOfferFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
 
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(evaluation));
+    }
+
+    /**
+     * Tests that a specification declaring both pricing modes at once is rejected.
+     * <p>
+     * A fixed bundle price and a discount are mutually exclusive.
+     */
+    @Test
+    void testBuildAppliers_BothPricingModes() {
+        setUpDatabase();
+        String jsonSpec = "{ \"bundlePrice\": 10.00, \"discount\": { \"type\": \"PERCENTAGE\", \"value\": 20.0 }, " +
+                "\"vatRate\": 0.20, \"contents\": [ { \"ean\": \"1000000000001\", \"quantity\": 1 } ] }";
+        DomainUtils.createAndPersistOffer("BOTH_MODES", store, "MIXED_BUNDLE", jsonSpec);
+        Basket basket = new Basket();
+        basket.storeCode = "STORE_01";
+        basket.items = List.of(createItem("1000000000001", 1.0));
+        BasketEvaluation evaluation = new BasketEvaluation(basket);
+
+        assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(evaluation));
+    }
+
+    /**
+     * Tests that a specification priced by a discount instead of a fixed amount is accepted.
+     */
+    @Test
+    void testBuildAppliers_DiscountMode() {
+        setUpDatabase();
+        String jsonSpec = "{ \"discount\": { \"type\": \"PERCENTAGE\", \"value\": 20.0 }, " +
+                "\"vatRate\": 0.20, \"contents\": [ { \"ean\": \"1000000000001\", \"quantity\": 1 } ] }";
+        DomainUtils.createAndPersistOffer("DISCOUNT_MODE", store, "MIXED_BUNDLE", jsonSpec);
+        Basket basket = new Basket();
+        basket.storeCode = "STORE_01";
+        basket.items = List.of(createItem("1000000000001", 1.0));
+        BasketEvaluation evaluation = new BasketEvaluation(basket);
+        evaluation.feedFrom(basket);
+
+        Collection<OfferApplier> appliers = factory.buildAppliers(evaluation);
+
+        assertEquals(1, appliers.size(), "Should create an applier when priced by discount");
     }
 
     // --------------------------------------------------
@@ -697,12 +741,14 @@ public class MixedBundleOfferFactoryTest {
         BigDecimal unitPrice = new BigDecimal("12.50"); // 12.50 TTC
         // Calcul attendu : 12.50 * 3 = 37.50
         String expectedType = "MixedBundle: MENU_01 x3 for 37.50€";
-        // Constructeur: (Store, offerCode, bundlePriceUnit, vatRate, coveredItems, bundleCount)
+        // Constructeur: (Store, offerCode, bundlePriceUnit, discountType, discountValue, vatRate, coveredItems, bundleCount)
         MixedBundleOfferFactory.MixedBundleApplication app =
                 new MixedBundleOfferFactory.MixedBundleApplication(
                         null,               // Store (non utilisé par getType)
                         code,
                         unitPrice,
+                        null,               // discountType (mode prix fixe)
+                        null,               // discountValue (mode prix fixe)
                         BigDecimal.ZERO,    // vatRate (non utilisé)
                         Collections.emptyList(), // coveredItems (non utilisé)
                         count
@@ -735,6 +781,8 @@ public class MixedBundleOfferFactoryTest {
                         store,
                         "BUNDLE_TEST",
                         new BigDecimal("10.00"),
+                        null,               // discountType (mode prix fixe)
+                        null,               // discountValue (mode prix fixe)
                         new BigDecimal("0.20"),
                         List.of(consumedItem),
                         1

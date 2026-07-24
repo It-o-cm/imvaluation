@@ -1,0 +1,96 @@
+{#include ui/layout}
+
+{#title}{#if offer.id}Edit offer {offer.code}{#else}New offer{/if}{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>{#if offer.id}Edit offer{#else}New offer{/if}</h1>
+        <p class="page-sub">{#if offer.id}{offer.code}{#else}The form adapts to the selected offer type{/if}</p>
+    </div>
+    <a class="btn btn-ghost" href="/ui/offers">Back to list</a>
+</div>
+
+{#if error}
+<div class="alert alert-error" role="alert">{error}</div>
+{/if}
+
+<form id="offer-form" class="stacked-form" method="post"
+      action="{#if offer.id}/ui/offers/{offer.id}{#else}/ui/offers/new{/if}">
+
+    <section class="card">
+        <h2 class="card-title">Identity</h2>
+        <div class="field-grid">
+            <label class="field">
+                <span class="field-label">Code <em>*</em></span>
+                {#if offer.id}
+                <input type="text" value="{offer.code}" disabled>
+                {#else}
+                <input type="text" name="code" value="{offer.code ?: ''}" required
+                       maxlength="50" placeholder="PROMO_SUMMER_2026">
+                {/if}
+                <span class="field-hint">Unique business key, cannot be changed afterwards.</span>
+            </label>
+
+            <label class="field">
+                <span class="field-label">Type <em>*</em></span>
+                <select id="offer-type" name="type" required>
+                    <option value="">&mdash; select a type &mdash;</option>
+                    {#for type in types}
+                    <option value="{type}" {#if type == offer.type}selected{/if}>{type}</option>
+                    {/for}
+                    {#if offer.type && !types.contains(offer.type)}
+                    <option value="{offer.type}" selected>{offer.type} (no schema)</option>
+                    {/if}
+                </select>
+                <span class="field-hint">Drives the specification form below.</span>
+            </label>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2 class="card-title">Targets</h2>
+        <p class="card-sub">At least one store or one store group is required.</p>
+        <div class="field-grid">
+            <div class="field">
+                <span class="field-label">Stores</span>
+                <div data-widget="store-code" data-name="storeCodes" data-value="{storeCodes}"></div>
+            </div>
+            <div class="field">
+                <span class="field-label">Store groups</span>
+                <div data-widget="store-group-code" data-name="storeGroupCodes" data-value="{storeGroupCodes}"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card">
+        <div class="card-title-row">
+            <h2 class="card-title">Specification</h2>
+            <div class="mode-switch">
+                <button type="button" class="btn btn-small is-active" data-mode="form">Form</button>
+                <button type="button" class="btn btn-small" data-mode="json">JSON</button>
+            </div>
+        </div>
+
+        <div id="schema-form" class="schema-form"></div>
+
+        <div id="json-editor" class="json-editor is-hidden">
+            <textarea id="specification-raw" spellcheck="false" rows="16"></textarea>
+            <p class="field-hint">Edits are synchronised with the form when switching back.</p>
+        </div>
+
+        <div id="spec-errors" class="spec-errors is-hidden"></div>
+
+        <input type="hidden" id="specification" name="specification" value="">
+    </section>
+
+    <div class="form-actions">
+        <button class="btn btn-primary" type="submit">{#if offer.id}Save changes{#else}Create offer{/if}</button>
+        <a class="btn btn-ghost" href="/ui/offers">Cancel</a>
+    </div>
+</form>
+
+<script id="offer-schemas" type="application/json">{schemasJson.raw}</script>
+<script id="offer-specification" type="application/json">{offer.specification ?: '{}'}</script>
+<script src="/ui/schema-form.js"></script>
+{/body}

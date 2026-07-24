@@ -37,6 +37,11 @@ import java.util.List;
 public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTrait {
 
     /**
+     * The offer type discriminator handled by this factory.
+     */
+    public static final String OFFER_TYPE = "DEPOSIT_BASKET";
+
+    /**
      * JSON Schema definition for validating Deposit Basket specifications.
      */
     private static final String OFFER_SCHEMA = """
@@ -54,22 +59,48 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
         "basketVolume": {
           "type": "number",
           "description": "The maximum volume capacity of one deposit basket (in Liters).",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "x-widget": "volume",
+          "x-label": "Basket capacity"
         },
         "basketPrice": {
           "type": "number",
           "description": "The fixed price (TTC) for renting one basket.",
-          "exclusiveMinimum": 0
+          "exclusiveMinimum": 0,
+          "x-widget": "money",
+          "x-label": "Price per basket (incl. tax)"
         },
         "vatRate": {
           "type": "number",
           "description": "The VAT rate for the basket rental.",
-          "minimum": 0
+          "minimum": 0,
+          "x-widget": "rate",
+          "x-label": "VAT rate"
         }
       },
       "additionalProperties": false
     }
     """;
+
+    /**
+     * Returns the offer type handled by this factory.
+     *
+     * @return The "DEPOSIT_BASKET" discriminator.
+     */
+    @Override
+    public String getOfferType() {
+        return OFFER_TYPE;
+    }
+
+    /**
+     * Returns the JSON Schema describing the deposit basket specification.
+     *
+     * @return The JSON Schema as a string.
+     */
+    @Override
+    public String getSchema() {
+        return OFFER_SCHEMA;
+    }
 
     /**
      * Builds a collection of offer appliers based on the provided evaluation context.

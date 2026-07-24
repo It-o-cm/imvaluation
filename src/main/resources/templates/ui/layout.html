@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{#insert title}Valuation admin{/}</title>
+    <link rel="stylesheet" href="/ui/base.css">
+    <link rel="stylesheet" href="/ui/auth.css">
+    <link rel="stylesheet" href="/ui/offer.css">
+    <link rel="stylesheet" href="/ui/user.css">
+    <link rel="stylesheet" href="/ui/store-group.css">
+    <link rel="stylesheet" href="/ui/valuation.css">
+</head>
+<body>
+<header class="app-header">
+    <a class="app-brand" href="/ui/offers">
+        <span class="app-brand-mark"></span>
+        <span class="app-brand-text">Valuation<b>admin</b></span>
+    </a>
+    <nav class="app-nav">
+        <a href="/ui/offers">Offers</a>
+        <a href="/ui/store-groups">Store groups</a>
+        <a href="/ui/valuations">Valuations</a>
+        {#if inject:currentUser.admin}
+        <a href="/ui/users">Users</a>
+        {/if}
+    </nav>
+    {#if inject:currentUser.authenticated}
+    <div class="app-identity">
+        <span class="app-identity-name">{inject:currentUser.name}</span>
+        <a class="app-identity-link" href="/ui/password">Password</a>
+        <form method="post" action="/ui/logout" class="app-identity-form">
+            <button class="app-identity-link" type="submit">Sign out</button>
+        </form>
+    </div>
+    {/if}
+</header>
+
+<main class="app-main">
+    {#insert body}{/}
+</main>
+
+<footer class="app-footer">
+    <span>Offer specifications are validated against the schema declared by the valuation engine.</span>
+</footer>
+</body>
+</html>

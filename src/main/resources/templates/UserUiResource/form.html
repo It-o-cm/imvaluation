@@ -1,0 +1,87 @@
+{#include ui/layout}
+
+{#title}{#if user.id}Edit user {user.username}{#else}New user{/if}{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>{#if user.id}Edit user{#else}New user{/if}</h1>
+        <p class="page-sub">{#if user.id}{user.username}{#else}Grant only the roles the account actually needs{/if}</p>
+    </div>
+    <a class="btn btn-ghost" href="/ui/users">Back to list</a>
+</div>
+
+{#if error}
+<div class="alert alert-error" role="alert">{error}</div>
+{/if}
+
+<form class="stacked-form" method="post"
+      action="{#if user.id}/ui/users/{user.id}{#else}/ui/users/new{/if}">
+
+    <section class="card">
+        <h2 class="card-title">Identity</h2>
+        <div class="field-grid">
+            <label class="field">
+                <span class="field-label">Username <em>*</em></span>
+                {#if user.id}
+                <input type="text" value="{user.username}" disabled>
+                <span class="field-hint">The login name cannot be changed.</span>
+                {#else}
+                <input type="text" name="username" value="{user.username ?: ''}" required maxlength="60">
+                <span class="field-hint">Used to sign in.</span>
+                {/if}
+            </label>
+
+            <label class="field">
+                <span class="field-label">Display name</span>
+                <input type="text" name="displayName" value="{user.displayName ?: ''}" maxlength="100">
+                <span class="field-hint">Shown in the interface instead of the login name.</span>
+            </label>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2 class="card-title">Password</h2>
+        <div class="field-grid">
+            <label class="field">
+                <span class="field-label">{#if user.id}New password{#else}Password <em>*</em>{/if}</span>
+                <input type="password" name="password" autocomplete="new-password"
+                       {#if !user.id}required{/if}>
+                <span class="field-hint">
+                    {#if user.id}Leave empty to keep the current password. Setting one requires
+                    the user to choose a new password at their next sign-in.
+                    {#else}At least 8 characters. The user must replace it at first sign-in.{/if}
+                </span>
+            </label>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2 class="card-title">Access</h2>
+        <p class="card-sub">Roles are cumulative: grant every level the account needs.</p>
+        <div class="role-grid">
+            {#for role in allRoles}
+            <label class="role-option">
+                <input type="checkbox" name="roles" value="{role}" {#if user.hasRole(role)}checked{/if}>
+                <span class="role-name">{role}</span>
+                <span class="role-desc">
+                    {#if role == 'VIEWER'}Browse and export, no modification.
+                    {#else if role == 'MANAGER'}Read every administration screen.
+                    {#else}Full access, including import and user management.{/if}
+                </span>
+            </label>
+            {/for}
+        </div>
+
+        <label class="toggle-row">
+            <input type="checkbox" name="active" {#if user.active}checked{/if}>
+            <span>Account enabled</span>
+        </label>
+    </section>
+
+    <div class="form-actions">
+        <button class="btn btn-primary" type="submit">{#if user.id}Save changes{#else}Create user{/if}</button>
+        <a class="btn btn-ghost" href="/ui/users">Cancel</a>
+    </div>
+</form>
+{/body}

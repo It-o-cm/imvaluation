@@ -1,0 +1,71 @@
+/*
+ * Valuation area: recorded exchanges and the test form.
+ *
+ * Depends on the custom properties declared in base.css.
+ */
+
+/* ---------- Payload panels ---------- */
+
+.payload-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 18px;
+    align-items: start;
+}
+
+.payload {
+    margin: 0;
+    padding: 12px;
+    max-height: 480px;
+    overflow: auto;
+    background: #fbfcfd;
+    border: 1px solid var(--im-line);
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+/* ---------- Trace metadata ---------- */
+
+.meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 14px;
+    margin-bottom: 4px;
+}
+
+.meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.meta-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .4px;
+    color: var(--im-ink-soft);
+}
+
+.meta-value {
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Inline configuration form ---------- */
+
+.inline-form {
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.field-inline { min-width: 140px; }
+
+.badge-error { background: #fdf1f2; color: #8f0d1d; }
