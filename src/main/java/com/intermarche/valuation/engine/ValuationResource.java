@@ -1,5 +1,6 @@
 package com.intermarche.valuation.engine;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intermarche.valuation.domain.ValuationTrace;
 import io.smallrye.common.annotation.RunOnVirtualThread;
@@ -40,7 +41,8 @@ public class ValuationResource implements EngineTrait {
     /**
      * Mapper used to echo the incoming basket into the trace.
      */
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper()
+            .setSerializationInclusion(JsonInclude.Include.NON_NULL);
 
     /**
      * The valuation engine instance.

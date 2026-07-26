@@ -58,6 +58,12 @@ body {
 .app-brand-text { font-size: 16px; font-weight: 500; letter-spacing: -.2px; }
 .app-brand-text b { font-weight: 700; }
 
+.app-nav {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
 .app-nav a {
     color: var(--im-ink-soft);
     text-decoration: none;
@@ -186,6 +192,10 @@ body {
     font-weight: 600;
     letter-spacing: .3px;
 }
+
+.badge-ok { background: #e8f3ee; color: var(--im-accent); }
+.badge-off { background: #f4f5f7; color: var(--im-ink-soft); }
+.badge-error { background: #fdf1f2; color: #8f0d1d; }
 
 .chip {
     display: inline-block;
@@ -539,12 +549,17 @@ body {
 .pager {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 20px;
+    padding: 12px;
+    border-top: 1px solid var(--im-line);
 }
 
 .pager-status {
-    margin: 0 8px;
+    margin: 0 16px;
+    text-align: center;
     color: var(--im-ink-soft);
     font-size: 13px;
     font-variant-numeric: tabular-nums;
@@ -560,3 +575,20 @@ body {
 
 .ac-single { gap: 0; }
 .ac-single .ac-input { font-size: 14px; }
+
+.pager-range {
+    display: block;
+    font-size: 12px;
+    color: var(--im-ink-soft);
+    font-weight: 400;
+}
+
+/* ---------- Shared utilities ---------- */
+
+.is-hidden { display: none !important; }
+
+.page-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}

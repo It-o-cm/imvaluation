@@ -6,42 +6,82 @@
 <div class="page-head">
     <div>
         <h1>Users</h1>
-        <p class="page-sub">{users.size} account{#if users.size != 1}s{/if}</p>
+        <p class="page-sub">{view.summary}</p>
     </div>
-    <a class="btn btn-primary" href="/ui/users/new">New user</a>
+    <div class="page-actions">
+        {#if view.canWrite}
+        <a class="btn btn-primary" href="/ui/users/new">New user</a>
+        {/if}
+    </div>
 </div>
 
-{#if notice}
-<div class="alert {#if noticeOk}alert-ok{#else}alert-error{/if}" role="status">{notice}</div>
+{#if view.hasNotice}
+<div class="alert {#if view.noticeOk}alert-ok{#else}alert-error{/if}" role="status">{view.notice}</div>
 {/if}
 
+<form class="filter-bar" method="get" action="/ui/users">
+    <input type="hidden" name="sort" value="{view.sort}">
+    <input type="hidden" name="dir" value="{view.direction}">
+
+    <label class="filter-field">
+        <span class="filter-label">Name</span>
+        <input type="search" name="q" placeholder="Login or display name" value="{view.filter('q')}">
+    </label>
+
+    <label class="filter-field">
+        <span class="filter-label">Role</span>
+        <select name="role">
+            <option value="">All</option>
+            {#for r in allRoles}
+            <option value="{r}" {#if view.filter('role') == r}selected{/if}>{r}</option>
+            {/for}
+        </select>
+    </label>
+
+    <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">Filter</button>
+        {#if view.filtered}
+        <a class="btn btn-ghost" href="/ui/users">Reset</a>
+        {/if}
+    </div>
+</form>
+
+{#if view.rows.isEmpty()}
+<div class="empty-state">
+    <p>No user matches the current filters.</p>
+</div>
+{#else}
 <table class="data-table">
     <thead>
     <tr>
-        <th>Username</th>
-        <th>Display name</th>
+        <th class="{#if view.isSortedOn('username')}is-sorted{/if}">
+            <a class="col-sort" href="{view.sortUrl('username')}">Username <span class="sort-arrow">{view.sortIndicator('username')}</span></a>
+        </th>
+        <th class="{#if view.isSortedOn('displayName')}is-sorted{/if}">
+            <a class="col-sort" href="{view.sortUrl('displayName')}">Display name <span class="sort-arrow">{view.sortIndicator('displayName')}</span></a>
+        </th>
         <th>Roles</th>
         <th>Status</th>
         <th class="col-actions"></th>
     </tr>
     </thead>
     <tbody>
-    {#for user in users}
+    {#for user in view.rows}
     <tr>
         <td>
             <a class="link-strong" href="/ui/users/{user.id}">{user.username}</a>
             {#if user.username == currentUser}<span class="chip chip-self">you</span>{/if}
         </td>
         <td class="col-muted">{user.displayName ?: '&mdash;'}</td>
-        <td>
+        <td class="col-targets">
             {#for role in user.roleSet}<span class="chip chip-role">{role}</span>{/for}
         </td>
         <td>
             {#if user.active}<span class="badge badge-ok">Active</span>
-            {#else}<span class="badge badge-off">Disabled</span>{/if}
-            {#if user.mustChangePassword}<span class="badge badge-warn">Password pending</span>{/if}
+            {#else}<span class="badge badge-error">Disabled</span>{/if}
         </td>
         <td class="col-actions">
+            {#if view.canWrite}
             <a class="btn btn-small" href="/ui/users/{user.id}">Edit</a>
             {#if user.username != currentUser}
             <form method="post" action="/ui/users/{user.id}/delete"
@@ -49,9 +89,34 @@
                 <button class="btn btn-small btn-danger" type="submit">Delete</button>
             </form>
             {/if}
+            {/if}
         </td>
     </tr>
     {/for}
     </tbody>
 </table>
+
+{#if view.paged}
+<nav class="pager" aria-label="Pagination">
+    {#if view.hasPrevious}
+    <a class="btn btn-small" href="{view.pageUrl(1)}">First</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.currentPage - 1)}">Previous</a>
+    {#else}
+    <span class="btn btn-small is-disabled">First</span>
+    <span class="btn btn-small is-disabled">Previous</span>
+    {/if}
+    <span class="pager-status">
+        Page {view.currentPage} of {view.pageCount}
+        <span class="pager-range">{view.rangeLabel}</span>
+    </span>
+    {#if view.hasNext}
+    <a class="btn btn-small" href="{view.pageUrl(view.currentPage + 1)}">Next</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.pageCount)}">Last</a>
+    {#else}
+    <span class="btn btn-small is-disabled">Next</span>
+    <span class="btn btn-small is-disabled">Last</span>
+    {/if}
+</nav>
+{/if}
+{/if}
 {/body}

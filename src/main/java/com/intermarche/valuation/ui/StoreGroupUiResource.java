@@ -1,10 +1,9 @@
 package com.intermarche.valuation.ui;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intermarche.valuation.domain.AppUser;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
-import io.quarkus.hibernate.orm.panache.PanacheQuery;
-import io.quarkus.panache.common.Page;
 import io.quarkus.qute.CheckedTemplate;
 import io.quarkus.qute.TemplateInstance;
 import io.smallrye.common.annotation.RunOnVirtualThread;
@@ -12,38 +11,34 @@ import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.DefaultValue;
-import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
-import jakarta.ws.rs.core.UriBuilder;
 import org.jboss.logging.Logger;
 
-import java.net.URI;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Administration screens managing store groups and their hierarchy.
+ * Workbench for organising stores into groups.
  * <p>
- * A group gathers stores and other groups. Both relationships are many-to-many, so a
- * store or a sub-group may belong to several parents at once; the screens are built
- * around that, showing every parent of a group rather than a single one.
+ * The screen shows the whole hierarchy on one side and every store on the other.
+ * Membership is changed by dragging or by selecting several rows at once; nothing is
+ * written until the pending changes are saved, so a reorganisation can be laid out in
+ * full and reviewed before it takes effect.
  * <p>
- * Cycles are refused when a link is created: a group cannot contain itself, directly or
- * through any chain of descendants.
+ * There is no per-row button and no separate edition form: the tree is the editor.
+ * Creating and renaming a group happens in place, and the whole state is submitted as a
+ * single document.
  */
 @Path("/ui/store-groups")
 @ApplicationScoped
@@ -54,34 +49,9 @@ public class StoreGroupUiResource {
     private static final Logger LOGGER = Logger.getLogger(StoreGroupUiResource.class);
 
     /**
-     * Number of groups displayed per page.
+     * Mapper used to exchange the hierarchy with the browser.
      */
-    private static final int PAGE_SIZE = 25;
-
-    /**
-     * Base path of the screen, used to build its links.
-     */
-    private static final String BASE_PATH = "/ui/store-groups";
-
-    /**
-     * Sort key ordering groups by their business code.
-     */
-    private static final String SORT_CODE = "code";
-
-    /**
-     * Sort key ordering groups by their display name.
-     */
-    private static final String SORT_NAME = "name";
-
-    /**
-     * Sort key ordering groups by the number of stores they hold directly.
-     */
-    private static final String SORT_STORES = "stores";
-
-    /**
-     * Every sort key accepted by this screen.
-     */
-    private static final Set<String> SORTABLE = Set.of(SORT_CODE, SORT_NAME, SORT_STORES);
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /**
      * Type-safe declarations of the Qute templates used by this resource.
@@ -90,424 +60,213 @@ public class StoreGroupUiResource {
     public static class Templates {
 
         /**
-         * Renders the group list screen.
+         * Renders the workbench.
          *
-         * @param view The view model carrying the page, the filters and the sort state.
+         * @param modelJson The hierarchy and the stores, serialized for the editor.
+         * @param canWrite  Whether the signed-in user may reorganise the hierarchy.
          * @return The template instance to render.
          */
-        public static native TemplateInstance list(ListView<StoreGroup> view);
-
-        /**
-         * Renders the group creation or edition form.
-         *
-         * @param group    The group being edited, or null when creating.
-         * @param parents  The groups declaring this one as a child.
-         * @param canWrite Whether the signed-in user may modify the group.
-         * @param error    An error message to display, may be null.
-         * @return The template instance to render.
-         */
-        public static native TemplateInstance form(StoreGroup group, List<StoreGroup> parents,
-                                                   boolean canWrite, String error);
-
-        /**
-         * Renders the hierarchy overview.
-         *
-         * @param roots    The groups that are not a child of any other.
-         * @param orphans  The stores belonging to no group at all.
-         * @param canWrite Whether the signed-in user may modify the hierarchy.
-         * @return The template instance to render.
-         */
-        public static native TemplateInstance tree(List<StoreGroup> roots, List<Store> orphans,
-                                                   boolean canWrite);
+        public static native TemplateInstance workbench(String modelJson, boolean canWrite);
     }
 
     // --------------------------------------------------
-    // Screens
+    // Screen
     // --------------------------------------------------
 
     /**
-     * Displays a page of store groups.
+     * Displays the workbench.
      *
-     * @param search A fragment matched against the code and the name, may be null or blank.
-     * @param store  A store code the group must contain, may be null or blank.
-     * @param sort   The column driving the sort, defaulting to the code.
-     * @param dir    The sort direction, either "asc" or "desc".
-     * @param page   The requested page number, defaulting to the first one.
-     * @param notice A message to display, typically the outcome of a previous action.
-     * @param noticeOk Whether the message reports a success.
      * @param securityContext The context identifying the signed-in user.
-     * @return The rendered list screen.
+     * @return The rendered workbench.
      */
     @GET
     @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance list(@QueryParam("q") String search,
-                                 @QueryParam("store") String store,
-                                 @QueryParam("sort") @DefaultValue(SORT_CODE) String sort,
-                                 @QueryParam("dir") @DefaultValue("asc") String dir,
-                                 @QueryParam("page") @DefaultValue("1") int page,
-                                 @QueryParam("notice") String notice,
-                                 @QueryParam("noticeOk") @DefaultValue("true") boolean noticeOk,
-                                 @Context SecurityContext securityContext) {
-        LOGGER.debug("Entering method list");
-        String sortKey = SORTABLE.contains(sort) ? sort : SORT_CODE;
-        boolean descending = "desc".equalsIgnoreCase(dir);
-        PanacheQuery<StoreGroup> query = queryGroups(search, store, sortKey, descending)
-                .page(Page.ofSize(PAGE_SIZE));
-        long totalCount = query.count();
-        int pageCount = Math.max(1, query.pageCount());
-        int currentPage = Math.min(Math.max(page, 1), pageCount);
-        List<StoreGroup> groups = query.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
-
-        Map<String, String> filters = new LinkedHashMap<>();
-        filters.put("q", search);
-        filters.put("store", store);
-        ListView<StoreGroup> view = new ListView<>(groups, BASE_PATH, filters, sortKey, descending,
-                currentPage, pageCount, totalCount, "store group", notice, noticeOk,
-                canWrite(securityContext));
-        return Templates.list(view);
+    public TemplateInstance workbench(@Context SecurityContext securityContext) {
+        LOGGER.debug("Entering method workbench");
+        return Templates.workbench(buildModelJson(), canWrite(securityContext));
     }
 
+    // --------------------------------------------------
+    // Persistence
+    // --------------------------------------------------
+
     /**
-     * Displays the hierarchy as a tree, starting from the groups without a parent.
+     * Applies a whole reorganisation submitted by the editor.
      * <p>
-     * Stores belonging to no group are listed apart: they are usually a configuration
-     * oversight, and the overview is the natural place to notice them.
+     * The payload describes the intended end state rather than a list of operations: the
+     * groups that must exist, their names, and the members of each. Replacing the state
+     * wholesale keeps the browser and the database in step even when several changes were
+     * accumulated before saving.
      *
-     * @param securityContext The context identifying the signed-in user.
-     * @return The rendered hierarchy screen.
-     */
-    @GET
-    @Path("/tree")
-    @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance tree(@Context SecurityContext securityContext) {
-        LOGGER.debug("Entering method tree");
-        List<Store> orphans = Store.find(
-                "select s from Store s where s.id not in"
-                        + " (select st.id from StoreGroup g join g.stores st) order by s.code").list();
-        return Templates.tree(StoreGroup.findRoots(), orphans, canWrite(securityContext));
-    }
-
-    /**
-     * Displays an empty form for creating a group.
-     *
-     * @param securityContext The context identifying the signed-in user.
-     * @return The rendered creation form.
-     */
-    @GET
-    @Path("/new")
-    @RolesAllowed(AppUser.ROLE_ADMIN)
-    @Produces(MediaType.TEXT_HTML)
-    public TemplateInstance create(@Context SecurityContext securityContext) {
-        LOGGER.debug("Entering method create");
-        return Templates.form(new StoreGroup(), List.of(), true, null);
-    }
-
-    /**
-     * Displays the edition form of an existing group.
-     *
-     * @param id The identifier of the group to edit.
-     * @param securityContext The context identifying the signed-in user.
-     * @return The rendered edition form, or a 404 response when the group does not exist.
-     */
-    @GET
-    @Path("/{id}")
-    @Produces(MediaType.TEXT_HTML)
-    public Response edit(@PathParam("id") Long id, @Context SecurityContext securityContext) {
-        LOGGER.debug("Entering method edit with id: " + id);
-        StoreGroup group = StoreGroup.findById(id);
-        if (group == null) {
-            LOGGER.error("StoreGroup with id " + id + " not found");
-            return Response.status(Response.Status.NOT_FOUND).entity("Store group " + id + " not found").build();
-        }
-        return Response.ok(Templates.form(group, StoreGroup.findParentsOf(group),
-                canWrite(securityContext), null)).build();
-    }
-
-    // --------------------------------------------------
-    // Mutations
-    // --------------------------------------------------
-
-    /**
-     * Creates a group from the submitted form.
-     *
-     * @param code            The unique business code.
-     * @param name            The display name.
-     * @param storeCodes      The codes of the stores to attach, comma separated.
-     * @param storeGroupCodes The codes of the sub-groups to attach, comma separated.
-     * @return A redirection to the list screen, or the form again when validation fails.
+     * @param payload The intended hierarchy, as produced by the editor.
+     * @return A confirmation, or a conflict describing why the hierarchy was refused.
      */
     @POST
-    @Path("/new")
     @RolesAllowed(AppUser.ROLE_ADMIN)
-    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    @Produces(MediaType.TEXT_HTML)
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
     @Transactional(rollbackOn = Exception.class)
-    public Response save(@FormParam("code") String code,
-                         @FormParam("name") String name,
-                         @FormParam("storeCodes") String storeCodes,
-                         @FormParam("storeGroupCodes") String storeGroupCodes) {
-        LOGGER.debug("Entering method save for code: " + code);
-        StoreGroup group = new StoreGroup();
-        group.code = code == null ? null : code.trim();
-        group.name = name;
-
-        if (group.code == null || group.code.isBlank()) {
-            return renderError(group, "The code is mandatory.");
+    public Response save(HierarchyPayload payload) {
+        LOGGER.debug("Entering method save");
+        if (payload == null || payload.groups == null) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("error", "Nothing to save.")).build();
         }
-        if (group.name == null || group.name.isBlank()) {
-            return renderError(group, "The name is mandatory.");
-        }
-        if (StoreGroup.count("code", group.code) > 0) {
-            return renderError(group, "A group with code '" + group.code + "' already exists.");
-        }
-        String error = applyLinks(group, storeCodes, storeGroupCodes);
+        String error = apply(payload);
         if (error != null) {
-            return renderError(group, error);
+            LOGGER.warn("Rejected hierarchy: " + error);
+            // Rolling back leaves the browser holding its pending state, so the user can
+            // correct the offending link without losing the rest of the reorganisation.
+            throw new RejectedHierarchyException(error);
         }
-        group.persist();
-        LOGGER.debug("Exiting method save. Created ID: " + group.id);
-        return redirectWithNotice("Group '" + group.code + "' created.", true);
+        LOGGER.debug("Exiting method save");
+        return Response.ok(Map.of("saved", true)).build();
     }
 
     /**
-     * Updates a group from the submitted form.
+     * Applies the submitted hierarchy to the database.
      *
-     * @param id              The identifier of the group to update.
-     * @param name            The display name.
-     * @param storeCodes      The codes of the stores to attach, comma separated.
-     * @param storeGroupCodes The codes of the sub-groups to attach, comma separated.
-     * @return A redirection to the list screen, or the form again when validation fails.
+     * @param payload The intended end state.
+     * @return An error message when the hierarchy must be refused, {@code null} on success.
      */
-    @POST
-    @Path("/{id}")
-    @RolesAllowed(AppUser.ROLE_ADMIN)
-    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
-    @Produces(MediaType.TEXT_HTML)
-    @Transactional(rollbackOn = Exception.class)
-    public Response update(@PathParam("id") Long id,
-                           @FormParam("name") String name,
-                           @FormParam("storeCodes") String storeCodes,
-                           @FormParam("storeGroupCodes") String storeGroupCodes) {
-        LOGGER.debug("Entering method update for id: " + id);
-        StoreGroup group = StoreGroup.findById(id);
-        if (group == null) {
-            return Response.status(Response.Status.NOT_FOUND).entity("Store group " + id + " not found").build();
-        }
-        if (name == null || name.isBlank()) {
-            return renderError(group, "The name is mandatory.");
-        }
-        group.name = name;
-        String error = applyLinks(group, storeCodes, storeGroupCodes);
-        if (error != null) {
-            return renderError(group, error);
-        }
-        LOGGER.debug("Exiting method update");
-        return redirectWithNotice("Group '" + group.code + "' updated.", true);
-    }
+    private String apply(HierarchyPayload payload) {
+        Map<String, StoreGroup> byCode = new LinkedHashMap<>();
 
-    /**
-     * Deletes a group.
-     * <p>
-     * The group is first detached from every parent referencing it, otherwise the join
-     * table would keep a row pointing at a deleted row.
-     *
-     * @param id The identifier of the group to delete.
-     * @return A redirection to the list screen carrying the outcome.
-     */
-    @POST
-    @Path("/{id}/delete")
-    @RolesAllowed(AppUser.ROLE_ADMIN)
-    @Produces(MediaType.TEXT_HTML)
-    @Transactional(rollbackOn = Exception.class)
-    public Response delete(@PathParam("id") Long id) {
-        LOGGER.debug("Entering method delete for id: " + id);
-        StoreGroup group = StoreGroup.findById(id);
-        if (group == null) {
-            return redirectWithNotice("Group not found.", false);
-        }
-        String code = group.code;
-        for (StoreGroup parent : StoreGroup.findParentsOf(group)) {
-            parent.storeGroups.remove(group);
-        }
-        group.stores.clear();
-        group.storeGroups.clear();
-        group.delete();
-        LOGGER.debug("Exiting method delete");
-        return redirectWithNotice("Group '" + code + "' deleted.", true);
-    }
-
-    /**
-     * Detaches a single store from a group.
-     * <p>
-     * Offered on the edition screen so a store can be removed without resubmitting the
-     * whole list of members.
-     *
-     * @param id        The identifier of the group.
-     * @param storeCode The code of the store to detach.
-     * @return A redirection to the edition screen.
-     */
-    @POST
-    @Path("/{id}/detach-store")
-    @RolesAllowed(AppUser.ROLE_ADMIN)
-    @Produces(MediaType.TEXT_HTML)
-    @Transactional(rollbackOn = Exception.class)
-    public Response detachStore(@PathParam("id") Long id, @FormParam("storeCode") String storeCode) {
-        StoreGroup group = StoreGroup.findById(id);
-        if (group == null) {
-            return redirectWithNotice("Group not found.", false);
-        }
-        group.stores.removeIf(store -> store.code.equals(storeCode));
-        return Response.seeOther(UriBuilder.fromPath(BASE_PATH + "/" + id).build()).build();
-    }
-
-    /**
-     * Detaches a single sub-group from a group.
-     *
-     * @param id        The identifier of the parent group.
-     * @param childCode The code of the sub-group to detach.
-     * @return A redirection to the edition screen.
-     */
-    @POST
-    @Path("/{id}/detach-group")
-    @RolesAllowed(AppUser.ROLE_ADMIN)
-    @Produces(MediaType.TEXT_HTML)
-    @Transactional(rollbackOn = Exception.class)
-    public Response detachGroup(@PathParam("id") Long id, @FormParam("childCode") String childCode) {
-        StoreGroup group = StoreGroup.findById(id);
-        if (group == null) {
-            return redirectWithNotice("Group not found.", false);
-        }
-        group.storeGroups.removeIf(child -> child.code.equals(childCode));
-        return Response.seeOther(UriBuilder.fromPath(BASE_PATH + "/" + id).build()).build();
-    }
-
-    // --------------------------------------------------
-    // Linking
-    // --------------------------------------------------
-
-    /**
-     * Replaces the stores and sub-groups attached to a group.
-     * <p>
-     * Every referenced code must exist, and no sub-group may introduce a cycle. The
-     * group's own collections are left untouched when validation fails, so a rejected
-     * submission never leaves a half-applied hierarchy.
-     *
-     * @param group           The group being populated.
-     * @param storeCodes      The codes of the stores to attach, comma separated.
-     * @param storeGroupCodes The codes of the sub-groups to attach, comma separated.
-     * @return An error message when validation fails, {@code null} on success.
-     */
-    private String applyLinks(StoreGroup group, String storeCodes, String storeGroupCodes) {
-        List<String> requestedStores = splitCsv(storeCodes);
-        List<String> requestedGroups = splitCsv(storeGroupCodes);
-
-        List<Store> stores = new ArrayList<>();
-        for (String code : requestedStores) {
-            Store store = Store.findByCode(code);
-            if (store == null) {
-                return "Unknown store code: " + code;
+        // 1. Create or update every declared group before linking, so a group can
+        //    reference another one created in the same submission.
+        for (GroupPayload declared : payload.groups) {
+            if (declared.code == null || declared.code.isBlank()) {
+                return "A group is missing its code.";
             }
-            stores.add(store);
+            String code = declared.code.trim();
+            StoreGroup group = StoreGroup.findByCode(code);
+            if (group == null) {
+                group = new StoreGroup();
+                group.code = code;
+                group.persist();
+            }
+            group.name = declared.name == null || declared.name.isBlank() ? code : declared.name.trim();
+            byCode.put(code, group);
         }
 
-        List<StoreGroup> children = new ArrayList<>();
-        for (String code : requestedGroups) {
-            StoreGroup child = StoreGroup.findByCode(code);
-            if (child == null) {
-                return "Unknown group code: " + code;
+        // 2. Remove the groups the editor no longer declares.
+        for (StoreGroup group : StoreGroup.<StoreGroup>listAll()) {
+            if (!byCode.containsKey(group.code)) {
+                for (StoreGroup parent : StoreGroup.findParentsOf(group)) {
+                    parent.storeGroups.remove(group);
+                }
+                group.stores.clear();
+                group.storeGroups.clear();
+                group.delete();
             }
-            if (StoreGroup.wouldCreateCycle(group, child)) {
-                return "Adding '" + code + "' would create a cycle in the hierarchy.";
-            }
-            children.add(child);
         }
 
-        group.stores.clear();
-        group.stores.addAll(stores);
-        group.storeGroups.clear();
-        group.storeGroups.addAll(children);
+        // 3. Replace the membership of every surviving group.
+        for (GroupPayload declared : payload.groups) {
+            StoreGroup group = byCode.get(declared.code.trim());
+            Set<Store> stores = new HashSet<>();
+            if (declared.storeCodes != null) {
+                for (String code : declared.storeCodes) {
+                    Store store = Store.findByCode(code);
+                    if (store == null) {
+                        return "Unknown store code: " + code;
+                    }
+                    stores.add(store);
+                }
+            }
+            Set<StoreGroup> children = new HashSet<>();
+            if (declared.childCodes != null) {
+                for (String code : declared.childCodes) {
+                    StoreGroup child = byCode.get(code);
+                    if (child == null) {
+                        return "Unknown group code: " + code;
+                    }
+                    children.add(child);
+                }
+            }
+            group.stores.clear();
+            group.stores.addAll(stores);
+            group.storeGroups.clear();
+            group.storeGroups.addAll(children);
+        }
+
+        // 4. Cycles are checked once the whole graph is in place: a submission may move
+        //    several groups at once, and an intermediate state can look circular while
+        //    the end state is not.
+        for (StoreGroup group : byCode.values()) {
+            if (reaches(group, group, new HashSet<>())) {
+                return "Group '" + group.code + "' ends up containing itself.";
+            }
+        }
         return null;
     }
 
-    // --------------------------------------------------
-    // Query
-    // --------------------------------------------------
-
     /**
-     * Builds the query backing the list screen.
+     * Indicates whether a group reaches a target by walking down its descendants.
      *
-     * @param search     A fragment matched against the code and the name, may be null or blank.
-     * @param store      A store code the group must contain, may be null or blank.
-     * @param sort       The validated sort key.
-     * @param descending Whether the sort is descending.
-     * @return The query, not yet paginated.
+     * @param current The group being explored.
+     * @param target  The group looked for.
+     * @param visited The codes already explored.
+     * @return {@code true} when the target is reachable.
      */
-    private PanacheQuery<StoreGroup> queryGroups(String search, String store,
-                                                 String sort, boolean descending) {
-        StringBuilder jpql = new StringBuilder("from StoreGroup g");
-        StringBuilder where = new StringBuilder();
-        List<Object> params = new ArrayList<>();
-        if (isSet(search)) {
-            int index = params.size() + 1;
-            where.append("(lower(g.code) like ?").append(index)
-                    .append(" or lower(g.name) like ?").append(index).append(")");
-            params.add("%" + search.trim().toLowerCase() + "%");
-        }
-        if (isSet(store)) {
-            if (where.length() > 0) {
-                where.append(" and ");
+    private boolean reaches(StoreGroup current, StoreGroup target, Set<String> visited) {
+        for (StoreGroup child : current.storeGroups) {
+            if (child.code.equals(target.code)) {
+                return true;
             }
-            // Membership is tested with EXISTS: a join would duplicate rows and corrupt
-            // the page count.
-            where.append("exists (select 1 from g.stores s where lower(s.code) like ?")
-                    .append(params.size() + 1).append(")");
-            params.add("%" + store.trim().toLowerCase() + "%");
+            if (visited.add(child.code) && reaches(child, target, visited)) {
+                return true;
+            }
         }
-        if (where.length() > 0) {
-            jpql.append(" where ").append(where);
-        }
-        String direction = descending ? " desc" : " asc";
-        String expression = SORT_STORES.equals(sort) ? "size(g.stores)" : "g." + sort;
-        jpql.append(" order by ").append(expression).append(direction);
-        if (!SORT_CODE.equals(sort)) {
-            jpql.append(", g.code asc");
-        }
-        return StoreGroup.find(jpql.toString(), params.toArray());
+        return false;
     }
 
     // --------------------------------------------------
-    // Helpers
+    // Model
     // --------------------------------------------------
 
     /**
-     * Re-renders the form carrying an error message back to the user.
+     * Serializes the current hierarchy for the editor.
+     * <p>
+     * Every store is sent, not only the unassigned ones: a store may belong to several
+     * groups, so the editor needs the full catalog to offer it again.
      *
-     * @param group The group holding the submitted values.
-     * @param error The error message to display.
-     * @return A 200 response rendering the form.
+     * @return A JSON document holding every group and every store.
      */
-    private Response renderError(StoreGroup group, String error) {
-        List<StoreGroup> parents = group.id == null ? List.of() : StoreGroup.findParentsOf(group);
-        return Response.ok(Templates.form(group, parents, true, error)).build();
+    private String buildModelJson() {
+        Map<String, Object> model = new LinkedHashMap<>();
+
+        List<Map<String, Object>> groups = new ArrayList<>();
+        for (StoreGroup group : StoreGroup.<StoreGroup>list("order by code")) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("code", group.code);
+            entry.put("name", group.name);
+            entry.put("storeCodes", group.stores.stream().map(s -> s.code).sorted().toList());
+            entry.put("childCodes", group.storeGroups.stream().map(g -> g.code).sorted().toList());
+            groups.add(entry);
+        }
+        model.put("groups", groups);
+
+        List<Map<String, Object>> stores = new ArrayList<>();
+        for (Store store : Store.<Store>list("order by code")) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("code", store.code);
+            entry.put("name", store.name);
+            entry.put("city", store.address == null ? null : store.address.city);
+            stores.add(entry);
+        }
+        model.put("stores", stores);
+
+        try {
+            return MAPPER.writeValueAsString(model);
+        } catch (Exception e) {
+            LOGGER.error("Could not serialize the hierarchy", e);
+            return "{\"groups\":[],\"stores\":[]}";
+        }
     }
 
     /**
-     * Builds a redirection to the list screen carrying a message to display.
-     *
-     * @param notice  The message shown once on the list screen.
-     * @param success Whether the message reports a success.
-     * @return A 303 See Other response.
-     */
-    private Response redirectWithNotice(String notice, boolean success) {
-        URI target = UriBuilder.fromPath(BASE_PATH)
-                .queryParam("notice", notice)
-                .queryParam("noticeOk", success)
-                .build();
-        return Response.seeOther(target).build();
-    }
-
-    /**
-     * Indicates whether the signed-in user may modify groups.
+     * Indicates whether the signed-in user may reorganise the hierarchy.
      *
      * @param securityContext The JAX-RS security context.
      * @return {@code true} when the administrator role is granted.
@@ -516,33 +275,78 @@ public class StoreGroupUiResource {
         return securityContext != null && securityContext.isUserInRole(AppUser.ROLE_ADMIN);
     }
 
+    // --------------------------------------------------
+    // Payloads
+    // --------------------------------------------------
+
     /**
-     * Indicates whether a filter value carries an actual criterion.
-     *
-     * @param value The candidate value, may be null.
-     * @return {@code true} when the value is neither null nor blank.
+     * Raised when the submitted hierarchy cannot be applied.
+     * <p>
+     * Extending {@link RuntimeException} is what rolls the transaction back, so a refused
+     * submission leaves the database exactly as it was.
      */
-    private boolean isSet(String value) {
-        return value != null && !value.isBlank();
+    public static class RejectedHierarchyException extends RuntimeException {
+
+        /**
+         * Constructs the exception with the reason shown to the user.
+         *
+         * @param message The reason the hierarchy was refused.
+         */
+        public RejectedHierarchyException(String message) {
+            super(message);
+        }
     }
 
     /**
-     * Splits a comma separated form value into a list of trimmed, unique codes.
-     *
-     * @param raw The raw form value, may be null.
-     * @return The parsed codes, never null.
+     * The hierarchy submitted by the editor.
+     * <p>
+     * Fields are public because Jackson populates them directly.
      */
-    private List<String> splitCsv(String raw) {
-        List<String> values = new ArrayList<>();
-        if (raw == null || raw.isBlank()) {
-            return values;
+    public static class HierarchyPayload {
+
+        /**
+         * Every group that must exist once the submission is applied.
+         */
+        public List<GroupPayload> groups;
+
+        /**
+         * Default constructor required for JSON deserialization.
+         */
+        public HierarchyPayload() {
         }
-        for (String part : Arrays.asList(raw.split(","))) {
-            String trimmed = part.trim();
-            if (!trimmed.isEmpty() && !values.contains(trimmed)) {
-                values.add(trimmed);
-            }
+    }
+
+    /**
+     * One group of the submitted hierarchy.
+     * <p>
+     * Fields are public because Jackson populates them directly.
+     */
+    public static class GroupPayload {
+
+        /**
+         * The unique business code of the group.
+         */
+        public String code;
+
+        /**
+         * The display name of the group.
+         */
+        public String name;
+
+        /**
+         * The codes of the stores attached directly to this group.
+         */
+        public List<String> storeCodes;
+
+        /**
+         * The codes of the groups contained in this one.
+         */
+        public List<String> childCodes;
+
+        /**
+         * Default constructor required for JSON deserialization.
+         */
+        public GroupPayload() {
         }
-        return values;
     }
 }

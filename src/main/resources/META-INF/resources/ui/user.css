@@ -9,8 +9,6 @@
 .chip-role { background: #eceaf7; color: #5a49a8; }
 .chip-self { background: #eef1f6; color: var(--im-ink-soft); }
 
-.badge-ok { background: #e8f3ee; color: var(--im-accent); }
-.badge-off { background: #f4f5f7; color: var(--im-ink-soft); }
 
 .role-grid {
     display: grid;

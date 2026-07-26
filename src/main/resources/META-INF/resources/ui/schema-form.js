@@ -370,6 +370,11 @@
     function buildField(name, schema, value, required, onChange) {
         var widget = resolveWidget(name, schema);
         var wrapper = el('div', 'field field-' + widget);
+        // Repeaters and nested objects need the whole row; simple fields sit in the grid.
+        var WIDE = ['object-list', 'object', 'ean-quantity-map', 'string-list', 'ean-list'];
+        if (WIDE.indexOf(widget) !== -1) {
+            wrapper.classList.add('field-wide');
+        }
         var label = el('label', 'field-label');
         label.appendChild(document.createTextNode(labelOf(name, schema)));
         if (required) {

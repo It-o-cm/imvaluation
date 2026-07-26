@@ -1,0 +1,48 @@
+{#include ui/layout}
+
+{#title}Store groups{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>Store groups</h1>
+        <p class="page-sub" id="wb-summary">Drag stores onto a group, or select several and drop them together</p>
+    </div>
+    <div class="page-actions">
+        <span class="wb-pending is-hidden" id="wb-pending"></span>
+        {#if canWrite}
+        <button class="btn btn-ghost" type="button" id="wb-revert" disabled>Discard</button>
+        <button class="btn btn-primary" type="button" id="wb-save" disabled>Save changes</button>
+        {/if}
+    </div>
+</div>
+
+<div class="alert alert-error is-hidden" id="wb-error" role="alert"></div>
+
+<div class="wb-grid">
+    <section class="card wb-panel">
+        <div class="card-title-row">
+            <h2 class="card-title">Hierarchy</h2>
+            {#if canWrite}
+            <input class="wb-new-group" type="text" id="wb-new-group"
+                   placeholder="New group code, then Enter" maxlength="50">
+            {/if}
+        </div>
+        <p class="card-sub">Drop a store or a group here. Double-click a name to rename it.</p>
+        <div id="wb-tree" class="wb-tree"></div>
+    </section>
+
+    <section class="card wb-panel">
+        <div class="card-title-row">
+            <h2 class="card-title">Stores</h2>
+            <input class="wb-search" type="search" id="wb-store-search" placeholder="Filter stores">
+        </div>
+        <p class="card-sub">Click to select, shift-click for a range. Drag the selection onto a group.</p>
+        <div id="wb-stores" class="wb-stores"></div>
+    </section>
+</div>
+
+<script id="wb-model" type="application/json">{modelJson.raw}</script>
+<script id="wb-can-write" type="application/json">{canWrite}</script>
+<script src="/ui/store-group-workbench.js"></script>
+{/body}

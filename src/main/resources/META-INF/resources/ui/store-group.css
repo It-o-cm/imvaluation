@@ -1,63 +1,180 @@
 /*
- * Store group area: hierarchy tree and membership chips.
+ * Store group workbench: two-panel layout, drag targets and selection states.
  *
  * Depends on the custom properties declared in base.css.
  */
 
-/* ---------- Hierarchy tree ---------- */
+/* ---------- Layout ---------- */
 
-.tree {
+.wb-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 18px;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .wb-grid { grid-template-columns: 1fr; }
+}
+
+.wb-panel { min-height: 320px; }
+
+.wb-tree,
+.wb-stores {
+    max-height: 560px;
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid var(--im-line);
+    border-radius: 6px;
+    background: #fcfdfe;
+}
+
+.wb-tree { min-height: 220px; }
+
+/* ---------- Hierarchy ---------- */
+
+.wb-list {
     list-style: none;
     margin: 0;
     padding: 0;
 }
 
-.tree .tree {
-    margin-left: 18px;
-    padding-left: 16px;
-    border-left: 1px solid var(--im-line);
-}
+.wb-group { margin: 0; }
 
-.tree-node { padding: 6px 0; }
-
-.tree-row {
+.wb-group-row {
     display: flex;
-    align-items: baseline;
-    gap: 10px;
-    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 5px;
+    cursor: grab;
 }
 
-.tree-name {
+.wb-group-row:hover { background: #f2f4f7; }
+.wb-group-row.is-dragging { opacity: .45; }
+
+.wb-group-row.is-drop-target,
+.wb-tree.is-drop-target {
+    background: #e8f3ee;
+    outline: 2px dashed var(--im-accent);
+    outline-offset: -2px;
+}
+
+.wb-group-name { font-weight: 600; font-size: 14px; }
+
+.wb-group-code {
+    font-size: 11px;
     color: var(--im-ink-soft);
-    font-size: 14px;
+    font-variant-numeric: tabular-nums;
 }
 
-.tree-count {
-    font-size: 12px;
+.wb-count {
+    margin-left: auto;
+    font-size: 11px;
     color: var(--im-ink-soft);
     background: #eef1f6;
     border-radius: 10px;
     padding: 1px 8px;
 }
 
-.tree-stores {
-    margin: 4px 0 0 2px;
+.wb-members {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
+    padding: 2px 0 8px;
 }
 
-.tree-truncated {
-    margin: 4px 0 0 18px;
+.wb-chip { cursor: grab; }
+.wb-chip-name { margin-left: 6px; opacity: .7; font-size: 11px; }
+
+.wb-rename {
+    padding: 3px 7px;
+    border: 1px solid var(--im-red);
+    border-radius: 4px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.wb-new-group,
+.wb-search {
+    padding: 6px 10px;
+    border: 1px solid var(--im-line);
+    border-radius: 6px;
+    font: inherit;
+    font-size: 13px;
+    min-width: 200px;
+}
+
+.wb-new-group:focus,
+.wb-search:focus {
+    outline: none;
+    border-color: var(--im-red);
+    box-shadow: 0 0 0 3px rgba(226, 0, 26, .1);
+}
+
+/* ---------- Store catalog ---------- */
+
+.wb-store {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.wb-store:hover { background: #f2f4f7; }
+
+.wb-store.is-selected {
+    background: #fdf1f2;
+    box-shadow: inset 2px 0 0 var(--im-red);
+}
+
+/* A store already placed somewhere stays offerable: it may belong to several groups. */
+.wb-store.is-assigned .wb-store-code { color: var(--im-accent); }
+
+.wb-store-code {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+}
+
+.wb-store-name { flex: 1; font-size: 14px; }
+
+.wb-store-city {
+    font-size: 11px;
+    color: var(--im-ink-soft);
+}
+
+/* ---------- Pending state ---------- */
+
+.wb-pending {
+    align-self: center;
     font-size: 12px;
+    font-weight: 600;
     color: var(--im-warn);
+    background: #fff8ed;
+    border: 1px solid #f2dfc0;
+    border-radius: 12px;
+    padding: 3px 10px;
 }
 
-/* ---------- Linked chips ---------- */
+/* ---------- Collapse toggle ---------- */
 
-.chip-link {
-    text-decoration: none;
+.wb-toggle {
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--im-ink-soft);
+    font-size: 11px;
+    line-height: 1;
     cursor: pointer;
 }
 
-.chip-link:hover { filter: brightness(.95); }
+.wb-toggle:hover:not(:disabled) { color: var(--im-red); }
+.wb-toggle.is-leaf { cursor: default; visibility: hidden; }

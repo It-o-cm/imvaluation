@@ -191,7 +191,7 @@ public class OfferUiResource implements EngineTrait {
         filters.put("target", target);
         filters.put("ean", ean);
         ListView<Offer> view = new ListView<>(offers, BASE_PATH, filters, sortKey, descending,
-                currentPage, pageCount, totalCount, "offer", notice, noticeOk,
+                currentPage, pageCount, totalCount, PAGE_SIZE, "offer", notice, noticeOk,
                 securityContext != null && securityContext.isUserInRole(AppUser.ROLE_ADMIN));
         return Templates.list(view, schemaRegistry.getKnownTypes());
     }

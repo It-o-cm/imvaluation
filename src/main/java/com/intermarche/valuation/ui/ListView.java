@@ -67,6 +67,11 @@ public class ListView<T> {
     private final long totalCount;
 
     /**
+     * Number of rows a full page holds, used to state the displayed range.
+     */
+    private final int pageSize;
+
+    /**
      * The singular noun naming a row, used to build the summary sentence.
      */
     private final String itemLabel;
@@ -100,6 +105,7 @@ public class ListView<T> {
      * @param currentPage The one-based number of the displayed page.
      * @param pageCount   The total number of pages.
      * @param totalCount  The total number of matching rows.
+     * @param pageSize    The number of rows a full page holds.
      * @param itemLabel   The singular noun naming a row (e.g. "offer").
      * @param notice      A one-shot message to display, may be null.
      * @param noticeOk    Whether the message reports a success.
@@ -107,7 +113,7 @@ public class ListView<T> {
      */
     public ListView(List<T> rows, String basePath, Map<String, String> filters,
                     String sort, boolean descending,
-                    int currentPage, int pageCount, long totalCount, String itemLabel,
+                    int currentPage, int pageCount, long totalCount, int pageSize, String itemLabel,
                     String notice, boolean noticeOk, boolean canWrite) {
         this.rows = rows;
         this.basePath = basePath;
@@ -117,6 +123,7 @@ public class ListView<T> {
         this.currentPage = currentPage;
         this.pageCount = pageCount;
         this.totalCount = totalCount;
+        this.pageSize = pageSize;
         this.itemLabel = itemLabel;
         this.notice = notice;
         this.noticeOk = noticeOk;
@@ -246,12 +253,16 @@ public class ListView<T> {
     }
 
     /**
-     * Indicates whether more than one page of results exists.
+     * Indicates whether the pager must be displayed.
+     * <p>
+     * The pager shows as soon as there is something to page through, even on a single
+     * page: hiding it would leave the reader wondering whether the screen is truncated,
+     * and the disabled arrows already say that there is nothing more to see.
      *
-     * @return {@code true} when the pager must be displayed.
+     * @return {@code true} when at least one row is displayed.
      */
     public boolean isPaged() {
-        return pageCount > 1;
+        return totalCount > 0;
     }
 
     /**
@@ -286,6 +297,23 @@ public class ListView<T> {
             summary += " \u2014 page " + currentPage + " of " + pageCount;
         }
         return summary;
+    }
+
+    /**
+     * Describes which rows the current page covers.
+     * <p>
+     * On a single page the pager has no navigation to offer, so it states the range
+     * instead: the reader learns that nothing is hidden below the fold.
+     *
+     * @return A sentence such as "Showing 1-11 of 11", empty when there is no row.
+     */
+    public String getRangeLabel() {
+        if (totalCount == 0 || rows.isEmpty()) {
+            return "";
+        }
+        long first = (long) (currentPage - 1) * pageSize + 1;
+        long last = first + rows.size() - 1;
+        return "Showing " + first + "\u2013" + last + " of " + totalCount;
     }
 
     /**

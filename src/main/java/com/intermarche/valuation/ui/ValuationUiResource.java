@@ -139,13 +139,13 @@ public class ValuationUiResource {
         /**
          * Renders the test form.
          *
-         * @param schemaJson  The basket schema, embedded for the form generator.
+         * @param schemasJson The generator's schema map, keyed by the single type "BASKET".
          * @param requestJson The basket to preload, an empty object when starting fresh.
          * @param responseJson The evaluation returned by the last submission, may be null.
          * @param error       An error message to display, may be null.
          * @return The template instance to render.
          */
-        public static native TemplateInstance test(String schemaJson, String requestJson,
+        public static native TemplateInstance test(String schemasJson, String requestJson,
                                                    String responseJson, String error);
     }
 
@@ -194,7 +194,7 @@ public class ValuationUiResource {
         filters.put("customer", customer);
         filters.put("status", status);
         ListView<ValuationTrace> view = new ListView<>(traces, BASE_PATH, filters,
-                sortKey, descending, currentPage, pageCount, totalCount, "valuation",
+                sortKey, descending, currentPage, pageCount, totalCount, PAGE_SIZE, "valuation",
                 notice, noticeOk,
                 securityContext != null && securityContext.isUserInRole(AppUser.ROLE_ADMIN));
         return Templates.list(view, ValuationTraceConfig.current());
@@ -240,7 +240,7 @@ public class ValuationUiResource {
                 request = trace.requestPayload;
             }
         }
-        return Templates.test(Basket.BASKET_SCHEMA, request, null, null);
+        return Templates.test(schemasJson(), request, null, null);
     }
 
     /**
@@ -259,7 +259,7 @@ public class ValuationUiResource {
     public Response submitTest(@FormParam("request") String requestJson) {
         LOGGER.debug("Entering method submitTest");
         if (requestJson == null || requestJson.isBlank()) {
-            return Response.ok(Templates.test(Basket.BASKET_SCHEMA, "{}", null,
+            return Response.ok(Templates.test(schemasJson(), "{}", null,
                     "The basket is empty.")).build();
         }
         try {
@@ -267,14 +267,14 @@ public class ValuationUiResource {
             Response result = valuationResource.calculate(basket);
             String response = MAPPER.writerWithDefaultPrettyPrinter()
                     .writeValueAsString(result.getEntity());
-            return Response.ok(Templates.test(Basket.BASKET_SCHEMA, requestJson, response, null)).build();
+            return Response.ok(Templates.test(schemasJson(), requestJson, response, null)).build();
         } catch (WebApplicationException e) {
             String message = e.getMessage() == null ? "The valuation was refused." : e.getMessage();
-            return Response.ok(Templates.test(Basket.BASKET_SCHEMA, requestJson, null,
+            return Response.ok(Templates.test(schemasJson(), requestJson, null,
                     "HTTP " + e.getResponse().getStatus() + " \u2014 " + message)).build();
         } catch (Exception e) {
             LOGGER.error("Test valuation failed", e);
-            return Response.ok(Templates.test(Basket.BASKET_SCHEMA, requestJson, null,
+            return Response.ok(Templates.test(schemasJson(), requestJson, null,
                     e.getMessage())).build();
         }
     }
@@ -376,6 +376,31 @@ public class ValuationUiResource {
                 .queryParam("noticeOk", success)
                 .build();
         return Response.seeOther(target).build();
+    }
+
+    /**
+     * Wraps the basket schema in the object the form generator expects.
+     * <p>
+     * The generator keys its schemas by type and looks the selected one up by name; the
+     * test form has a single type, "BASKET", so the map holds exactly one entry.
+     * <p>
+     * The schema is minified first. It is declared as an indented text block, and a JSON
+     * template escapes the control characters U+0000..U+001F, so its literal newlines
+     * would reach the browser as escaped sequences and break {@code JSON.parse}. Parsing
+     * and re-serializing collapses it to a single line, which embeds cleanly.
+     *
+     * @return A compact JSON object of the form {@code {"BASKET": <schema>}}.
+     */
+    private String schemasJson() {
+        try {
+            Object schema = MAPPER.readValue(Basket.BASKET_SCHEMA, Object.class);
+            Map<String, Object> wrapper = new LinkedHashMap<>();
+            wrapper.put("BASKET", schema);
+            return MAPPER.writeValueAsString(wrapper);
+        } catch (Exception e) {
+            LOGGER.error("Could not prepare the basket schema", e);
+            return "{}";
+        }
     }
 
     /**

@@ -28,7 +28,6 @@
 
 .json-editor textarea:focus { outline: none; border-color: var(--im-red); }
 
-.is-hidden { display: none !important; }
 
 /* ---------- Repeaters ---------- */
 
@@ -68,13 +67,22 @@
     background: #fcfdfe;
 }
 
+.field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px 18px;
+    align-items: start;
+}
+
+/* Complex controls span the whole row: a repeater or a nested object needs the width. */
+.field-grid > .field-wide,
+.field-grid > .repeater,
+.field-grid > .nested-object {
+    grid-column: 1 / -1;
+}
+
 .nested-object .field-grid { gap: 12px; }
 
 /* ---------- List toolbar and notices ---------- */
 
-.page-actions {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
 

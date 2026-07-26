@@ -377,7 +377,7 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
         }
 
         /**
-         * Calculates the discount amount (negative AmountEvaluation).
+         * Calculates the discount amount as a positive value to be deducted from the total.
          *
          * @param basePrice The base price.
          * @param quantity  The quantity.
@@ -400,7 +400,10 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
             BigDecimal multiplier = BigDecimal.ONE.add(vatRate);
             BigDecimal discountTtc = discountHt.multiply(multiplier).setScale(2, RoundingMode.HALF_UP);
             discountHt = discountHt.setScale(2, RoundingMode.HALF_UP);
-            return new AmountEvaluation(discountHt.negate(), discountTtc.negate(), vatRate);
+            // Discount amounts are stored positive; the engine subtracts them from the total
+            // and the UI renders the minus sign. Negating here would double the sign and
+            // turn a reduction into a surcharge.
+            return new AmountEvaluation(discountHt, discountTtc, vatRate);
         }
 
         /**

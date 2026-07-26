@@ -456,9 +456,36 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
             BigDecimal totalTTC = bundlePriceUnit != null
                     ? computeFixedPriceTotal()
                     : computeDiscountedTotal();
-            BigDecimal divisor = BigDecimal.ONE.add(vatRate);
+            // The VAT rate is derived from the covered products rather than declared on the
+            // offer: a bundle's rate is a consequence of what it contains, and a hand-typed
+            // value could disagree with the goods (e.g. 0.2020 instead of 0.20). When the
+            // products carry a single rate, that rate is used; a mix yields the blended rate
+            // implied by their prices, which is the honest figure for a multi-rate bundle.
+            BigDecimal effectiveVatRate = deriveVatRate();
+            BigDecimal divisor = BigDecimal.ONE.add(effectiveVatRate);
             BigDecimal totalHT = totalTTC.divide(divisor, 2, RoundingMode.HALF_UP);
-            return new AmountEvaluation(totalHT, totalTTC, vatRate);
+            return new AmountEvaluation(totalHT, totalTTC, effectiveVatRate);
+        }
+
+        /**
+         * Derives the VAT rate of the bundle from the products it covers.
+         * <p>
+         * The rate is the one implied by the catalog prices of the covered items: total
+         * tax over total pre-tax amount. This keeps the bundle consistent with its goods
+         * instead of trusting a value typed on the offer.
+         *
+         * @return The effective VAT rate; the declared rate as a fallback when the covered
+         *         items carry no usable price.
+         */
+        private BigDecimal deriveVatRate() {
+            Basket.Item[] allItems = coveredItems.toArray(new Basket.Item[0]);
+            AmountEvaluation reference = AmountEvaluation.getAmount(allItems, store, PriceUsage.BASE_FOR_DISCOUNT);
+            if (reference.amountExcludingTax.compareTo(BigDecimal.ZERO) > 0) {
+                return reference.amountIncludingTax
+                        .divide(reference.amountExcludingTax, 4, RoundingMode.HALF_UP)
+                        .subtract(BigDecimal.ONE);
+            }
+            return vatRate;
         }
 
         /**

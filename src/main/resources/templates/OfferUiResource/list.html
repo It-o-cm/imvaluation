@@ -126,7 +126,10 @@
     <span class="btn btn-small is-disabled">Previous</span>
     {/if}
 
-    <span class="pager-status">Page {view.currentPage} of {view.pageCount}</span>
+    <span class="pager-status">
+        Page {view.currentPage} of {view.pageCount}
+        <span class="pager-range">{view.rangeLabel}</span>
+    </span>
 
     {#if view.hasNext}
     <a class="btn btn-small" href="{view.pageUrl(view.currentPage + 1)}">Next</a>

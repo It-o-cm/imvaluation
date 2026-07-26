@@ -213,8 +213,16 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
                 if (offerApp instanceof ProductAwareOfferApplication) {
                     ProductAwareOfferApplication productApp = (ProductAwareOfferApplication) offerApp;
 
-                    // Iterate through items associated with this application to identify products
+                    // getProductAmount returns the offer-wide amount for a product, so each
+                    // distinct product is priced once per offer. Collecting the products in a
+                    // set first avoids counting a product several times when the offer splits
+                    // it across items (e.g. a bundle's paid and free lines).
+                    BigDecimal grossEligible = BigDecimal.ZERO;
+                    java.util.Set<String> countedEans = new java.util.HashSet<>();
                     for (Basket.Item item : offerApp.getItems()) {
+                        if (!countedEans.add(item.produceEan)) {
+                            continue;
+                        }
                         Product product = Product.findByEan(item.produceEan);
 
                         // Check if the product is eligible by verifying the flag in its family hierarchy
@@ -224,9 +232,19 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
                             AmountEvaluation productAmount = productApp.getProductAmount(product);
 
                             if (productAmount != null) {
-                                totalEligibleAmount = totalEligibleAmount.add(productAmount.amountIncludingTax);
+                                grossEligible = grossEligible.add(productAmount.amountIncludingTax);
                             }
                         }
+                    }
+
+                    // The eligible base is what the customer actually pays, so the discounts
+                    // already applied to this offer come off it once, after the eligible
+                    // products have been summed: a meal voucher may only cover the net price
+                    // of eligible goods. Subtracting per product would deduct the offer's
+                    // discounts several times when it holds more than one eligible product.
+                    if (grossEligible.compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal net = grossEligible.subtract(discountsOn(offerApp, evaluation));
+                        totalEligibleAmount = totalEligibleAmount.add(net.max(BigDecimal.ZERO));
                     }
                 }
                 // If the offer is not "ProductAware", we cannot safely determine eligibility for specific items.
@@ -248,14 +266,40 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
         }
 
         /**
+         * Sums, in TTC, the discounts already applied to a given offer.
+         * <p>
+         * A discount exposes the offer it targets through
+         * {@link AdvantageApplication#getOfferApplication()}, so the ones attached to this
+         * offer are matched by identity and their positive amounts added up. This is what
+         * lets the meal voucher work on the net price rather than the gross offer price.
+         *
+         * @param offerApp   The offer whose discounts are summed.
+         * @param evaluation The evaluation holding every applied advantage.
+         * @return The total discount, TTC, attached to the offer; zero when there is none.
+         */
+        private BigDecimal discountsOn(OfferApplication offerApp, BasketEvaluation evaluation) {
+            BigDecimal total = BigDecimal.ZERO;
+            for (AdvantageApplication advantage : evaluation.getAdvantages()) {
+                if (advantage instanceof DiscountApplication
+                        && advantage.getOfferApplication() == offerApp) {
+                    AmountEvaluation amount = ((DiscountApplication) advantage).getDiscountAmount();
+                    if (amount != null) {
+                        total = total.add(amount.amountIncludingTax);
+                    }
+                }
+            }
+            return total;
+        }
+
+        /**
          * Returns the efficiency score of this applier.
          * <p>
          * As this advantage does not consume basket items (it is purely informational/calculative
          * applied globally), the efficiency score is not relevant for sorting priority against
-         * standard discounts. Returns a constant {@code 0.0}.
+         * standard discounts. Returns a constant {@code -2.0} so it sorts after line discounts.
          * </p>
          *
-         * @return {@code 0.0}.
+         * @return {@code -2.0}.
          */
         @Override
         public double getEfficiencyScore() {

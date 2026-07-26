@@ -24,7 +24,12 @@ import org.jboss.logging.Logger;
 
 import java.net.URI;
 import java.util.HashSet;
+import io.quarkus.hibernate.orm.panache.PanacheQuery;
+import io.quarkus.panache.common.Page;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -49,6 +54,32 @@ public class UserUiResource {
     private static final Logger LOGGER = Logger.getLogger(UserUiResource.class);
 
     /**
+     * Number of accounts displayed per page.
+     */
+    private static final int PAGE_SIZE = 25;
+
+    /**
+     * Base path of the screen, used to build its links.
+     */
+    private static final String BASE_PATH = "/ui/users";
+
+    /**
+     * Sort key ordering accounts by login name.
+     */
+    private static final String SORT_USERNAME = "username";
+
+    /**
+     * Sort key ordering accounts by display name.
+     */
+    private static final String SORT_DISPLAY = "displayName";
+
+    /**
+     * Every sort key accepted by this screen.
+     */
+    private static final java.util.Set<String> SORTABLE =
+            java.util.Set.of(SORT_USERNAME, SORT_DISPLAY);
+
+    /**
      * Type-safe declarations of the Qute templates used by this resource.
      */
     @CheckedTemplate
@@ -57,15 +88,13 @@ public class UserUiResource {
         /**
          * Renders the user list screen.
          *
-         * @param users     The accounts to display.
+         * @param view      The view model carrying the page, the filter and the sort state.
          * @param allRoles  Every role the application recognises.
          * @param currentUser The login name of the signed-in user.
-         * @param notice    A message to display, may be null.
-         * @param noticeOk  Whether the message reports a success.
          * @return The template instance to render.
          */
-        public static native TemplateInstance list(List<AppUser> users, List<String> allRoles,
-                                                   String currentUser, String notice, boolean noticeOk);
+        public static native TemplateInstance list(ListView<AppUser> view, List<String> allRoles,
+                                                   String currentUser);
 
         /**
          * Renders the user creation or edition form.
@@ -93,11 +122,62 @@ public class UserUiResource {
     @GET
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance list(@Context SecurityContext securityContext,
+                                 @QueryParam("q") String search,
+                                 @QueryParam("role") String role,
+                                 @QueryParam("sort") @jakarta.ws.rs.DefaultValue(SORT_USERNAME) String sort,
+                                 @QueryParam("dir") @jakarta.ws.rs.DefaultValue("asc") String dir,
+                                 @QueryParam("page") @jakarta.ws.rs.DefaultValue("1") int page,
                                  @QueryParam("notice") String notice,
                                  @QueryParam("noticeOk") @jakarta.ws.rs.DefaultValue("true") boolean noticeOk) {
         LOGGER.debug("Entering method list");
-        List<AppUser> users = AppUser.list("order by username");
-        return Templates.list(users, AppUser.ALL_ROLES, currentUsername(securityContext), notice, noticeOk);
+        String sortKey = SORTABLE.contains(sort) ? sort : SORT_USERNAME;
+        boolean descending = "desc".equalsIgnoreCase(dir);
+        PanacheQuery<AppUser> query = queryUsers(search, role, sortKey, descending).page(Page.ofSize(PAGE_SIZE));
+        long totalCount = query.count();
+        int pageCount = Math.max(1, query.pageCount());
+        int currentPage = Math.min(Math.max(page, 1), pageCount);
+        List<AppUser> users = query.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
+
+        Map<String, String> filters = new LinkedHashMap<>();
+        filters.put("q", search);
+        filters.put("role", role);
+        ListView<AppUser> view = new ListView<>(users, BASE_PATH, filters, sortKey, descending,
+                currentPage, pageCount, totalCount, PAGE_SIZE, "user", notice, noticeOk,
+                securityContext != null && securityContext.isUserInRole(AppUser.ROLE_ADMIN));
+        return Templates.list(view, AppUser.ALL_ROLES, currentUsername(securityContext));
+    }
+
+    /**
+     * Builds the query backing the list screen.
+     *
+     * @param search     A fragment matched against the username and display name, may be null.
+     * @param role       A role the account must hold, may be null or blank.
+     * @param sort       The validated sort key.
+     * @param descending Whether the sort is descending.
+     * @return The query, not yet paginated.
+     */
+    private PanacheQuery<AppUser> queryUsers(String search, String role, String sort, boolean descending) {
+        StringBuilder where = new StringBuilder();
+        List<Object> params = new ArrayList<>();
+        if (search != null && !search.isBlank()) {
+            int index = params.size() + 1;
+            where.append("(lower(username) like ?").append(index)
+                    .append(" or lower(displayName) like ?").append(index).append(")");
+            params.add("%" + search.trim().toLowerCase() + "%");
+        }
+        if (role != null && !role.isBlank()) {
+            if (where.length() > 0) {
+                where.append(" and ");
+            }
+            where.append("roles like ?").append(params.size() + 1);
+            params.add("%" + role.trim() + "%");
+        }
+        String order = " order by " + sort + (descending ? " desc" : " asc");
+        if (!SORT_USERNAME.equals(sort)) {
+            order += ", username asc";
+        }
+        String query = where.length() > 0 ? where + order : order.trim();
+        return AppUser.find(query, params.toArray());
     }
 
     /**

@@ -100,7 +100,9 @@ public class ValuationEngine {
                     DiscountApplication discount = (DiscountApplication) app;
                     AmountEvaluation price = discount.getDiscountAmount();
                     if (price != null) {
-                        // We assume getPrice() returns the amount to deduct (positive value)
+                        // getDiscountAmount() returns a positive amount to deduct; every
+                        // DiscountApplication follows that contract, so the sign lives here
+                        // in the subtraction, not in the stored value.
                         totalHT = totalHT.subtract(price.amountExcludingTax);
                         totalTTC = totalTTC.subtract(price.amountIncludingTax);
                     }

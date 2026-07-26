@@ -397,7 +397,7 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
          * @param productApp          The offer application providing the price context.
          * @param rule                The discount rule.
          * @param numberOfApplications The number of times to apply the unit discount.
-         * @return The total discount evaluation (negative values).
+         * @return The total discount evaluation (positive amount to deduct).
          */
         AmountEvaluation calculateTotalDiscount(Product product, ProductAwareOfferApplication productApp, VignetteRule rule, int numberOfApplications) {
             AmountEvaluation totalProductPrice = productApp.getProductAmount(product);
@@ -473,7 +473,7 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
         final OfferApplication targetApplication;
 
         /**
-         * The calculated discount amount (negative value).
+         * The calculated discount amount (positive amount to deduct).
          */
         final AmountEvaluation discountAmount;
 
@@ -492,7 +492,7 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
          *
          * @param offerCode         The offer code.
          * @param targetApplication  The product offer being discounted.
-         * @param discountAmount     The calculated discount (negative).
+         * @param discountAmount     The calculated discount (positive amount to deduct).
          * @param numberOfApplications How many times the discount was applied.
          * @param vignettesConsumed  How many vignettes were used.
          */

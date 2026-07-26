@@ -100,7 +100,7 @@ public class Basket {
         "instructions": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Special instructions, e.g. \"Deposit basket\".",
+          "description": "Special instructions, for example a drop-off note.",
           "x-widget": "string-list",
           "x-label": "Instructions"
         },
