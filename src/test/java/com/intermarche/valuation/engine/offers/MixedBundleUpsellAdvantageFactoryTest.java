@@ -60,11 +60,15 @@ public class MixedBundleUpsellAdvantageFactoryTest {
      * Moves items from 'toEvaluate' to 'availableToUpcell'.
      */
     private void moveToUpcell(BasketEvaluation evaluation) {
-        // We iterate over a copy of values to avoid ConcurrentModificationException
-        List<Basket.Item> itemsToMove = new ArrayList<>(evaluation.getToEvaluate().values());
+        // We iterate over a copy to avoid ConcurrentModificationException. getToEvaluate()
+        // now holds one list of price entries per EAN, so we flatten to individual items.
+        List<Basket.Item> itemsToMove = new ArrayList<>();
+        for (List<Basket.Item> bucket : evaluation.getToEvaluate().values()) {
+            itemsToMove.addAll(bucket);
+        }
         for (Basket.Item item : itemsToMove) {
             // Pick the item (removes from toEvaluate)
-            Basket.Item picked = evaluation.pick(item.quantity, item.produceEan);
+            Basket.Item picked = evaluation.pickMerged(item.quantity, item.produceEan);
             if (picked != null) {
                 // Add to upcell map
                 evaluation.addAvailableToUpcell(picked);

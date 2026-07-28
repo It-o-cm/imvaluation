@@ -51,12 +51,28 @@ public class PasswordChangeFilter implements ContainerRequestFilter {
     SecurityIdentity identity;
 
     /**
+     * Whether a pending password change is enforced.
+     * <p>
+     * Defaults to {@code true} so existing environments keep forcing the change. Set
+     * {@code app.password-change.enforced=false} to disable the redirect without removing
+     * the mechanism: the account flag is still honoured everywhere else, only this filter
+     * stops acting on it.
+     */
+    @org.eclipse.microprofile.config.inject.ConfigProperty(
+            name = "app.password-change.enforced", defaultValue = "true")
+    boolean enforced;
+
+    /**
      * Redirects to the password screen when the signed-in account has a pending change.
      *
      * @param requestContext The request being filtered.
      */
     @Override
     public void filter(ContainerRequestContext requestContext) {
+        // Disabled by configuration: leave the redirect off but keep the mechanism intact.
+        if (!enforced) {
+            return;
+        }
         if (identity == null || identity.isAnonymous() || identity.getPrincipal() == null) {
             return;
         }

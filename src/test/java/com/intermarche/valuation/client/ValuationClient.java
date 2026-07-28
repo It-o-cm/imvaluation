@@ -26,7 +26,7 @@ import java.util.List;
  */
 public class ValuationClient {
 
-    private static final String BASE_URL = "http://localhost:8080";
+    private static final String BASE_URL = "http://localhost:8090";
     private static final String VALUATION_URL = BASE_URL + "/valuation";
 
     // Auth (Basic Auth for dev)
@@ -55,14 +55,14 @@ public class ValuationClient {
 
         // Mapping Product 1 (Apples - Already weighted)
         Item item1 = new Item();
-        item1.lineId = 1;
+        item1.lineId = "1";
         item1.produceEan = "3300000000001"; // Pommes Golden
         item1.quantity = 4.0; // 4 units of 1kg
         items.add(item1);
 
         // Mapping Product 2 (Milk - Sold by unit)
         Item item2 = new Item();
-        item2.lineId = 2;
+        item2.lineId = "2";
         item2.produceEan = "3300000000002"; // Lait UHT
         item2.quantity = 1.0; // 1 bottle
         items.add(item2);
@@ -71,7 +71,7 @@ public class ValuationClient {
         // Type: WEIGHT, RefWeight: 0.100 kg, Price: 2.40 €/kg
         // Expected calculation: 0.5 * 2.40 = 1.20 € TTC
         Item item3 = new Item();
-        item3.lineId = 3;
+        item3.lineId = "3";
         item3.produceEan = "3300000000008"; // Jambon Blanc 100g
         item3.quantity = 0.5; // 0.5 kg
         items.add(item3);
@@ -83,14 +83,14 @@ public class ValuationClient {
 
         // 4 Items "3300000000004" (Café Grains 500g)
         Item item4 = new Item();
-        item4.lineId = 4;
+        item4.lineId = "4";
         item4.produceEan = "3300000000004";
         item4.quantity = 4.0;
         items.add(item4);
 
         // 2 Items "3300000000013" (Biscuits Chocolat 200g)
         Item item5 = new Item();
-        item5.lineId = 5;
+        item5.lineId = "5";
         item5.produceEan = "3300000000013";
         item5.quantity = 2.0;
         items.add(item5);
@@ -101,7 +101,7 @@ public class ValuationClient {
         // Total Biscuits in basket = 2 (Item 5)
         // Max bundles possible = min(5/1, 2/1) = 2 Bundles
         Item item6 = new Item();
-        item6.lineId = 6;
+        item6.lineId = "6";
         item6.produceEan = "3300000000014";
         item6.quantity = 1.0;
         items.add(item6);
@@ -112,7 +112,7 @@ public class ValuationClient {
         // Offer: 5 vignettes = 50% discount
         // --------------------------------------------------
         Item item7 = new Item();
-        item7.lineId = 7;
+        item7.lineId = "7";
         item7.produceEan = "3300000000031"; // Poêle Antiadhésive 28cm
         item7.quantity = 1.0;
         items.add(item7);

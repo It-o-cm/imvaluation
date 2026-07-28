@@ -1,5 +1,8 @@
 package com.intermarche.valuation.engine.offers;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.intermarche.valuation.domain.*;
 import com.intermarche.valuation.engine.*;
@@ -332,10 +335,7 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
                 double totalAvailableQty = 0.0;
                 // Sum available quantities for all valid EANs (Main + Substitutes)
                 for (String ean : comp.validEans) {
-                    Basket.Item available = evaluation.getToEvaluate().get(ean);
-                    if (available != null) {
-                        totalAvailableQty += available.quantity;
-                    }
+                    totalAvailableQty += evaluation.remainingQuantity(ean);
                 }
                 int possibleForComp = (int) (totalAvailableQty / comp.quantity);
                 maxBundles = Math.min(maxBundles, possibleForComp);
@@ -362,15 +362,22 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
                 // Try to consume prioritizing Main EAN, then Substitutes in order
                 for (String ean : comp.validEans) {
                     if (remainingToConsume <= 0.0) break;
-                    Basket.Item available = evaluation.getToEvaluate().get(ean);
+                    double availableQty = evaluation.remainingQuantity(ean);
                     // If this specific EAN exists in the basket and has quantity
-                    if (available != null) {
-                        // Take what we can (min of available or remaining needed)
-                        double takeQty = Math.min(available.quantity, remainingToConsume);
-                        Basket.Item picked = evaluation.pick(takeQty, ean);
-                        if (picked != null) {
-                            consumedItems.add(picked);
-                            remainingToConsume -= takeQty;
+                    if (availableQty > 0.0) {
+                        // Take what we can (min of available or remaining needed).
+                        // pick may return several slices when the EAN carries more than one
+                        // price; each slice is mono-price and is kept as its own item so the
+                        // per-line valuation stays exact.
+                        double takeQty = Math.min(availableQty, remainingToConsume);
+                        List<Basket.Item> slices = evaluation.pick(takeQty, ean);
+                        if (!slices.isEmpty()) {
+                            double taken = 0.0;
+                            for (Basket.Item slice : slices) {
+                                consumedItems.add(slice);
+                                taken += slice.quantity;
+                            }
+                            remainingToConsume -= taken;
                         } else {
                             return null;
                         }
@@ -530,8 +537,25 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
          * @return The collection of consumed items.
          */
         @Override
+        @JsonIgnore
         public Collection<Basket.Item> getItems() {
             return coveredItems;
+        }
+
+        /**
+         * Values the bundle's items by distributing its total over them.
+         * <p>
+         * A bundle consumes every covered item — it makes no price-based selection — so the
+         * generic pro-rata split on catalog TTC weight applies directly. Each item keeps its
+         * product's real VAT rate, its excluding-tax figure is rebuilt, and the rounding
+         * residue lands on the highest-rate item, so the parts sum to the bundle total.
+         *
+         * @return The valued items, one per source line, summing to {@link #getAmount()}.
+         */
+        @Override
+        @JsonProperty("items")
+        public java.util.List<BasketEvaluation.Item> getValuedItems() {
+            return ItemValuation.distribute(getAmount(), coveredItems, store);
         }
 
         /**

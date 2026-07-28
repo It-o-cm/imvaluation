@@ -274,7 +274,7 @@ public class MixedBundleOfferFactoryTest {
         assertEquals(new BigDecimal("20.00"), app.getAmount().amountIncludingTax);
 
         // 2.5 - 2.0 = 0.5 remaining
-        assertEquals(0.5, evaluation.getToEvaluate().get("1000000000001").quantity, 0.001);
+        assertEquals(0.5, evaluation.remainingQuantity("1000000000001"), 0.001);
     }
 
     /**
@@ -674,7 +674,7 @@ public class MixedBundleOfferFactoryTest {
         Basket.Item zeroItem = new Basket.Item();
         zeroItem.produceEan = "1000000000001";
         zeroItem.quantity = 0.0; // Quantity is zero
-        evaluation.getToEvaluate().put("1000000000001", zeroItem);
+        evaluation.getToEvaluate().put("1000000000001", new java.util.ArrayList<>(java.util.List.of(zeroItem)));
 
         // Act
         Collection<OfferApplier> appliers = factory.buildAppliers(evaluation);
@@ -709,9 +709,9 @@ public class MixedBundleOfferFactoryTest {
             public BrokenPickEvaluation(Basket basket) { super(basket); }
 
             @Override
-            public Basket.Item pick(Double quantityToPick, String ean) {
-                // Simulate a failure (e.g. item removed by another thread or logic error)
-                return null;
+            public List<Basket.Item> pick(Double quantityToPick, String ean) {
+                // Simulate a failure: nothing gets consumed (empty list).
+                return new ArrayList<>();
             }
         }
 

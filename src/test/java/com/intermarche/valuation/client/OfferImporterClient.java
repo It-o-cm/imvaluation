@@ -15,7 +15,7 @@ import java.util.Base64;
  */
 public class OfferImporterClient {
 
-    private static final String BASE_URL = "http://localhost:8080";
+    private static final String BASE_URL = "http://localhost:8090";
     private static final String IMPORT_URL = BASE_URL + "/offers/import";
 
     // Credentials defined in application-dev.properties

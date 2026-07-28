@@ -1,5 +1,8 @@
 package com.intermarche.valuation.engine.offers;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.intermarche.valuation.domain.*;
 import com.intermarche.valuation.engine.*;
@@ -288,8 +291,13 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
                 return Collections.emptyList();
             }
 
-            // 2. Calculate Max Bundles
-            double totalAvailableQty = sortedCandidates.stream().mapToDouble(item -> item.quantity).sum();
+            // 2. Calculate Max Bundles on the LIVE pool. A candidate may have been consumed
+            //    already by a higher-priority offer (e.g. a manual gesture), so counting the
+            //    frozen target quantities would over-count and build an empty application.
+            double totalAvailableQty = 0.0;
+            for (Basket.Item candidate : sortedCandidates) {
+                totalAvailableQty += evaluation.remainingQuantity(candidate.produceEan);
+            }
             int bundleSize = quantityToPay + discountedQuantity;
 
             int maxBundles = (int) (totalAvailableQty / bundleSize);
@@ -301,7 +309,12 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
             // 3. Bulk Pick: Consume items from the evaluation
             List<Basket.Item> pickedPool = pickItemsFromEvaluation(evaluation, sortedCandidates, totalQtyToConsume);
 
-            // 4. Construct Applications (Batch Construction)
+            // 4. Nothing actually consumed: emit no application rather than an empty one.
+            if (pickedPool.isEmpty()) {
+                return Collections.emptyList();
+            }
+
+            // 5. Construct Applications (Batch Construction)
             return createApplicationsFromPool(pickedPool);
         }
 
@@ -343,14 +356,15 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
             List<Basket.Item> pickedPool = new ArrayList<>();
             double remainingToConsume = totalQtyToConsume;
             for (Basket.Item candidate : sortedCandidates) {
-                // Get live reference from map
-                Basket.Item liveItem = evaluation.getToEvaluate().get(candidate.produceEan);
-                if (liveItem == null || liveItem.quantity <= 0) continue;
-                double take = Math.min(liveItem.quantity, remainingToConsume);
-                Basket.Item pickedItem = evaluation.pick(take, liveItem.produceEan);
-                if (pickedItem != null) {
-                    pickedPool.add(pickedItem);
-                    remainingToConsume -= take;
+                // Live remaining quantity for this EAN, across its price entries.
+                double liveQty = evaluation.remainingQuantity(candidate.produceEan);
+                if (liveQty <= 0) continue;
+                double take = Math.min(liveQty, remainingToConsume);
+                // pick may split across several prices of the same EAN; keep every slice.
+                List<Basket.Item> slices = evaluation.pick(take, candidate.produceEan);
+                for (Basket.Item slice : slices) {
+                    pickedPool.add(slice);
+                    remainingToConsume -= slice.quantity;
                 }
             }
             return pickedPool;
@@ -508,10 +522,45 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
          * @return A list containing both paid and discounted items.
          */
         @Override
+        @JsonIgnore
         public Collection<Basket.Item> getItems() {
             List<Basket.Item> allItems = new ArrayList<>(paidItems);
             allItems.addAll(discountedItems);
             return allItems;
+        }
+
+        /**
+         * Values this offer's items, honouring the paid / discounted split.
+         * <p>
+         * N+M selects items by price, so a single pro-rata over all items would misstate the
+         * result: the paid items keep their full catalog price, while the discounted items
+         * share the net discounted amount. Each block is therefore distributed on its own —
+         * the paid block over its full price, the discounted block over its net price — so
+         * every item's amount reflects whether it was paid or discounted. The two blocks
+         * together sum to {@link #getAmount()}.
+         *
+         * @return The valued items, one per source line.
+         */
+        @Override
+        @JsonProperty("items")
+        public java.util.List<BasketEvaluation.Item> getValuedItems() {
+            java.util.List<BasketEvaluation.Item> valued = new ArrayList<>();
+
+            if (!paidItems.isEmpty()) {
+                AmountEvaluation paidTotal =
+                        AmountEvaluation.getAmount(paidItems, store, PriceUsage.BASE_FOR_DISCOUNT);
+                valued.addAll(ItemValuation.distribute(paidTotal, paidItems, store));
+            }
+
+            if (!discountedItems.isEmpty()) {
+                // Net amount of the discounted block = full offer total minus the paid block.
+                AmountEvaluation paidTotal =
+                        AmountEvaluation.getAmount(paidItems, store, PriceUsage.BASE_FOR_DISCOUNT);
+                AmountEvaluation discountedNet = getAmount().subtract(paidTotal);
+                valued.addAll(ItemValuation.distribute(discountedNet, discountedItems, store));
+            }
+
+            return valued;
         }
 
         /**

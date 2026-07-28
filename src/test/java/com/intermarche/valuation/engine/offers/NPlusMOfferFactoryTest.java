@@ -602,7 +602,7 @@ public class NPlusMOfferFactoryTest {
 
         assertEquals(1, result.size());
         assertEquals(1.0, result.get(0).quantity);
-        assertEquals(1.0, evaluation.getToEvaluate().get("1000000000001").quantity);
+        assertEquals(1.0, evaluation.remainingQuantity("1000000000001"));
     }
 
     /**
@@ -667,7 +667,7 @@ public class NPlusMOfferFactoryTest {
         evaluation.feedFrom(basket);
 
         Basket.Item zeroItem = createItem("1000000000001", 0.0);
-        evaluation.getToEvaluate().put("1000000000001", zeroItem);
+        evaluation.getToEvaluate().put("1000000000001", new ArrayList<>(List.of(zeroItem)));
 
         NPlusMOfferFactory.NPlusMOfferApplier applier = new NPlusMOfferFactory.NPlusMOfferApplier(
                 "TEST", Collections.emptyMap(), 1, 0,
@@ -697,7 +697,7 @@ public class NPlusMOfferFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
-        evaluation.getToEvaluate().put(null, nullEanItem);
+        evaluation.getToEvaluate().put(null, new ArrayList<>(List.of(nullEanItem)));
 
         NPlusMOfferFactory.NPlusMOfferApplier applier = new NPlusMOfferFactory.NPlusMOfferApplier(
                 "TEST", Collections.emptyMap(), 1, 0,

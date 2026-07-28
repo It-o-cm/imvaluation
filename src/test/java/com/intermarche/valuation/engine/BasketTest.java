@@ -455,7 +455,7 @@ public class BasketTest {
 
         // --- 2. Create and set Items ---
         Basket.Item item1 = new Basket.Item();
-        item1.lineId = 101;
+        item1.lineId = "101";
         item1.produceEan = "3124567890123";
         item1.quantity = 2.0;
         // Using manual pricing for this structural test
@@ -464,7 +464,7 @@ public class BasketTest {
         item1.vatRate = new BigDecimal("0.20");
 
         Basket.Item item2 = new Basket.Item();
-        item2.lineId = 102;
+        item2.lineId = "102";
         item2.produceEan = "3999999999999";
         item2.quantity = 1.5; // Weighted item
         item2.pricePerUnitExclTax = new BigDecimal("8.00");

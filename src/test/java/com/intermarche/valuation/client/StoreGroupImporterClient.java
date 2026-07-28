@@ -15,7 +15,7 @@ import java.util.Base64;
  */
 public class StoreGroupImporterClient {
 
-    private static final String BASE_URL = "http://localhost:8080";
+    private static final String BASE_URL = "http://localhost:8090";
     private static final String IMPORT_URL = BASE_URL + "/store-groups/import";
 
     // Credentials defined in application-dev.properties

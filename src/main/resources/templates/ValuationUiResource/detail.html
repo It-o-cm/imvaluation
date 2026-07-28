@@ -42,17 +42,35 @@
 
 <div class="payload-grid">
     <section class="card">
-        <h2 class="card-title">Request</h2>
-        <pre class="payload">{trace.requestPayload}</pre>
+        <div class="card-title-row">
+            <h2 class="card-title">Request</h2>
+            <div class="view-toggle" role="tablist" aria-label="Request view">
+                <button type="button" class="view-tab is-active" data-view="friendly" data-target="request">Readable</button>
+                <button type="button" class="view-tab" data-view="json" data-target="request">JSON</button>
+            </div>
+        </div>
+        <div class="view-friendly" data-panel="request-friendly"></div>
+        <pre class="payload is-hidden" data-panel="request-json" data-role="request-src">{trace.requestPayload}</pre>
     </section>
 
     <section class="card">
-        <h2 class="card-title">Response</h2>
+        <div class="card-title-row">
+            <h2 class="card-title">Response</h2>
+            {#if trace.responsePayload}
+            <div class="view-toggle" role="tablist" aria-label="Response view">
+                <button type="button" class="view-tab is-active" data-view="friendly" data-target="response">Readable</button>
+                <button type="button" class="view-tab" data-view="json" data-target="response">JSON</button>
+            </div>
+            {/if}
+        </div>
         {#if trace.responsePayload}
-        <pre class="payload">{trace.responsePayload}</pre>
+        <div class="view-friendly" data-panel="response-friendly"></div>
+        <pre class="payload is-hidden" data-panel="response-json" data-role="response-src">{trace.responsePayload}</pre>
         {#else}
         <p class="placeholder-note">No response was produced.</p>
         {/if}
     </section>
 </div>
+
+<script src="/ui/valuation-view.js"></script>
 {/body}

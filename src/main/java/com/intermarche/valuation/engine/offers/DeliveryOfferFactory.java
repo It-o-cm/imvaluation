@@ -1,6 +1,7 @@
 package com.intermarche.valuation.engine.offers;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Store;
@@ -346,6 +347,17 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
         @JsonIgnore
         public Collection<Basket.Item> getItems() {
             return null;
+        }
+
+        /**
+         * Delivery covers no basket product, so there is nothing to value per line.
+         *
+         * @return An empty list.
+         */
+        @Override
+        @JsonProperty("items")
+        public java.util.List<BasketEvaluation.Item> getValuedItems() {
+            return java.util.List.of();
         }
 
         /**

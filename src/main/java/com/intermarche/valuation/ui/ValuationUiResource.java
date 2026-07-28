@@ -129,6 +129,15 @@ public class ValuationUiResource {
                                                    ValuationTraceConfig config);
 
         /**
+         * Renders only the table rows, for the periodic refresh of the list.
+         *
+         * @param view The same view model as {@link #list}, carrying the current rows.
+         * @return The template instance to render.
+         */
+        @io.quarkus.qute.Location("ValuationUiResource/rows.html")
+        public static native TemplateInstance rows(ListView<ValuationTrace> view);
+
+        /**
          * Renders a single trace, request and response side by side.
          *
          * @param trace The trace to display.
@@ -201,6 +210,51 @@ public class ValuationUiResource {
     }
 
     /**
+     * Returns only the table rows for the current filters, for the periodic in-place
+     * refresh of the list. Same query parameters as {@link #list}, minus the notice.
+     *
+     * @param store    Filter on the store code, may be null.
+     * @param customer Filter on a fragment of the customer code, may be null.
+     * @param status   Filter on the status, may be null.
+     * @param sort     The sort key.
+     * @param dir      The sort direction.
+     * @param page     The requested page.
+     * @param securityContext The security context, for the write flag.
+     * @return The rendered rows fragment.
+     */
+    @GET
+    @jakarta.ws.rs.Path("/rows")
+    @Produces(MediaType.TEXT_HTML)
+    @Transactional
+    public TemplateInstance rows(@QueryParam("store") String store,
+                                 @QueryParam("customer") String customer,
+                                 @QueryParam("status") String status,
+                                 @QueryParam("sort") @DefaultValue(SORT_DATE) String sort,
+                                 @QueryParam("dir") @DefaultValue("desc") String dir,
+                                 @QueryParam("page") @DefaultValue("1") int page,
+                                 @Context SecurityContext securityContext) {
+        LOGGER.debug("Entering method rows");
+        String sortKey = SORTABLE.contains(sort) ? sort : SORT_DATE;
+        boolean descending = !"asc".equalsIgnoreCase(dir);
+        PanacheQuery<ValuationTrace> query = queryTraces(store, customer, status, sortKey, descending)
+                .page(Page.ofSize(PAGE_SIZE));
+        long totalCount = query.count();
+        int pageCount = Math.max(1, query.pageCount());
+        int currentPage = Math.min(Math.max(page, 1), pageCount);
+        List<ValuationTrace> traces = query.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
+
+        Map<String, String> filters = new LinkedHashMap<>();
+        filters.put("store", store);
+        filters.put("customer", customer);
+        filters.put("status", status);
+        ListView<ValuationTrace> view = new ListView<>(traces, BASE_PATH, filters,
+                sortKey, descending, currentPage, pageCount, totalCount, PAGE_SIZE, "valuation",
+                null, true,
+                securityContext != null && securityContext.isUserInRole(AppUser.ROLE_ADMIN));
+        return Templates.rows(view);
+    }
+
+    /**
      * Displays a single recorded valuation.
      *
      * @param id The identifier of the trace to display.
@@ -213,7 +267,14 @@ public class ValuationUiResource {
         LOGGER.debug("Entering method detail with id: " + id);
         ValuationTrace trace = ValuationTrace.findById(id);
         if (trace == null) {
-            return Response.status(Response.Status.NOT_FOUND).entity("Trace " + id + " not found").build();
+            // The trace is gone (e.g. a stale bookmark, or replayed after a restart with a
+            // recreated database). Send the user back to the list with a plain explanation
+            // rather than a dead-end error page.
+            java.net.URI target = jakarta.ws.rs.core.UriBuilder.fromPath(BASE_PATH)
+                    .queryParam("notice", "Valuation " + id + " no longer exists.")
+                    .queryParam("noticeOk", false)
+                    .build();
+            return Response.seeOther(target).build();
         }
         return Response.ok(Templates.detail(trace)).build();
     }

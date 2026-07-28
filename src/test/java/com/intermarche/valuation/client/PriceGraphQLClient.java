@@ -24,7 +24,7 @@ import java.util.Base64;
 public class PriceGraphQLClient {
 
     // Configuration
-    private static final String BASE_URL = "http://localhost:8080";
+    private static final String BASE_URL = "http://localhost:8090";
     private static final String GRAPHQL_URL = BASE_URL + "/graphql";
 
     // Auth (Basic Auth for dev)

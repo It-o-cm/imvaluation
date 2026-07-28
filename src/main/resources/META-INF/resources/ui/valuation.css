@@ -68,3 +68,126 @@
 
 .field-inline { min-width: 140px; }
 
+
+/* ---------- Readable / JSON views ---------- */
+
+.card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.view-toggle {
+    display: inline-flex;
+    border: 1px solid var(--im-line);
+    border-radius: 7px;
+    overflow: hidden;
+    background: var(--im-bg);
+}
+
+.view-tab {
+    border: 0;
+    background: transparent;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--im-ink-soft);
+    cursor: pointer;
+}
+
+.view-tab.is-active {
+    background: var(--im-surface);
+    color: var(--im-ink);
+    box-shadow: inset 0 -2px 0 var(--im-red);
+}
+
+.friendly-summary {
+    margin: 0 0 12px;
+    color: var(--im-ink-soft);
+    font-size: 13px;
+}
+
+.friendly-summary strong { color: var(--im-ink); }
+
+.friendly-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.friendly-table th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--im-ink-soft);
+    border-bottom: 1px solid var(--im-line);
+    padding: 6px 8px;
+}
+
+.friendly-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--im-line);
+}
+
+.friendly-table.sub { margin-top: 8px; }
+.friendly-table.sub th { background: var(--im-bg); }
+
+.friendly-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.friendly-table .rate { color: var(--im-ink-soft); }
+.friendly-table .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
+
+.friendly-head {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 18px 0 8px;
+    color: var(--im-ink);
+}
+
+.friendly-offer {
+    border: 1px solid var(--im-line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 10px;
+}
+
+.friendly-offer-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    font-weight: 600;
+    font-size: 13px;
+}
+
+.friendly-total {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 12px 14px;
+    background: var(--im-bg);
+    border-radius: 8px;
+    margin-bottom: 6px;
+}
+
+.friendly-total-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--im-ink-soft);
+}
+
+.friendly-total-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--im-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.friendly-total-ht {
+    font-size: 12px;
+    color: var(--im-ink-soft);
+    margin-left: auto;
+}

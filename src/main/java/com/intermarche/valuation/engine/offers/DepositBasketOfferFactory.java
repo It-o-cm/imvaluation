@@ -1,5 +1,8 @@
 package com.intermarche.valuation.engine.offers;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Store;
@@ -291,8 +294,21 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
          * @return An empty list.
          */
         @Override
+        @JsonIgnore
         public Collection<Basket.Item> getItems() {
             return List.of();
+        }
+
+        /**
+         * A deposit basket covers no priced product line, so there is nothing to value per
+         * line.
+         *
+         * @return An empty list.
+         */
+        @Override
+        @JsonProperty("items")
+        public java.util.List<BasketEvaluation.Item> getValuedItems() {
+            return java.util.List.of();
         }
 
         /**

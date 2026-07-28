@@ -116,17 +116,17 @@ public class BasketEvaluationTest {
         Basket basket = new Basket();
 
         Basket.Item item1 = new Basket.Item();
-        item1.lineId = 1;
+        item1.lineId = "1";
         item1.produceEan = "111";
         item1.quantity = 2.0;
 
         Basket.Item item2 = new Basket.Item();
-        item2.lineId = 2;
+        item2.lineId = "2";
         item2.produceEan = "111"; // Same EAN
         item2.quantity = 3.0;
 
         Basket.Item item3 = new Basket.Item();
-        item3.lineId = 3;
+        item3.lineId = "3";
         item3.produceEan = "222"; // Different EAN
         item3.quantity = 1.0;
 
@@ -140,15 +140,15 @@ public class BasketEvaluationTest {
         // Assert
         assertEquals(2, evaluation.getToEvaluate().size()); // 2 distinct EANs
 
-        Basket.Item aggregatedItem = evaluation.getToEvaluate().get("111");
-        assertNotNull(aggregatedItem);
-        assertEquals(5.0, aggregatedItem.quantity, 0.001); // 2.0 + 3.0
+        List<Basket.Item> aggregatedBucket = evaluation.getToEvaluate().get("111");
+        assertNotNull(aggregatedBucket);
+        assertEquals(5.0, evaluation.remainingQuantity("111"), 0.001); // 2.0 + 3.0
         // Note: lineId might be from the last processed item or first depending on implementation,
         // here we check quantity as it's the business critical aggregation.
 
-        Basket.Item distinctItem = evaluation.getToEvaluate().get("222");
-        assertNotNull(distinctItem);
-        assertEquals(1.0, distinctItem.quantity, 0.001);
+        List<Basket.Item> distinctBucket = evaluation.getToEvaluate().get("222");
+        assertNotNull(distinctBucket);
+        assertEquals(1.0, evaluation.remainingQuantity("222"), 0.001);
     }
 
     // --------------------------------------------------
@@ -172,12 +172,12 @@ public class BasketEvaluationTest {
         evaluation.feedFrom(basket);
 
         // Act
-        Basket.Item picked = evaluation.pick(5.0, "123");
+        List<Basket.Item> picked = evaluation.pick(5.0, "123");
 
         // Assert
-        assertNotNull(picked);
-        assertEquals("123", picked.produceEan);
-        assertEquals(5.0, picked.quantity, 0.001);
+        assertEquals(1, picked.size());
+        assertEquals("123", picked.get(0).produceEan);
+        assertEquals(5.0, picked.get(0).quantity, 0.001);
 
         // Verify it's removed from working set
         assertNull(evaluation.getToEvaluate().get("123"));
@@ -200,16 +200,16 @@ public class BasketEvaluationTest {
         evaluation.feedFrom(basket);
 
         // Act
-        Basket.Item picked = evaluation.pick(4.0, "123");
+        List<Basket.Item> picked = evaluation.pick(4.0, "123");
 
         // Assert
-        assertNotNull(picked);
-        assertEquals(4.0, picked.quantity, 0.001);
+        assertEquals(1, picked.size());
+        assertEquals(4.0, picked.get(0).quantity, 0.001);
 
         // Verify remaining
-        Basket.Item remaining = evaluation.getToEvaluate().get("123");
+        List<Basket.Item> remaining = evaluation.getToEvaluate().get("123");
         assertNotNull(remaining);
-        assertEquals(6.0, remaining.quantity, 0.001); // 10 - 4
+        assertEquals(6.0, evaluation.remainingQuantity("123"), 0.001); // 10 - 4
     }
 
     /**
@@ -229,11 +229,11 @@ public class BasketEvaluationTest {
         evaluation.feedFrom(basket);
 
         // Act
-        Basket.Item picked = evaluation.pick(10.0, "123"); // Ask for 10
+        List<Basket.Item> picked = evaluation.pick(10.0, "123"); // Ask for 10
 
         // Assert
-        assertNotNull(picked);
-        assertEquals(2.0, picked.quantity, 0.001); // Should only get 2
+        assertEquals(1, picked.size());
+        assertEquals(2.0, picked.get(0).quantity, 0.001); // Should only get 2
 
         // Verify item is gone (fully consumed)
         assertNull(evaluation.getToEvaluate().get("123"));
@@ -251,10 +251,10 @@ public class BasketEvaluationTest {
         evaluation.feedFrom(basket);
 
         // Act
-        Basket.Item picked = evaluation.pick(1.0, "999");
+        List<Basket.Item> picked = evaluation.pick(1.0, "999");
 
         // Assert
-        assertNull(picked);
+        assertTrue(picked.isEmpty());
     }
 
     /**
@@ -264,8 +264,8 @@ public class BasketEvaluationTest {
     void testPick_NullInputs() {
         BasketEvaluation evaluation = new BasketEvaluation(new Basket());
 
-        assertNull(evaluation.pick(null, "123"));
-        assertNull(evaluation.pick(1.0, null));
+        assertTrue(evaluation.pick(null, "123").isEmpty());
+        assertTrue(evaluation.pick(1.0, null).isEmpty());
     }
 
     // --------------------------------------------------

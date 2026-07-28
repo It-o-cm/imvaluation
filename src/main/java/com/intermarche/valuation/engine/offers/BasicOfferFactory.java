@@ -91,19 +91,23 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
          */
         @Override
         public Collection<OfferApplication> apply(BasketEvaluation evaluation) {
-            // Check if the specific product for this applier still exists in the working map
-            Basket.Item availableItem = evaluation.getToEvaluate().get(product.ean);
-            if (availableItem != null) {
-                // Pick the item (consume it from the evaluation context)
-                Basket.Item pickedItem = evaluation.pick(availableItem.quantity, availableItem.produceEan);
-                evaluation.addAvailableToUpcell(pickedItem);
-                if (pickedItem != null) {
-                    Price price = this.getDiscountAppliers().isEmpty() ? this.defaultPrice : this.refPrice;
-                    return List.of(new BasicApplication(pickedItem, store, product, price));
-                }
+            // How much of this product remains, across all its price entries.
+            double remaining = evaluation.remainingQuantity(product.ean);
+            if (remaining <= 0.0) {
+                // If the item is gone (picked by another offer) return empty list
+                return List.of();
             }
-            // If the item is gone (picked by another offer) return empty list
-            return List.of();
+            // Consume it. pick may return several slices when the product carries more than
+            // one price; each slice is mono-price and becomes its own standard line, so a
+            // product priced two ways yields two applications rather than a blended one.
+            List<Basket.Item> slices = evaluation.pick(remaining, product.ean);
+            Price price = this.getDiscountAppliers().isEmpty() ? this.defaultPrice : this.refPrice;
+            List<OfferApplication> applications = new ArrayList<>();
+            for (Basket.Item slice : slices) {
+                evaluation.addAvailableToUpcell(slice);
+                applications.add(new BasicApplication(slice, store, product, price));
+            }
+            return applications;
         }
 
         /**
@@ -164,11 +168,30 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
          * @return A collection containing the single item.
          */
         @Override
+        @com.fasterxml.jackson.annotation.JsonIgnore
         public Collection<Basket.Item> getItems() {
             if (item == null) {
                 return List.of();
             }
             return List.of(item);
+        }
+
+        /**
+         * Values this standard line, split back across its source lines.
+         * <p>
+         * A standard application covers a single mono-price item, so its whole amount is
+         * distributed over that item's source lines by the generic rule. When the item came
+         * from one request line, this yields exactly one valued item.
+         *
+         * @return The valued items, one per source line, summing to {@link #getAmount()}.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonProperty("items")
+        public java.util.List<BasketEvaluation.Item> getValuedItems() {
+            if (item == null) {
+                return java.util.List.of();
+            }
+            return ItemValuation.distribute(getAmount(), java.util.List.of(item), store);
         }
 
         /**

@@ -55,7 +55,11 @@ public class BasketEvaluation {
      * Marked as ignored to hide it from the JSON response.
      */
     @JsonIgnore
-    private Map<String, Basket.Item> toEvaluate;
+    // Keyed by EAN, each EAN holds one entry per distinct price profile. Lines that share
+    // an EAN and a price profile are aggregated; lines of the same EAN but different price
+    // (manual override, or a different price date) stay separate, so valuation and the
+    // per-line split downstream stay exact when a product carries two prices at once.
+    private Map<String, List<Basket.Item>> toEvaluate;
 
     /**
      * The map of items available for upcell suggestions.
@@ -124,18 +128,38 @@ public class BasketEvaluation {
         this.toEvaluate.clear();
         if (basket.items != null) {
             for (Basket.Item originalItem : basket.items) {
-                // Check if EAN already exists in map (Aggregation)
-                Basket.Item existingItem = toEvaluate.get(originalItem.produceEan);
+                List<Basket.Item> bucket =
+                        toEvaluate.computeIfAbsent(originalItem.produceEan, k -> new ArrayList<>());
+                // Aggregate only with a line sharing the same price profile; a different
+                // manual price or price date keeps the line on its own entry.
+                Basket.Item existingItem = null;
+                for (Basket.Item candidate : bucket) {
+                    if (samePriceProfile(candidate, originalItem)) {
+                        existingItem = candidate;
+                        break;
+                    }
+                }
                 if (existingItem == null) {
-                    // First occurrence: Create a deep copy and put in map
+                    // First occurrence of this (EAN, price): deep copy into the bucket.
                     Basket.Item copy = new Basket.Item();
                     copy.lineId = originalItem.lineId;
                     copy.produceEan = originalItem.produceEan;
                     copy.quantity = originalItem.quantity;
-                    toEvaluate.put(originalItem.produceEan, copy);
+                    copy.pricePerUnitExclTax = originalItem.pricePerUnitExclTax;
+                    copy.pricePerUnitInclTax = originalItem.pricePerUnitInclTax;
+                    copy.vatRate = originalItem.vatRate;
+                    copy.priceDate = originalItem.priceDate;
+                    // Record this line's contribution so a later consumption can be split
+                    // back across the exact source lines, in order.
+                    copy.sourceLines.add(new Basket.Item.SourceLine(
+                            originalItem.lineId, originalItem.quantity));
+                    bucket.add(copy);
                 } else {
-                    // Duplicate EAN: Aggregate quantity to the existing item
+                    // Same EAN and same price: aggregate quantity, keep each contributing
+                    // line on record for an exact per-line split downstream.
                     existingItem.quantity += originalItem.quantity;
+                    existingItem.sourceLines.add(new Basket.Item.SourceLine(
+                            originalItem.lineId, originalItem.quantity));
                 }
             }
         }
@@ -161,33 +185,141 @@ public class BasketEvaluation {
      * @return A new {@link Basket.Item} describing what was actually taken (with the taken quantity),
      *         or {@code null} if no matching item was found.
      */
-    public Basket.Item pick(Double quantityToPick, String ean) {
+    public List<Basket.Item> pick(Double quantityToPick, String ean) {
+        List<Basket.Item> picked = new ArrayList<>();
         if (quantityToPick == null || ean == null) {
+            return picked;
+        }
+        List<Basket.Item> bucket = toEvaluate.get(ean);
+        if (bucket == null || bucket.isEmpty()) {
+            return picked;
+        }
+        double remaining = quantityToPick;
+        // Consume price entries in order until the quantity is satisfied or the EAN runs
+        // out. Each entry yields its own picked item, mono-price, so a downstream split
+        // sees the exact price of every consumed slice — the whole point of separating a
+        // product's distinct prices.
+        while (remaining > 1e-9 && !bucket.isEmpty()) {
+            Basket.Item item = bucket.get(0);
+            double available = item.quantity;
+            double take = Math.min(remaining, available);
+
+            Basket.Item slice = new Basket.Item();
+            slice.lineId = item.lineId;
+            slice.produceEan = ean;
+            slice.quantity = take;
+            slice.pricePerUnitExclTax = item.pricePerUnitExclTax;
+            slice.pricePerUnitInclTax = item.pricePerUnitInclTax;
+            slice.vatRate = item.vatRate;
+            slice.priceDate = item.priceDate;
+            slice.sourceLines = consumeSourceLines(item, take);
+            picked.add(slice);
+
+            remaining -= take;
+            if (take < available) {
+                item.quantity = available - take;
+            } else {
+                bucket.remove(0);
+            }
+        }
+        if (bucket.isEmpty()) {
+            toEvaluate.remove(ean);
+        }
+        return picked;
+    }
+
+    /**
+     * Consumes a quantity of an EAN and returns the total taken, ignoring the per-price
+     * breakdown.
+     * <p>
+     * A convenience for callers that only need the aggregate consumed quantity and the
+     * combined source lines, not one item per price. It draws on {@link #pick(Double,
+     * String)} and merges the slices into a single item carrying the price profile of the
+     * first slice; use {@link #pick(Double, String)} directly when the per-price split
+     * must be preserved.
+     *
+     * @param quantityToPick The quantity to consume.
+     * @param ean            The product EAN.
+     * @return A single merged item, or {@code null} when nothing was taken.
+     */
+    public Basket.Item pickMerged(Double quantityToPick, String ean) {
+        List<Basket.Item> slices = pick(quantityToPick, ean);
+        if (slices.isEmpty()) {
             return null;
         }
-        // Direct O(1) lookup by EAN
-        Basket.Item item = toEvaluate.get(ean);
-        if (item != null) {
-            double available = item.quantity;
-            double actualPick = Math.min(quantityToPick, available);
-            // Create a return Item describing what was taken
-            Basket.Item pickedItem = new Basket.Item();
-            pickedItem.lineId = item.lineId; // Keep original lineId for traceability
-            pickedItem.produceEan = ean;
-            pickedItem.quantity = actualPick;
-            // Update the map
-            if (actualPick < available) {
-                // Partial consumption: reduce the quantity in the working map
-                item.quantity = available - actualPick;
-            } else {
-                // Full consumption: remove the item from the working map
-                toEvaluate.remove(ean);
-            }
-            return pickedItem;
+        Basket.Item first = slices.get(0);
+        if (slices.size() == 1) {
+            return first;
         }
+        Basket.Item merged = new Basket.Item();
+        merged.lineId = first.lineId;
+        merged.produceEan = ean;
+        merged.pricePerUnitExclTax = first.pricePerUnitExclTax;
+        merged.pricePerUnitInclTax = first.pricePerUnitInclTax;
+        merged.vatRate = first.vatRate;
+        merged.priceDate = first.priceDate;
+        double total = 0.0;
+        for (Basket.Item slice : slices) {
+            total += slice.quantity;
+            merged.sourceLines.addAll(slice.sourceLines);
+        }
+        merged.quantity = total;
+        return merged;
+    }
 
-        // Item not found
-        return null;
+    /**
+     * Consumes a quantity from an item's source lines, in order, returning the slices taken.
+     * <p>
+     * Source lines record how each original basket line contributed to an aggregated item.
+     * Consuming FIFO, a pick of 3 against lines [line1:2, line5:3] yields [line1:2, line5:1]
+     * and leaves [line5:2] on the working item. This is what lets the response carry an
+     * exact amount per original line rather than one merged figure.
+     *
+     * @param item     The working item whose source lines are drawn down (mutated).
+     * @param quantity The quantity being consumed.
+     * @return The source-line slices making up the consumed quantity.
+     */
+    private List<Basket.Item.SourceLine> consumeSourceLines(Basket.Item item, double quantity) {
+        List<Basket.Item.SourceLine> taken = new ArrayList<>();
+        double remaining = quantity;
+        java.util.Iterator<Basket.Item.SourceLine> it = item.sourceLines.iterator();
+        while (it.hasNext() && remaining > 1e-9) {
+            Basket.Item.SourceLine line = it.next();
+            double slice = Math.min(line.quantity, remaining);
+            taken.add(new Basket.Item.SourceLine(line.lineId, slice));
+            remaining -= slice;
+            if (slice >= line.quantity - 1e-9) {
+                it.remove();
+            } else {
+                line.quantity -= slice;
+            }
+        }
+        return taken;
+    }
+
+    /**
+     * Indicates whether two lines of the same EAN carry the same price profile.
+     * <p>
+     * Lines aggregate only when they would resolve to the same price: identical manual
+     * price fields (or both absent) and the same price date. Comparing the inputs rather
+     * than the resolved price avoids resolving a price early, while still keeping genuinely
+     * different prices apart.
+     *
+     * @param a One line.
+     * @param b The other line.
+     * @return {@code true} when the two may be aggregated.
+     */
+    private boolean samePriceProfile(Basket.Item a, Basket.Item b) {
+        return java.util.Objects.equals(a.pricePerUnitExclTax, b.pricePerUnitExclTax)
+                && java.util.Objects.equals(a.pricePerUnitInclTax, b.pricePerUnitInclTax)
+                && java.util.Objects.equals(a.vatRate, b.vatRate)
+                && java.util.Objects.equals(a.priceDate, b.priceDate)
+                // Manual gestures are per line: two lines of the same EAN must not merge
+                // when they carry different gestures, or a gesture would spread to the wrong
+                // quantity. Any difference here keeps them on separate entries.
+                && java.util.Objects.equals(a.manualDiscountAmount, b.manualDiscountAmount)
+                && java.util.Objects.equals(a.manualDiscountPercent, b.manualDiscountPercent)
+                && java.util.Objects.equals(a.manualForcedPrice, b.manualForcedPrice);
     }
 
     /**
@@ -235,8 +367,43 @@ public class BasketEvaluation {
      * @return The map of items (EAN -> Item).
      */
     @JsonIgnore
-    public Map<String, Basket.Item> getToEvaluate() {
+    public Map<String, List<Basket.Item>> getToEvaluate() {
         return toEvaluate;
+    }
+
+    /**
+     * Returns the total remaining quantity of an EAN across all its price entries.
+     * <p>
+     * Callers that only need to know how much of a product is left, regardless of price,
+     * use this instead of reaching into the per-price entries.
+     *
+     * @param ean The product EAN.
+     * @return The summed remaining quantity; zero when the EAN is absent.
+     */
+    public double remainingQuantity(String ean) {
+        List<Basket.Item> bucket = toEvaluate.get(ean);
+        if (bucket == null) {
+            return 0.0;
+        }
+        double total = 0.0;
+        for (Basket.Item item : bucket) {
+            total += item.quantity;
+        }
+        return total;
+    }
+
+    /**
+     * Returns the first working entry for an EAN, or {@code null} when none remains.
+     * <p>
+     * A convenience for callers that inspect a product's presence or its price context and
+     * do not themselves iterate the per-price entries.
+     *
+     * @param ean The product EAN.
+     * @return The first price entry, or {@code null}.
+     */
+    public Basket.Item firstEntry(String ean) {
+        List<Basket.Item> bucket = toEvaluate.get(ean);
+        return (bucket == null || bucket.isEmpty()) ? null : bucket.get(0);
     }
 
     /**
@@ -312,4 +479,65 @@ public class BasketEvaluation {
             }
         }
     }
+
+    /**
+     * An item as it appears in a valuation result — a line's contribution to one offer,
+     * already priced.
+     * <p>
+     * This is deliberately a distinct type from {@link Basket.Item}, the line submitted in
+     * the request. A request line may give rise to several result items: split across the
+     * paid and free parts of a bundle, spread over more than one offer, or separated by
+     * price when a product carries two. Each result item is mono-price and traces back to
+     * exactly one source line through {@link #lineId}, so a caller rebuilds a line-by-line
+     * valuation by grouping result items on that identifier.
+     * <p>
+     * The {@link #amount} is the offer's own attribution to this item — the figure the
+     * offer computed for it, not a re-derivation — so summing the items of an offer returns
+     * that offer's total.
+     * <p>
+     * Fields are public for JSON serialization.
+     */
+    public static class Item {
+
+        /**
+         * Identifier of the request line this result item came from.
+         */
+        public String lineId;
+
+        /**
+         * EAN of the product.
+         */
+        public String produceEan;
+
+        /**
+         * Quantity of this result item.
+         */
+        public double quantity;
+
+        /**
+         * The offer's attributed amount for this item: excl. tax, incl. tax, and the real
+         * VAT rate of the product — never a blended rate.
+         */
+        public AmountEvaluation amount;
+
+        /**
+         * Default constructor for JSON serialization.
+         */
+        public Item() {
+        }
+
+        /**
+         * Builds a result item from a consumed slice and its attributed amount.
+         *
+         * @param source The consumed slice, carrying its line id, EAN and quantity.
+         * @param amount The amount the offer attributes to this item.
+         */
+        public Item(Basket.Item source, AmountEvaluation amount) {
+            this.lineId = source.lineId;
+            this.produceEan = source.produceEan;
+            this.quantity = source.quantity == null ? 0.0 : source.quantity;
+            this.amount = amount;
+        }
+    }
+
 }

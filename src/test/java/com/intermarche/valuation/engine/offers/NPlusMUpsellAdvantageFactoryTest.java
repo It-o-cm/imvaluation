@@ -262,7 +262,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         Basket basket = createBasket("STORE_01", item);
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
-        evaluation.addAvailableToUpcell(evaluation.pick(3.0, "1111111111111"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(3.0, "1111111111111"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -317,7 +317,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         Basket basket = createBasket("STORE_01", item);
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
-        evaluation.addAvailableToUpcell(evaluation.pick(5.0, "2222222222222"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(5.0, "2222222222222"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -438,7 +438,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         evaluation.feedFrom(basket);
         // Fix: Add to availableToUpcell (simulating standard flow)
         // but current Applier implementation looks in toEvaluate.
-        evaluation.addAvailableToUpcell(evaluation.pick(2.0, "1111111111111"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(2.0, "1111111111111"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -478,8 +478,8 @@ public class NPlusMUpsellAdvantageFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
-        evaluation.addAvailableToUpcell(evaluation.pick(1.0, "1111111111111"));
-        evaluation.addAvailableToUpcell(evaluation.pick(1.0, "2222222222222"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(1.0, "1111111111111"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(1.0, "2222222222222"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -522,7 +522,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         Basket basket = createBasket("STORE_01", item);
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
-        evaluation.addAvailableToUpcell(evaluation.pick(1.0, "4444444444444"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(1.0, "4444444444444"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -566,7 +566,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
 
         evaluation.feedFrom(basket);
-        evaluation.addAvailableToUpcell(evaluation.pick(1.0, "1111111111111"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(1.0, "1111111111111"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();

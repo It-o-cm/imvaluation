@@ -20,7 +20,7 @@ import java.util.Base64;
  */
 public class ProductCategoryStorageImporterClient {
 
-    private static final String BASE_URL = "http://localhost:8080";
+    private static final String BASE_URL = "http://localhost:8090";
     private static final String IMPORT_URL = BASE_URL + "/product-category-storages/import";
 
     // Credentials defined in application-dev.properties

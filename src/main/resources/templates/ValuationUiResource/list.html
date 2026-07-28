@@ -102,24 +102,8 @@
         <th class="col-actions"></th>
     </tr>
     </thead>
-    <tbody>
-    {#for trace in view.rows}
-    <tr>
-        <td><a class="link-strong" href="/ui/valuations/{trace.id}">{trace.createdAt}</a></td>
-        <td>{trace.storeCode ?: '&mdash;'}</td>
-        <td class="col-muted">{trace.customerCode ?: '&mdash;'}</td>
-        <td>
-            {#if trace.success}<span class="badge badge-ok">Success</span>
-            {#else}<span class="badge badge-error">{trace.status}</span>{/if}
-        </td>
-        <td class="col-muted">{#if trace.totalIncludingTax}{trace.totalIncludingTax} &euro;{#else}&mdash;{/if}</td>
-        <td class="col-muted">{#if trace.durationMs}{trace.durationMs} ms{#else}&mdash;{/if}</td>
-        <td class="col-actions">
-            <a class="btn btn-small" href="/ui/valuations/{trace.id}">View</a>
-            <a class="btn btn-small" href="/ui/valuations/new?replay={trace.id}">Replay</a>
-        </td>
-    </tr>
-    {/for}
+    <tbody id="valuation-rows" data-refresh-url="/ui/valuations/rows">
+    {#include ValuationUiResource/val-rows /}
     </tbody>
 </table>
 
@@ -148,4 +132,5 @@
 {/if}
 
 <script src="/ui/list-filters.js"></script>
+<script src="/ui/valuation-refresh.js"></script>
 {/body}

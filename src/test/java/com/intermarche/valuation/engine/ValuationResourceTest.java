@@ -122,11 +122,11 @@ public class ValuationResourceTest {
 
     private BasketEvaluation mockEvaluationWithItems() {
         BasketEvaluation evaluation = org.mockito.Mockito.mock(BasketEvaluation.class);
-        Map<String, Basket.Item> items = new HashMap<>();
+        Map<String, java.util.List<Basket.Item>> items = new HashMap<>();
         Basket.Item item = new Basket.Item();
         item.produceEan = "9999999999999";
         item.quantity = 1.0;
-        items.put(item.produceEan, item);
+        items.put(item.produceEan, new ArrayList<>(java.util.List.of(item)));
         when(evaluation.getToEvaluate()).thenReturn(items);
         return evaluation;
     }

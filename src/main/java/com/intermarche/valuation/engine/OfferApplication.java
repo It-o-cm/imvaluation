@@ -29,4 +29,23 @@ public interface OfferApplication {
      * @return A descriptive string of the application.
      */
     String getType();
+
+    /**
+     * Returns this offer's items as valued result items, one per source line.
+     * <p>
+     * Each item carries the offer's attributed amount at the product's real VAT rate and
+     * the identifier of the request line it came from, so a caller reconstructs a
+     * line-by-line valuation by grouping on {@code lineId}. The amounts of the returned
+     * items sum to {@link #getAmount()}.
+     * <p>
+     * The default splits the offer total across the items by their catalog TTC weight
+     * (option b). An offer whose own logic already attributes amounts per item — because it
+     * selects or discounts items by price — overrides this to reflect that attribution
+     * exactly.
+     *
+     * @return The valued result items; empty when the offer covers no priced items.
+     */
+    default java.util.List<BasketEvaluation.Item> getValuedItems() {
+        return java.util.List.of();
+    }
 }

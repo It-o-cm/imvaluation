@@ -123,9 +123,8 @@ public class Basket {
             "required": ["produceEan", "quantity"],
             "properties": {
               "lineId": {
-                "type": "integer",
-                "description": "Line number, unique within the basket.",
-                "x-widget": "quantity",
+                "type": "string",
+                "description": "Line identifier, unique within the basket.",
                 "x-label": "Line"
               },
               "produceEan": {
@@ -161,6 +160,28 @@ public class Basket {
                 "description": "Overrides the catalog price. Requires the two other price fields.",
                 "x-widget": "rate",
                 "x-label": "VAT rate"
+              },
+              "manualDiscountAmount": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Manual gesture: a fixed amount in euros deducted from the item price. Exclusive with the percentage.",
+                "x-widget": "money",
+                "x-label": "Manual discount (amount)"
+              },
+              "manualDiscountPercent": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Manual gesture: a percentage reduction on the item price. Exclusive with the amount.",
+                "x-widget": "rate",
+                "x-label": "Manual discount (%)"
+              },
+              "manualForcedPrice": {
+                "type": "number",
+                "minimum": 0,
+                "description": "Manual gesture: a forced unit price (tax included), the label price. Exclusive with the other gestures.",
+                "x-widget": "money",
+                "x-label": "Forced price (incl. tax)"
               },
               "priceDate": {
                 "type": "string",
@@ -231,8 +252,11 @@ public class Basket {
 
         /**
          * The unique line identifier.
+         * <p>
+         * A String rather than a number: it labels a basket line and is never used in any
+         * arithmetic, so an upstream system is free to send "A001", a UUID, or a plain "1".
          */
-        public Integer lineId;
+        public String lineId;
 
         /**
          * The EAN code of the product (produce).
@@ -255,6 +279,36 @@ public class Basket {
         public BigDecimal vatRate;
 
         /**
+         * Manual cash-desk gesture: a fixed amount in euros deducted from the item price.
+         * <p>
+         * One of three mutually exclusive gestures ({@link #manualDiscountAmount},
+         * {@link #manualDiscountPercent}, {@link #manualForcedPrice}). When any is set the
+         * item is handled by the ultra-priority manual-gesture offer and is excluded from
+         * every other offer and discount. Distinct from {@link #pricePerUnitInclTax}, which
+         * is a normal contractual price that leaves the item eligible for every offer.
+         */
+        public BigDecimal manualDiscountAmount;
+
+        /**
+         * Manual cash-desk gesture: a percentage reduction applied to the item price.
+         * <p>
+         * Expressed as a percentage (e.g. {@code 10} for 10%). One of three mutually
+         * exclusive gestures; see {@link #manualDiscountAmount}.
+         */
+        public BigDecimal manualDiscountPercent;
+
+        /**
+         * Manual cash-desk gesture: a forced unit price, tax included — the "label price".
+         * <p>
+         * Replaces the catalog price for this line; the product's catalog VAT rate is kept.
+         * One of three mutually exclusive gestures; see {@link #manualDiscountAmount}. This
+         * is not the same as {@link #pricePerUnitInclTax}: a forced price is a cash-desk
+         * gesture that makes the line ultra-priority and bars every discount, whereas
+         * {@link #pricePerUnitInclTax} is a normal price that keeps the line fully eligible.
+         */
+        public BigDecimal manualForcedPrice;
+
+        /**
          * The date and time when the price was recorded.
          */
         public String priceDate;
@@ -268,6 +322,86 @@ public class Basket {
          * Cached Product entity for this item.
          */
         transient Product product;
+
+        /**
+         * Contributions of the original basket lines to this item.
+         * <p>
+         * When several basket lines carry the same EAN, the engine aggregates them into a
+         * single working item for pricing. This list preserves what each line contributed,
+         * so a consumed quantity can later be split back across the exact lines it came
+         * from, in order — the basis for a line-by-line valuation on the ticket.
+         * <p>
+         * It carries only the identifier and the quantity of each source line, never a
+         * price, and is ignored in JSON: it is internal bookkeeping, not part of the
+         * exchanged contract.
+         */
+        @JsonIgnore
+        public transient java.util.List<SourceLine> sourceLines = new java.util.ArrayList<>();
+
+        /**
+         * One original basket line's contribution to an aggregated item.
+         * <p>
+         * Holds the line identifier and the quantity that line brought, so a later split
+         * can rebuild per-line amounts exactly rather than by proportional guesswork.
+         */
+        public static class SourceLine {
+
+            /**
+             * Identifier of the original basket line.
+             */
+            public String lineId;
+
+            /**
+             * Quantity this line contributed to the aggregated item.
+             */
+            public double quantity;
+
+            /**
+             * Constructs a source-line contribution.
+             *
+             * @param lineId   Identifier of the original line.
+             * @param quantity Quantity contributed by that line.
+             */
+            public SourceLine(String lineId, double quantity) {
+                this.lineId = lineId;
+                this.quantity = quantity;
+            }
+        }
+
+        /**
+         * Indicates whether this item carries a manual cash-desk gesture.
+         * <p>
+         * A gesture is a price forcing, a fixed discount, or a percentage discount. Price
+         * forcing alone is not a gesture on its own here — it only sets the base price; a
+         * gesture is a forced discount or percentage, which routes the item to the
+         * ultra-priority manual-gesture offer. Price forcing combined with one of those is
+         * still one gesture.
+         *
+         * @return {@code true} when a manual discount amount or percentage is present.
+         */
+        @JsonIgnore
+        public boolean hasManualGesture() {
+            return this.manualDiscountAmount != null
+                    || this.manualDiscountPercent != null
+                    || this.manualForcedPrice != null;
+        }
+
+        /**
+         * Validates that at most one kind of manual discount is set on this item.
+         *
+         * @throws IllegalStateException when both a fixed amount and a percentage are given.
+         */
+        public void validateManualGesture() {
+            int count = 0;
+            if (this.manualDiscountAmount != null) count++;
+            if (this.manualDiscountPercent != null) count++;
+            if (this.manualForcedPrice != null) count++;
+            if (count > 1) {
+                throw new IllegalStateException(String.format(
+                        "Item EAN '%s' carries more than one manual gesture (amount, percentage, "
+                                + "forced price); only one is allowed.", this.produceEan));
+            }
+        }
 
         /**
          * Get Product by EAN with validation.
