@@ -37,6 +37,20 @@ import static org.junit.jupiter.api.Assertions.*;
 public class StoreCsvResourceTest {
 
     /**
+     * Starts a request already carrying the credentials the import endpoints expect.
+     * <p>
+     * The import paths sit behind a permission policy that requires an authenticated caller
+     * through the basic mechanism. {@code @TestSecurity} injects an identity without going
+     * through any mechanism, so it does not satisfy that policy: the call is answered with
+     * 401 before the resource is reached. Real credentials are sent instead.
+     *
+     * @return A request specification authenticated as the bootstrap administrator.
+     */
+    private io.restassured.specification.RequestSpecification authenticated() {
+        return given().auth().preemptive().basic("admin", "admin");
+    }
+
+    /**
      * The Store CSV resource under test.
      */
     @Inject
@@ -83,7 +97,7 @@ public class StoreCsvResourceTest {
                 "S001|Store Paris|1 Rue de Paris|Bat 5|75001|Paris|France|48.8566|2.3522\n" +
                 "S002|Store Lyon|1 Rue de Lyon||69001|Lyon|France||";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -133,7 +147,7 @@ public class StoreCsvResourceTest {
         String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n" +
                 "S001|New Name|New Street||Zip|New City|Country||";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -185,7 +199,7 @@ public class StoreCsvResourceTest {
         String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n" +
                 "S001|Store Identique|10 Avenue des Champs-Elysees|Appt 5B|75008|Paris|France|48.8698|2.3075";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -207,7 +221,7 @@ public class StoreCsvResourceTest {
         // CSV with only header, no data lines
         String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -237,7 +251,7 @@ public class StoreCsvResourceTest {
                 "S002|Store 2|Str1||Zip|City|France||\n" + // Valid
                 "S003| |Str1||Zip|City|France||"; // Invalid (Empty Name)
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()

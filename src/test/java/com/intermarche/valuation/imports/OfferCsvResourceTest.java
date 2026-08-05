@@ -2,6 +2,7 @@ package com.intermarche.valuation.imports;
 
 import com.intermarche.valuation.domain.Adresse;
 import com.intermarche.valuation.domain.Offer;
+import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
 import io.quarkus.hibernate.orm.panache.Panache;
@@ -49,13 +50,33 @@ public class OfferCsvResourceTest {
 
     /**
      * Cleans the database before each test to ensure isolation.
+     * <p>
+     * Rows are removed in reverse dependency order. Prices come first because they hold a
+     * foreign key on stores: clearing stores while a price still points at one fails on a
+     * referential integrity violation. This test creates no price itself, but every
+     * {@code @QuarkusTest} class shares one database, so any class that ran before may have
+     * left some.
      */
     @BeforeEach
     @Transactional
     void cleanDatabase() {
+        Price.deleteAll();
         Offer.deleteAll();
         Store.deleteAll();
         StoreGroup.deleteAll();
+    }
+
+    /**
+     * Starts a request already carrying the credentials the import endpoints expect.
+     * <p>
+     * The import paths sit behind the {@code api} permission policy, which requires an
+     * authenticated caller through the basic mechanism; an anonymous call is answered with
+     * 401 before it ever reaches the resource.
+     *
+     * @return A request specification authenticated as the bootstrap administrator.
+     */
+    private io.restassured.specification.RequestSpecification authenticated() {
+        return given().auth().preemptive().basic("admin", "admin");
     }
 
     /**
@@ -90,7 +111,7 @@ public class OfferCsvResourceTest {
                 "OFFER01|PROMO|{\"ean\":\"123\"}|S001|G001\n" +
                 "OFFER02|DISCOUNT|{\"ean\":\"456\"}|S001|"; // Only store
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -150,7 +171,7 @@ public class OfferCsvResourceTest {
         String csvContent = "code|type|specification|store_codes|group_codes\n" +
                 "OFFER_UPDATE|NEW_TYPE|{\"new\":\"data\"}|S001|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -201,7 +222,7 @@ public class OfferCsvResourceTest {
         String csvContent = "code|type|specification|store_codes|group_codes\n" +
                 "OFFER_SAME|TYPE|{}|S001|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -223,7 +244,7 @@ public class OfferCsvResourceTest {
         String csvContent = "code|type|specification|store_codes|group_codes\n" +
                 "OFFER_BAD|PROMO|Spec||"; // Both empty
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -244,7 +265,7 @@ public class OfferCsvResourceTest {
         String csvContent = "code|type|specification|store_codes|group_codes\n" +
                 "OFFER_NO_STORE|PROMO|Spec|NON_EXISTENT_STORE|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -265,7 +286,7 @@ public class OfferCsvResourceTest {
         String csvContent = "code|type|specification|store_codes|group_codes\n" +
                 "OFFER_NO_GROUP|PROMO|Spec||NON_EXISTENT_GROUP";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -309,7 +330,7 @@ public class OfferCsvResourceTest {
                 "OFFER02|PROMO|{}|S001|\n" +
                 "OFFER03|PROMO|{}||"; // Invalid
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -351,7 +372,7 @@ public class OfferCsvResourceTest {
                 "OFFER_FALLBACK|PROMO|{}||G_FALLBACK\n" + // Valid
                 "OFFER_ERROR|PROMO|{}||"; // Invalid (No target, triggers rollback)
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -418,10 +439,13 @@ public class OfferCsvResourceTest {
     }
 
     /**
-     * Tests the security configuration to ensure access is denied for non-admin users.
+     * Tests that an anonymous caller is denied access to the import endpoint.
+     * <p>
+     * This one deliberately does not authenticate: it asserts the permission policy answers
+     * an unauthenticated call with 401 before the resource is ever reached.
      */
     @Test
-    void testSecurity_AccessDeniedForNonAdmin() {
+    void testSecurity_AccessDeniedForAnonymousCaller() {
         String csvContent = "code|type|specification|store_codes|group_codes\n" +
                 "OFFER01|PROMO|Spec|S001|";
 

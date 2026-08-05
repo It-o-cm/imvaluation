@@ -493,7 +493,7 @@ public class BasketTest {
         assertEquals(2, basket.items.size());
 
         Basket.Item firstItem = basket.items.get(0);
-        assertEquals(101, firstItem.lineId);
+        assertEquals("101", firstItem.lineId);
         assertEquals("3124567890123", firstItem.produceEan);
         assertEquals(2.0, firstItem.quantity);
 

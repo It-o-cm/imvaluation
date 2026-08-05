@@ -98,18 +98,25 @@ public class ValuationResourceTest {
         assertTrue(ex.getMessage().contains("Valuation failed"));
     }
 
+    /**
+     * A basket without any line is rejected before valuation.
+     * <p>
+     * The request is validated against the basket schema, which requires {@code items}, so
+     * the engine is never reached: pricing nothing and answering success would hide a
+     * malformed request from the caller.
+     */
     @Test
     void testCalculate_ItemsListIsNull() {
         // Arrange
         basket.items = null;
-        BasketEvaluation evaluation = mockEvaluationWithEmptyMap();
-        when(engine.evaluate(any(Basket.class))).thenReturn(evaluation);
 
-        // Act
-        Response response = resource.calculate(basket);
+        // Act & Assert
+        WebApplicationException ex = assertThrows(WebApplicationException.class, () -> {
+            resource.calculate(basket);
+        });
 
-        // Assert
-        assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
+        assertEquals(400, ex.getResponse().getStatus());
+        assertTrue(ex.getMessage().contains("items"));
     }
 
     // --------------------------------------------------

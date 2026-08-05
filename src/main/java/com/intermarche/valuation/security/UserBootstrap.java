@@ -35,9 +35,12 @@ public class UserBootstrap {
     /**
      * Clear text password of the account created on an empty database.
      * <p>
-     * Override it in every environment that is not a local workstation.
+     * Deliberately without a default: a fallback value compiled into the application would
+     * grant administrator access to anyone who reads the source. The property is supplied
+     * per environment (from a secret outside the repository in production), and startup
+     * fails when it is missing rather than falling back to something guessable.
      */
-    @ConfigProperty(name = "valuation.bootstrap.admin.password", defaultValue = "admin")
+    @ConfigProperty(name = "valuation.bootstrap.admin.password")
     String bootstrapPassword;
 
     /**

@@ -34,6 +34,20 @@ import static org.junit.jupiter.api.Assertions.*;
 public class StoreGroupCsvResourceTest {
 
     /**
+     * Starts a request already carrying the credentials the import endpoints expect.
+     * <p>
+     * The import paths sit behind a permission policy that requires an authenticated caller
+     * through the basic mechanism. {@code @TestSecurity} injects an identity without going
+     * through any mechanism, so it does not satisfy that policy: the call is answered with
+     * 401 before the resource is reached. Real credentials are sent instead.
+     *
+     * @return A request specification authenticated as the bootstrap administrator.
+     */
+    private io.restassured.specification.RequestSpecification authenticated() {
+        return given().auth().preemptive().basic("admin", "admin");
+    }
+
+    /**
      * The StoreGroup CSV resource under test.
      */
     @Inject
@@ -87,7 +101,7 @@ public class StoreGroupCsvResourceTest {
         String csvContent = "code|name|stores|groups\n" +
                 "G_UPDATE|New Name||";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -122,7 +136,7 @@ public class StoreGroupCsvResourceTest {
         String csvContent = "code|name|stores|groups\n" +
                 "G_SAME|Same Name||";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -146,7 +160,7 @@ public class StoreGroupCsvResourceTest {
         String csvContent = "code|name|stores|groups\n" +
                 "G_BAD_SUB|Bad||NON_EXISTENT_SUB";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -175,7 +189,7 @@ public class StoreGroupCsvResourceTest {
                 "G01|Empty Lists|||\n" + // Empty stores (col 3) and groups (col 4)
                 "G02|Also Empty|||";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -217,7 +231,7 @@ public class StoreGroupCsvResourceTest {
                 "G_OK|Good Group|S001|\n" +
                 "G_BAD|Bad Group|BAD_STORE|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -354,7 +368,7 @@ public class StoreGroupCsvResourceTest {
                 "ERROR_GROUP|Nom Error|STORE_INCONNU|";                       // Ligne 2 (Provoque l'erreur)
 
         // 3. Appel
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -404,7 +418,7 @@ public class StoreGroupCsvResourceTest {
                 "ERROR_GROUP|Error Name|MISSING_STORE|";           // Erreur ici
 
         // 3. Action
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()

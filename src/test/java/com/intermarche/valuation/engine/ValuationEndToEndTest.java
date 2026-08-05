@@ -1,9 +1,17 @@
 package com.intermarche.valuation.engine;
 
+import com.intermarche.valuation.domain.Offer;
+import com.intermarche.valuation.domain.Price;
+import com.intermarche.valuation.domain.Product;
+import com.intermarche.valuation.domain.ProductFamily;
+import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.domain.StoreGroup;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.ContentType;
 import io.restassured.response.Response;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Order;
@@ -73,9 +81,13 @@ public class ValuationEndToEndTest {
      * Going through the real endpoints rather than seeding the tables directly means the
      * importers are exercised too, and that the data under test is the data the application
      * actually accepts.
+     * <p>
+     * Run before each test but guarded so it happens once: the extension points RestAssured
+     * at the test port from its own before-each callback, so a call issued from a
+     * {@code @BeforeAll} would still target the default port and be refused.
      */
-    @BeforeAll
-    static void seedReferenceData() {
+    @BeforeEach
+    void seedReferenceData() {
         if (seeded) {
             return;
         }
@@ -161,6 +173,28 @@ public class ValuationEndToEndTest {
                 .body(csv)
                 .when().post(path)
                 .then().statusCode(200);
+    }
+
+    /**
+     * Removes the reference data this class inserted.
+     * <p>
+     * Every {@code @QuarkusTest} class shares one application and one database, and the
+     * schema is only recreated at startup. A class that leaves rows behind therefore
+     * constrains the ones that follow: prices in particular hold a foreign key on stores, so
+     * another class clearing stores would fail on a referential integrity violation. The
+     * rows are removed in reverse dependency order so no constraint is ever left dangling.
+     */
+    @AfterAll
+    static void clearReferenceData() {
+        QuarkusTransaction.requiringNew().run(() -> {
+            Price.deleteAll();
+            Offer.deleteAll();
+            ProductFamily.deleteAll();
+            Product.deleteAll();
+            StoreGroup.deleteAll();
+            Store.deleteAll();
+        });
+        seeded = false;
     }
 
     // --------------------------------------------------
@@ -314,8 +348,14 @@ public class ValuationEndToEndTest {
                   "deliveryAddress": { "streetLine1": "12 Rue du Test", "postalCode": "59113",
                                        "city": "Seclin", "country": "France",
                                        "latitude": 50.540, "longitude": 3.030 },
-                  "items": [ { "lineId": "L1", "produceEan": "3300000000031", "quantity": 2 } ] }
+                  "instructions": ["Deposit basket"],
+                  "items": [
+                    { "lineId": "L1", "produceEan": "3300000000031", "quantity": 2 },
+                    { "lineId": "L2", "produceEan": "3300000000001", "quantity": 5 } ] }
                 """);
+        // A deposit basket is only charged when the basket asks for one, through the
+        // dedicated instruction. The pan carries no reference volume; the apples do, and
+        // five of them exceed one basket, which sets the quantity due.
         response.then()
                 .body("offers.find { it.type.startsWith('Delivery') }", notNullValue())
                 .body("offers.find { it.type.contains('Deposit') }", notNullValue());

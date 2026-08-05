@@ -53,6 +53,34 @@
 .wb-group-row:hover { background: #f2f4f7; }
 .wb-group-row.is-dragging { opacity: .45; }
 
+.wb-group-remove {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--im-ink-soft);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .12s ease, color .12s ease, background .12s ease;
+}
+
+.wb-group-remove svg { width: 14px; height: 14px; fill: currentColor; }
+
+/* Revealed on row hover, and always visible once focused for keyboard users. */
+.wb-group-row:hover .wb-group-remove,
+.wb-group-remove:focus-visible { opacity: 1; }
+
+.wb-group-remove:hover {
+    color: var(--im-red);
+    background: #fdecee;
+}
+
 .wb-group-row.is-drop-target,
 .wb-tree.is-drop-target {
     background: #e8f3ee;

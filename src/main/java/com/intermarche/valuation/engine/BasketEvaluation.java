@@ -149,17 +149,28 @@ public class BasketEvaluation {
                     copy.pricePerUnitInclTax = originalItem.pricePerUnitInclTax;
                     copy.vatRate = originalItem.vatRate;
                     copy.priceDate = originalItem.priceDate;
+                    // The manual gesture belongs to the line and takes part in the price
+                    // profile: without it here, a line bearing a gesture would look identical
+                    // to a plain line of the same product and the two would be merged.
+                    copy.manualDiscountAmount = originalItem.manualDiscountAmount;
+                    copy.manualDiscountPercent = originalItem.manualDiscountPercent;
+                    copy.manualForcedPrice = originalItem.manualForcedPrice;
                     // Record this line's contribution so a later consumption can be split
-                    // back across the exact source lines, in order.
+                    // back across the exact source lines, in order. A line without a
+                    // quantity contributes nothing and is recorded as zero rather than
+                    // unboxed, which would fail on a case the engine otherwise tolerates.
                     copy.sourceLines.add(new Basket.Item.SourceLine(
-                            originalItem.lineId, originalItem.quantity));
+                            originalItem.lineId, contributionOf(originalItem)));
                     bucket.add(copy);
                 } else {
                     // Same EAN and same price: aggregate quantity, keep each contributing
                     // line on record for an exact per-line split downstream.
-                    existingItem.quantity += originalItem.quantity;
+                    if (originalItem.quantity != null) {
+                        existingItem.quantity = (existingItem.quantity == null ? 0.0 : existingItem.quantity)
+                                + originalItem.quantity;
+                    }
                     existingItem.sourceLines.add(new Basket.Item.SourceLine(
-                            originalItem.lineId, originalItem.quantity));
+                            originalItem.lineId, contributionOf(originalItem)));
                 }
             }
         }
@@ -201,7 +212,7 @@ public class BasketEvaluation {
         // product's distinct prices.
         while (remaining > 1e-9 && !bucket.isEmpty()) {
             Basket.Item item = bucket.get(0);
-            double available = item.quantity;
+            double available = contributionOf(item);
             double take = Math.min(remaining, available);
 
             Basket.Item slice = new Basket.Item();
@@ -212,18 +223,81 @@ public class BasketEvaluation {
             slice.pricePerUnitInclTax = item.pricePerUnitInclTax;
             slice.vatRate = item.vatRate;
             slice.priceDate = item.priceDate;
+            slice.manualDiscountAmount = item.manualDiscountAmount;
+            slice.manualDiscountPercent = item.manualDiscountPercent;
+            slice.manualForcedPrice = item.manualForcedPrice;
             slice.sourceLines = consumeSourceLines(item, take);
             picked.add(slice);
 
             remaining -= take;
             if (take < available) {
-                item.quantity = available - take;
+                item.quantity = roundQuantity(available - take);
             } else {
                 bucket.remove(0);
             }
         }
         if (bucket.isEmpty()) {
             toEvaluate.remove(ean);
+        }
+        return picked;
+    }
+
+    /**
+     * Consumes a quantity from the entry matching a given line's price profile.
+     * <p>
+     * {@link #pick(Double, String)} draws on the first entry of an EAN, which is wrong for a
+     * caller that owns one particular line: a manual gesture belongs to the line that
+     * carries it, and consuming a neighbouring line of the same product would apply the
+     * gesture to the wrong quantity and report the wrong line identifier.
+     *
+     * @param quantityToPick The quantity to consume.
+     * @param source         The line whose price profile identifies the entry to draw on.
+     * @return The consumed slices, empty when no matching entry remains.
+     */
+    public List<Basket.Item> pickMatching(Double quantityToPick, Basket.Item source) {
+        List<Basket.Item> picked = new ArrayList<>();
+        if (quantityToPick == null || source == null || source.produceEan == null) {
+            return picked;
+        }
+        List<Basket.Item> bucket = toEvaluate.get(source.produceEan);
+        if (bucket == null) {
+            return picked;
+        }
+        int index = -1;
+        for (int i = 0; i < bucket.size(); i++) {
+            if (samePriceProfile(bucket.get(i), source)) {
+                index = i;
+                break;
+            }
+        }
+        if (index < 0) {
+            return picked;
+        }
+        Basket.Item item = bucket.get(index);
+        double available = contributionOf(item);
+        double take = Math.min(quantityToPick, available);
+
+        Basket.Item slice = new Basket.Item();
+        slice.lineId = item.lineId;
+        slice.produceEan = item.produceEan;
+        slice.quantity = take;
+        slice.pricePerUnitExclTax = item.pricePerUnitExclTax;
+        slice.pricePerUnitInclTax = item.pricePerUnitInclTax;
+        slice.vatRate = item.vatRate;
+        slice.priceDate = item.priceDate;
+        slice.manualDiscountAmount = item.manualDiscountAmount;
+        slice.manualDiscountPercent = item.manualDiscountPercent;
+        slice.manualForcedPrice = item.manualForcedPrice;
+        slice.sourceLines = consumeSourceLines(item, take);
+        picked.add(slice);
+
+        if (take < available) {
+            item.quantity = roundQuantity(available - take);
+        } else {
+            bucket.remove(index);
+            if (bucket.isEmpty()) {
+                toEvaluate.remove(source.produceEan);
+            }
         }
         return picked;
     }
@@ -260,7 +334,7 @@ public class BasketEvaluation {
         merged.priceDate = first.priceDate;
         double total = 0.0;
         for (Basket.Item slice : slices) {
-            total += slice.quantity;
+            total += contributionOf(slice);
             merged.sourceLines.addAll(slice.sourceLines);
         }
         merged.quantity = total;
@@ -291,10 +365,37 @@ public class BasketEvaluation {
             if (slice >= line.quantity - 1e-9) {
                 it.remove();
             } else {
-                line.quantity -= slice;
+                line.quantity = roundQuantity(line.quantity - slice);
             }
         }
         return taken;
+    }
+
+    /**
+     * Rounds a quantity to a sane precision.
+     * <p>
+     * Quantities are doubles, so splitting one (3.639 minus 3.0) leaves artefacts like
+     * 0.6389999999999998 that then surface in offer labels and in the response. Rounding
+     * the remainder keeps the value the caller would expect without changing the total
+     * consumed.
+     *
+     * @param quantity The quantity to round.
+     * @return The quantity rounded to six decimals.
+     */
+    private static double roundQuantity(double quantity) {
+        return java.math.BigDecimal.valueOf(quantity)
+                .setScale(6, java.math.RoundingMode.HALF_UP)
+                .doubleValue();
+    }
+
+    /**
+     * Returns the quantity a line contributes, treating an absent quantity as none.
+     *
+     * @param item The original basket line.
+     * @return The quantity, or zero when the line carries none.
+     */
+    private static double contributionOf(Basket.Item item) {
+        return item.quantity == null ? 0.0 : item.quantity;
     }
 
     /**
@@ -387,23 +488,9 @@ public class BasketEvaluation {
         }
         double total = 0.0;
         for (Basket.Item item : bucket) {
-            total += item.quantity;
+            total += contributionOf(item);
         }
         return total;
-    }
-
-    /**
-     * Returns the first working entry for an EAN, or {@code null} when none remains.
-     * <p>
-     * A convenience for callers that inspect a product's presence or its price context and
-     * do not themselves iterate the per-price entries.
-     *
-     * @param ean The product EAN.
-     * @return The first price entry, or {@code null}.
-     */
-    public Basket.Item firstEntry(String ean) {
-        List<Basket.Item> bucket = toEvaluate.get(ean);
-        return (bucket == null || bucket.isEmpty()) ? null : bucket.get(0);
     }
 
     /**
@@ -447,6 +534,20 @@ public class BasketEvaluation {
     }
 
     /**
+     * Returns the amounts due per real VAT rate.
+     * <p>
+     * Derived from the applied offers and discounts on every call rather than stored, so it
+     * cannot drift from them. Where {@link #getTotalPrice()} shows a rate of zero because
+     * several rates are mixed, this gives the figures a tax return needs: one taxable base
+     * and one tax amount per legal rate, summing to the total.
+     *
+     * @return The breakdown lines, ordered by increasing rate.
+     */
+    public java.util.List<VatLine> getVatBreakdown() {
+        return VatBreakdown.compute(this);
+    }
+
+    /**
      * Gets the map of items available for upcell suggestions.
      *
      * @return The map of items (EAN -> Item).
@@ -475,8 +576,62 @@ public class BasketEvaluation {
                 availableToUpcell.put(pickedItem.produceEan, copy);
             } else {
                 // Duplicate EAN: Aggregate quantity to the existing item
-                existingItem.quantity += pickedItem.quantity;
+                existingItem.quantity = contributionOf(existingItem) + contributionOf(pickedItem);
             }
+        }
+    }
+
+    /**
+     * One line of the VAT breakdown: what is due at a single legal rate.
+     * <p>
+     * The engine prices each item at its product's own rate, so these lines carry real
+     * rates only — never the blended figure an offer or the total may show. Their amounts
+     * sum to the basket total.
+     * <p>
+     * Fields are public for JSON serialization.
+     */
+    public static class VatLine {
+
+        /**
+         * The VAT rate this line accounts for.
+         */
+        public java.math.BigDecimal vatRate;
+
+        /**
+         * Taxable base: the amount excluding tax at this rate.
+         */
+        public java.math.BigDecimal amountExcludingTax;
+
+        /**
+         * The tax due at this rate.
+         */
+        public java.math.BigDecimal vatAmount;
+
+        /**
+         * The amount including tax at this rate.
+         */
+        public java.math.BigDecimal amountIncludingTax;
+
+        /**
+         * Default constructor for JSON serialization.
+         */
+        public VatLine() {
+        }
+
+        /**
+         * Builds a breakdown line.
+         *
+         * @param vatRate            The rate.
+         * @param amountExcludingTax The taxable base.
+         * @param vatAmount          The tax due.
+         * @param amountIncludingTax The amount including tax.
+         */
+        public VatLine(java.math.BigDecimal vatRate, java.math.BigDecimal amountExcludingTax,
+                       java.math.BigDecimal vatAmount, java.math.BigDecimal amountIncludingTax) {
+            this.vatRate = vatRate;
+            this.amountExcludingTax = amountExcludingTax;
+            this.vatAmount = vatAmount;
+            this.amountIncludingTax = amountIncludingTax;
         }
     }
 

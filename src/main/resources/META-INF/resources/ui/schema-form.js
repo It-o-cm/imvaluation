@@ -28,6 +28,7 @@
         { test: function (n) { return /(storegroupcodes|storegroupcode)$/.test(n); }, widget: 'store-group-code' },
         { test: function (n) { return /(storecodes|storecode|idpdv|pdv)$/.test(n); }, widget: 'store-code' },
         { test: function (n) { return /flags?$/.test(n); }, widget: 'product-family-flag' },
+        { test: function (n) { return /percent$/.test(n); }, widget: 'percent' },
         { test: function (n) { return /(vatrate|taxrate|rate)$/.test(n); }, widget: 'rate' },
         { test: function (n) { return /(price|amount|threshold|cap)$/.test(n); }, widget: 'money' },
         { test: function (n) { return /(distance|radius)$/.test(n); }, widget: 'distance' },
@@ -53,6 +54,7 @@
     var UNITS = {
         'money': '\u20ac',
         'rate': '%',
+        'percent': '%',
         'distance': 'km',
         'volume': 'L',
         'weight': 'kg'
@@ -432,6 +434,7 @@
 
             case 'money':
             case 'rate':
+            case 'percent':
             case 'distance':
             case 'volume':
             case 'weight':
@@ -538,19 +541,25 @@
      */
     function buildNumberControl(widget, schema, value, onChange) {
         var isInteger = widget === 'integer' || widget === 'quantity' || (schema && schema.type === 'integer');
+        // A "rate" is stored as a fraction (0.2) but shown as a percentage (20), so the
+        // value and the schema bounds are scaled for display and unscaled on read. A
+        // "percent" is already expressed in percent and needs no scaling.
+        var scale = widget === 'rate' ? 100 : 1;
         var wrapper = el('div', 'input-unit');
         var input = el('input', 'input-control');
         input.type = 'number';
-        input.step = isInteger ? '1' : (widget === 'rate' ? '0.0001' : '0.01');
+        input.step = isInteger ? '1' : (scale === 100 || widget === 'percent' ? '0.01' : '0.01');
         if (schema) {
-            if (schema.minimum !== undefined) { input.min = schema.minimum; }
-            if (schema.maximum !== undefined) { input.max = schema.maximum; }
+            if (schema.minimum !== undefined) { input.min = schema.minimum * scale; }
+            if (schema.maximum !== undefined) { input.max = schema.maximum * scale; }
             if (schema.exclusiveMinimum !== undefined) {
-                input.min = isInteger ? schema.exclusiveMinimum + 1 : schema.exclusiveMinimum;
+                input.min = isInteger ? schema.exclusiveMinimum + 1 : schema.exclusiveMinimum * scale;
             }
         }
         if (value !== undefined && value !== null && value !== '') {
-            input.value = value;
+            // Scaling can surface float artefacts (0.2 * 100 = 20.000000000000004), so the
+            // displayed figure is trimmed.
+            input.value = scale === 1 ? value : parseFloat((value * scale).toFixed(6));
         }
         input.addEventListener('input', onChange);
         wrapper.appendChild(input);
@@ -564,7 +573,10 @@
             read: function () {
                 if (input.value === '') { return undefined; }
                 var parsed = isInteger ? parseInt(input.value, 10) : parseFloat(input.value);
-                return isNaN(parsed) ? undefined : parsed;
+                if (isNaN(parsed)) { return undefined; }
+                if (scale === 1) { return parsed; }
+                // Back to a fraction, trimmed so 20 / 100 stays 0.2 and not 0.2000000001.
+                return parseFloat((parsed / scale).toFixed(8));
             }
         };
     }

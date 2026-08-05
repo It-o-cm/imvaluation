@@ -129,13 +129,16 @@ public class ValuationUiResource {
                                                    ValuationTraceConfig config);
 
         /**
-         * Renders only the table rows, for the periodic refresh of the list.
+         * Renders only the "rows" fragment of the list template, for the periodic refresh.
+         * <p>
+         * The {@code list$rows} name binds to the {@code {#fragment id=rows}} declared in
+         * list.html, so the rows live in one place and are reused by the full page and by
+         * the refresh endpoint.
          *
          * @param view The same view model as {@link #list}, carrying the current rows.
-         * @return The template instance to render.
+         * @return The rendered rows fragment.
          */
-        @io.quarkus.qute.Location("ValuationUiResource/rows.html")
-        public static native TemplateInstance rows(ListView<ValuationTrace> view);
+        public static native TemplateInstance list$rows(ListView<ValuationTrace> view);
 
         /**
          * Renders a single trace, request and response side by side.
@@ -251,7 +254,7 @@ public class ValuationUiResource {
                 sortKey, descending, currentPage, pageCount, totalCount, PAGE_SIZE, "valuation",
                 null, true,
                 securityContext != null && securityContext.isUserInRole(AppUser.ROLE_ADMIN));
-        return Templates.rows(view);
+        return Templates.list$rows(view);
     }
 
     /**

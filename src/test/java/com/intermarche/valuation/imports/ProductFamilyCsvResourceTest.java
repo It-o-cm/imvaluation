@@ -36,6 +36,20 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ProductFamilyCsvResourceTest {
 
     /**
+     * Starts a request already carrying the credentials the import endpoints expect.
+     * <p>
+     * The import paths sit behind a permission policy that requires an authenticated caller
+     * through the basic mechanism. {@code @TestSecurity} injects an identity without going
+     * through any mechanism, so it does not satisfy that policy: the call is answered with
+     * 401 before the resource is reached. Real credentials are sent instead.
+     *
+     * @return A request specification authenticated as the bootstrap administrator.
+     */
+    private io.restassured.specification.RequestSpecification authenticated() {
+        return given().auth().preemptive().basic("admin", "admin");
+    }
+
+    /**
      * The ProductFamily CSV resource under test.
      */
     @Inject
@@ -97,7 +111,7 @@ public class ProductFamilyCsvResourceTest {
                 "FAM01|Family 1|FLAG_A|1234567890123|SUB01\n" +
                 "FAM02|Family 2|FLAG_B||"; // No links
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -145,7 +159,7 @@ public class ProductFamilyCsvResourceTest {
         String csvContent = "code|description|flags|product_eans|family_codes\n" +
                 "FAM_UPDATE|New Desc|NEW||";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -184,7 +198,7 @@ public class ProductFamilyCsvResourceTest {
         String csvContent = "code|description|flags|product_eans|family_codes\n" +
                 "FAM_SAME|Desc|FLAG||";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -204,7 +218,7 @@ public class ProductFamilyCsvResourceTest {
         String csvContent = "code|description|flags|product_eans|family_codes\n" +
                 "FAM_BAD|Bad||9999999999999|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -225,7 +239,7 @@ public class ProductFamilyCsvResourceTest {
         String csvContent = "code|description|flags|product_eans|family_codes\n" +
                 "FAM_BAD_SUB|Bad Sub|||NO_EXIST";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -264,7 +278,7 @@ public class ProductFamilyCsvResourceTest {
                 "FAM02|F2||1111111111111|\n" +
                 "FAM03|F3||9999999999999|"; // Invalid Product
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -304,7 +318,7 @@ public class ProductFamilyCsvResourceTest {
                 "FAM_MAIN|Main|||SUB_FALLBACK\n" + // Valid
                 "FAM_ERR|Err|||NO_EXIST"; // Invalid
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -408,7 +422,7 @@ public class ProductFamilyCsvResourceTest {
         String csvContent = "code|description|flags|product_eans|family_codes\n" +
                 "FAM_SELF|Updated Desc|||FAM_SELF"; // Attempting self-reference
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()

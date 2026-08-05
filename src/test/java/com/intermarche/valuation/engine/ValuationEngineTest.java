@@ -780,9 +780,6 @@ public class ValuationEngineTest {
         // On crée un mock direct de l'interface/classe
         AdvantageApplier applier = mock(AdvantageApplier.class);
 
-        // On stub le score d'efficacité (nécessaire pour le tri et le println)
-        when(applier.getEfficiencyScore()).thenReturn(1.0);
-
         // On crée une liste mutable (pour le tri interne) et on y ajoute le mock
         List<AdvantageApplier> appliers = new ArrayList<>();
         appliers.add(applier);
@@ -815,7 +812,6 @@ public class ValuationEngineTest {
     void testCreateDiscountApplications_ApplicationsResultIsNull() {
         // Arrange
         AdvantageApplier applier = mock(AdvantageApplier.class);
-        when(applier.getEfficiencyScore()).thenReturn(1.0);
 
         List<AdvantageApplier> appliers = new ArrayList<>();
         appliers.add(applier);
@@ -841,7 +837,6 @@ public class ValuationEngineTest {
     void testCreateDiscountApplications_ApplierThrowsException() {
         // Arrange
         AdvantageApplier applier = mock(AdvantageApplier.class);
-        when(applier.getEfficiencyScore()).thenReturn(1.0);
 
         List<AdvantageApplier> appliers = new ArrayList<>();
         appliers.add(applier);

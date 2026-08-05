@@ -211,8 +211,9 @@
      * Builds the delete button shown on a group row.
      * <p>
      * Removing a group releases its members to the level above and only takes effect once
-     * the hierarchy is saved, so no confirmation is asked: the change is reversible until
-     * then. The click is kept from reaching the row, which is draggable and a drop target.
+     * the hierarchy is saved. An empty group goes without asking; a populated one asks
+     * first, since its contents are about to be moved. The click is kept from reaching the
+     * row, which is draggable and a drop target.
      *
      * @param {object} g The group the button belongs to.
      * @returns {HTMLElement} The button element.
@@ -229,9 +230,39 @@
         button.addEventListener('click', function (event) {
             event.stopPropagation();
             event.preventDefault();
-            removeGroup(g.code);
+            if (confirmRemoval(g)) {
+                removeGroup(g.code);
+            }
         });
         return button;
+    }
+
+    /**
+     * Asks for confirmation when the group about to be deleted still holds members.
+     * <p>
+     * An empty group is deleted straight away. Otherwise the prompt states what the group
+     * contains and where its contents will end up, so the consequence is explicit before
+     * anything moves.
+     *
+     * @param {object} g The group about to be removed.
+     * @returns {boolean} {@code true} when the deletion may proceed.
+     */
+    function confirmRemoval(g) {
+        var storeCount = (g.storeCodes || []).length;
+        var childCount = (g.childCodes || []).length;
+        if (storeCount === 0 && childCount === 0) {
+            return true;
+        }
+        var parts = [];
+        if (storeCount) {
+            parts.push(storeCount + (storeCount === 1 ? ' store' : ' stores'));
+        }
+        if (childCount) {
+            parts.push(childCount + (childCount === 1 ? ' sub-group' : ' sub-groups'));
+        }
+        var label = g.name || g.code;
+        return window.confirm('"' + label + '" contains ' + parts.join(' and ')
+            + '.\n\nDeleting the group moves them up one level. Continue?');
     }
 
     /**
@@ -334,7 +365,7 @@
             // The Delete key stays available, but a visible button makes the action
             // discoverable instead of relying on a hidden shortcut.
             row.addEventListener('keydown', function (event) {
-                if (event.key === 'Delete') { removeGroup(g.code); }
+                if (event.key === 'Delete' && confirmRemoval(g)) { removeGroup(g.code); }
             });
             row.tabIndex = 0;
             row.appendChild(buildRemoveButton(g));

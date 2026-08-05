@@ -2,7 +2,6 @@ package com.intermarche.valuation.engine.offers;
 
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
-import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.engine.*;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -96,9 +95,10 @@ public class ManualGestureOfferFactory implements OfferApplierFactory, EngineTra
             if (remaining <= 0.0) {
                 return List.of();
             }
-            // Consume this line's quantity. Because a gesture line has its own price profile,
-            // it is picked as its own slice(s), never merged with catalog-priced lines.
-            List<Basket.Item> slices = basketEvaluation.pick(item.quantity, item.produceEan);
+            // Consume this line's own entry. A plain pick would draw on the first entry of
+            // the product, which may belong to another line: the gesture would then be
+            // applied to the wrong quantity and reported against the wrong line.
+            List<Basket.Item> slices = basketEvaluation.pickMatching(item.quantity, item);
             List<OfferApplication> applications = new ArrayList<>();
             for (Basket.Item slice : slices) {
                 // Deliberately NOT added to the upcell pool: a gesture line is excluded from
@@ -163,7 +163,9 @@ public class ManualGestureOfferFactory implements OfferApplierFactory, EngineTra
                 unitTtc = BigDecimal.ZERO;
             }
 
-            BigDecimal qty = BigDecimal.valueOf(item.quantity);
+            // The quantity is nullable on a basket line; an absent one prices as nothing
+            // rather than failing on an unboxing the engine tolerates elsewhere.
+            BigDecimal qty = BigDecimal.valueOf(item.quantity == null ? 0.0 : item.quantity);
             BigDecimal totalTtc = unitTtc.multiply(qty).setScale(2, RoundingMode.HALF_UP);
             BigDecimal totalHt = totalTtc.divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
             return new AmountEvaluation(totalHt, totalTtc, rate);

@@ -173,7 +173,7 @@ public class Basket {
                 "minimum": 0,
                 "maximum": 100,
                 "description": "Manual gesture: a percentage reduction on the item price. Exclusive with the amount.",
-                "x-widget": "rate",
+                "x-widget": "percent",
                 "x-label": "Manual discount (%)"
               },
               "manualForcedPrice": {

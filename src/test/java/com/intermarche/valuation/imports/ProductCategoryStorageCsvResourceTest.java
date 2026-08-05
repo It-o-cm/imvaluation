@@ -39,6 +39,20 @@ public class ProductCategoryStorageCsvResourceTest {
     TransactionManager tm;
 
     /**
+     * Starts a request already carrying the credentials the import endpoints expect.
+     * <p>
+     * The import paths sit behind a permission policy that requires an authenticated caller
+     * through the basic mechanism. {@code @TestSecurity} injects an identity without going
+     * through any mechanism, so it does not satisfy that policy: the call is answered with
+     * 401 before the resource is reached. Real credentials are sent instead.
+     *
+     * @return A request specification authenticated as the bootstrap administrator.
+     */
+    private io.restassured.specification.RequestSpecification authenticated() {
+        return given().auth().preemptive().basic("admin", "admin");
+    }
+
+    /**
      * Cleans the database before each test to ensure isolation.
      * <p>
      * Every {@code @QuarkusTest} class shares one application and one database, so this
@@ -83,7 +97,7 @@ public class ProductCategoryStorageCsvResourceTest {
                 productEan + "|Food|Fresh|Dairy|Yogurts|Bio\n" +
                 productEan + "|Food|Fresh|Dairy|Yogurts|Classic";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -125,7 +139,7 @@ public class ProductCategoryStorageCsvResourceTest {
         String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
                 productEan + "|Old L1|New L2|New L3|New L4|Old L5";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -169,7 +183,7 @@ public class ProductCategoryStorageCsvResourceTest {
         String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
                 productEan + "|L1|L2|L3|L4|L5";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -190,7 +204,7 @@ public class ProductCategoryStorageCsvResourceTest {
         String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
                 nonExistentEan + "|Food|Fresh|Dairy|Yogurts|Bio";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -212,7 +226,7 @@ public class ProductCategoryStorageCsvResourceTest {
         String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
                 "|Food|Fresh|Dairy|Yogurts|Bio"; // Empty EAN
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -247,7 +261,7 @@ public class ProductCategoryStorageCsvResourceTest {
                 validEan + "|G1|G2|G3|G4|G5\n" +
                 invalidEan + "|H1|H2|H3|H4|H5"; // Non-existent EAN triggers error
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()

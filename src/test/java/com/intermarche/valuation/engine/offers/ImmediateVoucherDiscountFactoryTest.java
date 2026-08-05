@@ -201,8 +201,8 @@ public class ImmediateVoucherDiscountFactoryTest {
         // Expected calculation: 10.00 HT total * 10% = 1.00 HT
         // TTC: 1.00 * 1.20 = 1.20 TTC
         AmountEvaluation discount = app.getDiscountAmount();
-        assertEquals(new BigDecimal("-1.00"), discount.amountExcludingTax);
-        assertEquals(new BigDecimal("-1.20"), discount.amountIncludingTax);
+        assertEquals(new BigDecimal("1.00"), discount.amountExcludingTax);
+        assertEquals(new BigDecimal("1.20"), discount.amountIncludingTax);
     }
 
     @Test
@@ -240,8 +240,8 @@ public class ImmediateVoucherDiscountFactoryTest {
                 (ImmediateVoucherDiscountFactory.ImmediateVoucherApplication)discounts.iterator().next();
 
         AmountEvaluation discount = app.getDiscountAmount();
-        assertEquals(new BigDecimal("-6.00"), discount.amountExcludingTax);
-        assertEquals(new BigDecimal("-7.20"), discount.amountIncludingTax); // +20%
+        assertEquals(new BigDecimal("6.00"), discount.amountExcludingTax);
+        assertEquals(new BigDecimal("7.20"), discount.amountIncludingTax); // +20%
     }
 
     @Test

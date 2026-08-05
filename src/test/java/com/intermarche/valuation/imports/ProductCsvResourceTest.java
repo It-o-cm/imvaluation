@@ -40,6 +40,20 @@ import static org.junit.jupiter.api.Assertions.*;
 public class ProductCsvResourceTest {
 
     /**
+     * Starts a request already carrying the credentials the import endpoints expect.
+     * <p>
+     * The import paths sit behind a permission policy that requires an authenticated caller
+     * through the basic mechanism. {@code @TestSecurity} injects an identity without going
+     * through any mechanism, so it does not satisfy that policy: the call is answered with
+     * 401 before the resource is reached. Real credentials are sent instead.
+     *
+     * @return A request specification authenticated as the bootstrap administrator.
+     */
+    private io.restassured.specification.RequestSpecification authenticated() {
+        return given().auth().preemptive().basic("admin", "admin");
+    }
+
+    /**
      * The Product CSV resource under test.
      */
     @Inject
@@ -87,7 +101,7 @@ public class ProductCsvResourceTest {
         String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
                 "3270190123456|Yaourt Nature|Yaourt fermier|Brand A|0.5|null|WEIGHT|kg|true\n" +
                 "3270190123457|Miel Pot 500g|Miel de montagne|Brand B|null|0.5|UNIT|pcs|true";
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -138,7 +152,7 @@ public class ProductCsvResourceTest {
         // 2. Act: Import CSV with same EAN but different data
         String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
                 "3270190123458|New Name|Updated Desc|Brand X|1.2|null|UNIT|pcs|true";
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -167,7 +181,7 @@ public class ProductCsvResourceTest {
         String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
                 "3270190111111|Valid Product|Desc|Brand|1.0||UNIT|pcs|true\n" + // Valid
                 "3270190222222|Bad Enum|Desc|Brand|1.0||INVALID_ENUM|pcs|true";  // Invalid Enum
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -194,7 +208,7 @@ public class ProductCsvResourceTest {
     void testProcessChunkWithFallback_EmptyInput() {
         // CSV with only header, no data lines
         String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n";
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -236,7 +250,7 @@ public class ProductCsvResourceTest {
                 "3270190999999|Updated Name|Desc|Brand|1||UNIT|pcs|true\n" + // Update
                 "3270190888888|New Product|Desc|Brand|1||UNIT|pcs|true\n" +   // Create
                 "3270190777777| |Desc|Brand|1||UNIT|pcs|true";               // Invalid (Empty Name)
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -283,7 +297,7 @@ public class ProductCsvResourceTest {
         String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
                 "\n" +
                 "3270190123458|Nouveau Nom|Nouvelle description|Nouvelle Marque|2.0|null|UNIT|pcs|true";
-        given()
+        authenticated()
                 .auth().preemptive().basic("admin", "admin")
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
@@ -330,7 +344,7 @@ public class ProductCsvResourceTest {
         // The checksum will be identical -> NO update (Optimization)
         String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
                 "3270190123459|Produit Identique|Desc|Brand|0.5|1.0|VOLUME|L|true";
-        given()
+        authenticated()
                 .auth().preemptive().basic("admin", "admin")
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
@@ -360,7 +374,7 @@ public class ProductCsvResourceTest {
         // Case 1: A line with fewer than 9 columns (missing separators)
         String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit\n" + // Incorrect Header (8 columns)
                 "3270190123456|Yaourt Nature|Yaourt fermier|Brand A|0.5|null|WEIGHT|kg"; // Incorrect Data
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()

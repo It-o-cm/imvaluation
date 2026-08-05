@@ -160,7 +160,7 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
 
         // Optimization: Pre-calculate EANs present in the basket.
         Map<String, Basket.Item> basketItems = basket.items.stream()
-                .collect(Collectors.toMap(item -> item.produceEan, item -> item));
+                .collect(Collectors.toMap(item -> item.produceEan, item -> item, (first, second) -> first));
 
         Store store = basketEvaluation.getStore();
         Collection<Offer> offers = getOffers(basketEvaluation, basketItems.keySet(), "N+M");

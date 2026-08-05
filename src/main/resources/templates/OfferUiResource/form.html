@@ -91,6 +91,6 @@
 </form>
 
 <script id="offer-schemas" type="application/json">{schemasJson.raw}</script>
-<script id="offer-specification" type="application/json">{offer.specification ?: '{}'}</script>
+<script id="offer-specification" type="application/json">{#if offer.specification}{offer.specification.raw}{#else}{'{}'}{/if}</script>
 <script src="/ui/schema-form.js"></script>
 {/body}
