@@ -1,5 +1,11 @@
 package com.intermarche.valuation.imports;
 
+import com.intermarche.valuation.domain.StoreGroup;
+import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.domain.ProductFamily;
+import com.intermarche.valuation.domain.ProductCategoryStorage;
+import com.intermarche.valuation.domain.Price;
+import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.ProductType;
 import io.quarkus.hibernate.orm.panache.Panache;
@@ -47,11 +53,25 @@ public class ProductCsvResourceTest {
 
     /**
      * Cleans the database before each test to ensure isolation.
+     * <p>
+     * Every {@code @QuarkusTest} class shares one application and one database, so this
+     * clears the whole reference set rather than only the entities this class handles: a
+     * row left by an earlier class would otherwise survive and skew the assertions.
+     * <p>
+     * The order is the reverse of the dependencies. Prices hold a foreign key on both
+     * stores and products, and offers on stores and store groups, so clearing a parent
+     * before its children fails on a referential integrity violation.
      */
     @BeforeEach
     @Transactional
     void cleanDatabase() {
+        Price.deleteAll();
+        ProductCategoryStorage.deleteAll();
+        Offer.deleteAll();
+        ProductFamily.deleteAll();
         Product.deleteAll();
+        StoreGroup.deleteAll();
+        Store.deleteAll();
     }
 
     /**

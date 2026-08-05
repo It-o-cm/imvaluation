@@ -124,8 +124,12 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
         Store store = basketEvaluation.getStore();
         // Retrieve all "IMMEDIATE_VOUCHER" type offers for this store
         List<Offer> offers = Offer.findByStoreAndType(store, "IMMEDIATE_VOUCHER");
+        // A product may now appear on several lines (distinct prices, or a manual-gesture
+        // line kept separate), so more than one item can share an EAN. This index only needs
+        // one representative item per EAN to test targeting and read a reference price, so
+        // duplicates keep the first occurrence rather than failing the whole build.
         Map<String, Basket.Item> basketItems = basketEvaluation.getBasket().items.stream()
-                .collect(Collectors.toMap(item -> item.produceEan, item -> item));
+                .collect(Collectors.toMap(item -> item.produceEan, item -> item, (first, second) -> first));
         for (Offer offer : offers) {
             processOffer(offer, appliers, basketItems, store);
         }

@@ -1,5 +1,9 @@
 package com.intermarche.valuation.imports;
 
+import com.intermarche.valuation.domain.StoreGroup;
+import com.intermarche.valuation.domain.ProductFamily;
+import com.intermarche.valuation.domain.ProductCategoryStorage;
+import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Adresse;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
@@ -38,6 +42,20 @@ import static org.junit.jupiter.api.Assertions.*;
 public class PriceCsvResourceTest {
 
     /**
+     * Starts a request already carrying the credentials the import endpoints expect.
+     * <p>
+     * The import paths sit behind a permission policy that requires an authenticated caller
+     * through the basic mechanism. {@code @TestSecurity} injects an identity without going
+     * through any mechanism, so it does not satisfy that policy: the call is answered with
+     * 401 before the resource is reached. Real credentials are sent instead.
+     *
+     * @return A request specification authenticated as the bootstrap administrator.
+     */
+    private io.restassured.specification.RequestSpecification authenticated() {
+        return given().auth().preemptive().basic("admin", "admin");
+    }
+
+    /**
      * The Price CSV resource under test.
      */
     @Inject
@@ -51,12 +69,24 @@ public class PriceCsvResourceTest {
 
     /**
      * Cleans the database before each test to ensure isolation.
+     * <p>
+     * Every {@code @QuarkusTest} class shares one application and one database, so this
+     * clears the whole reference set rather than only the entities this class handles: a
+     * row left by an earlier class would otherwise survive and skew the assertions.
+     * <p>
+     * The order is the reverse of the dependencies. Prices hold a foreign key on both
+     * stores and products, and offers on stores and store groups, so clearing a parent
+     * before its children fails on a referential integrity violation.
      */
     @BeforeEach
     @Transactional
     void cleanDatabase() {
         Price.deleteAll();
+        ProductCategoryStorage.deleteAll();
+        Offer.deleteAll();
+        ProductFamily.deleteAll();
         Product.deleteAll();
+        StoreGroup.deleteAll();
         Store.deleteAll();
     }
 
@@ -87,7 +117,7 @@ public class PriceCsvResourceTest {
         String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
                 "3270190123456|S001|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -146,7 +176,7 @@ public class PriceCsvResourceTest {
         String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
                 "3270190999999|S001|8.50|10.20|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -201,7 +231,7 @@ public class PriceCsvResourceTest {
         String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
                 "3270190888888|S001|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -231,7 +261,7 @@ public class PriceCsvResourceTest {
         String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
                 "NON_EXISTENT_EAN|S001|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -262,7 +292,7 @@ public class PriceCsvResourceTest {
         String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
                 "3270190123456|NON_EXISTENT_STORE|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -299,7 +329,7 @@ public class PriceCsvResourceTest {
         String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
                 "3270190123456|S001|10.00|12.00|0.2000||0|2023-01-01T00:00:00|"; // Empty Usage
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -345,7 +375,7 @@ public class PriceCsvResourceTest {
                 "3270190123456|S001|10.00|12.00|0.2000|DEFAULT|1|2023-01-01T00:00:00|\n" +
                 "3270190123456|S001|10.00|12.00|0.2000||0|2023-01-01T00:00:00|";
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -681,7 +711,7 @@ public class PriceCsvResourceTest {
                 "3270190000001|S001|10.00|12.00|0.2|DEFAULT|0||\n" + // Start null
                 "3270190000001|S001|15.00|18.00|0.2|DEFAULT|0|2023-01-01T00:00:00|"; // Start valid
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()
@@ -751,7 +781,7 @@ public class PriceCsvResourceTest {
                 ean + "|" + storeCode + "|15.00|18.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|\n" + // Valid (Update)
                 "BAD_EAN|S005|10.00|12.00|0.2000|INVALID_USAGE|0|2023-01-01T00:00:00|"; // Invalid (Trigger Fallback)
 
-        given()
+        authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
                 .when()

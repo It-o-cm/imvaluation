@@ -29,6 +29,14 @@ public class ValuationResourceTest {
     @Mock
     private ValuationEngine engine;
 
+    /**
+     * The resource records every valuation, successful or not, so the collaborator has to be
+     * supplied here too: {@code @InjectMocks} only injects what the test declares, and an
+     * undeclared one stays null and fails on the first call.
+     */
+    @Mock
+    private ValuationTraceService traceService;
+
     @InjectMocks
     private ValuationResource resource;
 

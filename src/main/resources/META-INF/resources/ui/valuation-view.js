@@ -74,7 +74,10 @@
             html += "<p class=\"placeholder-note\">No items.</p>";
             return html;
         }
-        html += "<table class=\"friendly-table\"><thead><tr>"
+        html += "<table class=\"friendly-table\">"
+            + "<colgroup><col class=\"col-line\"><col class=\"col-prod\">"
+            + "<col class=\"col-qty\"><col class=\"col-gesture\"></colgroup>"
+            + "<thead><tr>"
             + "<th>Line</th><th>Product</th><th class=\"num\">Qty</th><th>Gesture</th>"
             + "</tr></thead><tbody>";
         items.forEach(function (it) {
@@ -142,7 +145,11 @@
                     + "<span class=\"num\">" + euro(offer.amount && offer.amount.amountIncludingTax) + "</span></div>";
                 var items = offer.items || [];
                 if (items.length) {
-                    html += "<table class=\"friendly-table sub\"><thead><tr>"
+                    html += "<table class=\"friendly-table sub\">"
+                        + "<colgroup><col class=\"col-line\"><col class=\"col-prod\">"
+                        + "<col class=\"col-qty\"><col class=\"col-amt\">"
+                        + "<col class=\"col-amt\"><col class=\"col-vat\"></colgroup>"
+                        + "<thead><tr>"
                         + "<th>Line</th><th>Product</th><th class=\"num\">Qty</th>"
                         + "<th class=\"num\">Excl.</th><th class=\"num\">Incl.</th><th class=\"num\">VAT</th>"
                         + "</tr></thead><tbody>";

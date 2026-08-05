@@ -1,5 +1,10 @@
 package com.intermarche.valuation.graphql;
 
+import com.intermarche.valuation.domain.StoreGroup;
+import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.domain.ProductFamily;
+import com.intermarche.valuation.domain.Price;
+import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.ProductCategoryStorage;
 import com.intermarche.valuation.domain.ProductType;
@@ -34,6 +39,20 @@ public class ProductCategoryStorageResourceTest {
      * Sets up initial data for tests.
      */
     void setUp() {
+        // Every @QuarkusTest class shares one database, and a class that ran before may have
+        // committed rows of its own. Several tests below read "the first" entity or rely on
+        // a code being unused, so the fixture starts from an empty set. Deletion follows the
+        // reverse of the dependencies: prices reference stores and products, offers
+        // reference stores and groups. The class runs under @TestTransaction, so this is
+        // rolled back with the rest of the test.
+        Price.deleteAll();
+        ProductCategoryStorage.deleteAll();
+        Offer.deleteAll();
+        ProductFamily.deleteAll();
+        Product.deleteAll();
+        StoreGroup.deleteAll();
+        Store.deleteAll();
+
         Product product = DomainUtils.createAndPersistProduct("PROD_CAT", "Product Cat", ProductType.UNIT);
         createAndPersistStorage(product, "L1", "L2", "L3", "L4", "L5");
     }

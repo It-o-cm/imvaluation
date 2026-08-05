@@ -168,7 +168,7 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
         Basket basket = getBasket(basketEvaluation, "Cannot create appliers without a valid basket context.");
         // Optimization: Pre-calculate EANs present in the basket.
         Map<String, Basket.Item> basketItems = basketEvaluation.getBasket().items.stream()
-                .collect(Collectors.toMap(item -> item.produceEan, item -> item));
+                .collect(Collectors.toMap(item -> item.produceEan, item -> item, (first, second) -> first));
         Store store = basketEvaluation.getStore();
         // Retrieve all "MIXED_BUNDLE" type offers for this store
         Collection<Offer> offers = getOffers(basketEvaluation, basketItems.keySet(), "MIXED_BUNDLE");

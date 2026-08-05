@@ -33,6 +33,7 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineTrait {
 
+
     /**
      * JSON Schema definition for validating Vignette Discount specifications.
      */
@@ -249,6 +250,17 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
         private final Map<String, Integer> availableVignettes;
 
         /**
+         * The balance as it stood when the applier was built.
+         * <p>
+         * The engine calls {@link #apply(BasketEvaluation)} more than once — once while
+         * estimating the efficiency score, then again to produce the real applications — so
+         * the running balance is restored from this snapshot at the start of every pass.
+         * Without it the first pass spends the vignettes and the second finds none, and the
+         * discount silently disappears from the result.
+         */
+        private final Map<String, Integer> initialVignettes;
+
+        /**
          * The store context for price resolution.
          */
         private final Store store;
@@ -267,6 +279,7 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
             this.offerCode = offerCode;
             this.catalog = catalog;
             this.availableVignettes = availableVignettes;
+            this.initialVignettes = Map.copyOf(availableVignettes);
             this.store = store;
             this.productInCatalog = availableVignettes.keySet().stream().collect(Collectors.toMap(k -> k, Product::findByEan));
         }
@@ -297,6 +310,11 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
          */
         @Override
         public Collection<AdvantageApplication> apply(BasketEvaluation evaluation) {
+            // Restore the starting balance: applying twice must yield the same result, and
+            // the engine does call this more than once.
+            availableVignettes.clear();
+            availableVignettes.putAll(initialVignettes);
+
             List<AdvantageApplication> applications = new ArrayList<>();
             processAppliedOffers(evaluation, applications);
             return applications;

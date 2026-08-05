@@ -208,6 +208,33 @@
     // --------------------------------------------------
 
     /**
+     * Builds the delete button shown on a group row.
+     * <p>
+     * Removing a group releases its members to the level above and only takes effect once
+     * the hierarchy is saved, so no confirmation is asked: the change is reversible until
+     * then. The click is kept from reaching the row, which is draggable and a drop target.
+     *
+     * @param {object} g The group the button belongs to.
+     * @returns {HTMLElement} The button element.
+     */
+    function buildRemoveButton(g) {
+        var button = el('button', 'wb-group-remove');
+        button.type = 'button';
+        button.title = 'Delete this group (its members move up a level)';
+        button.setAttribute('aria-label', 'Delete group ' + g.code);
+        button.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+            + '<path d="M6 2h4l.5 1H14v1.5H2V3h3.5L6 2Z"/>'
+            + '<path d="M3.5 5.5h9l-.7 8a1 1 0 0 1-1 .9H5.2a1 1 0 0 1-1-.9l-.7-8Z"/>'
+            + '</svg>';
+        button.addEventListener('click', function (event) {
+            event.stopPropagation();
+            event.preventDefault();
+            removeGroup(g.code);
+        });
+        return button;
+    }
+
+    /**
      * Creates an element with an optional class name and text content.
      *
      * @param {string} tag The tag name.
@@ -304,11 +331,13 @@
                 dragging = null;
                 row.classList.remove('is-dragging');
             });
-            // Removing a group is a drag onto the trash strip, not a button.
+            // The Delete key stays available, but a visible button makes the action
+            // discoverable instead of relying on a hidden shortcut.
             row.addEventListener('keydown', function (event) {
                 if (event.key === 'Delete') { removeGroup(g.code); }
             });
             row.tabIndex = 0;
+            row.appendChild(buildRemoveButton(g));
         }
         makeDropTarget(row, g.code);
         item.appendChild(row);

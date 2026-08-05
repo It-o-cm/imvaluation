@@ -1,6 +1,7 @@
 package com.intermarche.valuation.graphql;
 
 import com.intermarche.valuation.domain.Offer;
+import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
 import io.quarkus.test.TestTransaction;
@@ -38,8 +39,19 @@ public class OfferResourceTest {
     /**
      * Sets up initial data for tests.
      * Creates a Store, StoreGroup, and an Offer linked to both.
+     * <p>
+     * The tables are emptied first. Several tests read {@code Offer.listAll().get(0)} and so
+     * assume the fixture is the only offer present, but every {@code @QuarkusTest} class
+     * shares one database and a class that ran before may have committed its own rows.
+     * Prices are cleared ahead of stores, which they reference. The class runs under
+     * {@code @TestTransaction}, so this deletion is rolled back with the rest of the test.
      */
     void setUp() {
+        Price.deleteAll();
+        Offer.deleteAll();
+        StoreGroup.deleteAll();
+        Store.deleteAll();
+
         Store store = createAndPersistStore("STORE_01", "Main Store");
         StoreGroup group = createAndPersistStoreGroup("GROUP_01", "Main Group");
         createAndPersistOffer("OFFER_01", "PROMO", "{}", Set.of(store), Set.of(group));

@@ -8,7 +8,7 @@
 
 .payload-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    grid-template-columns: 1fr;
     gap: 18px;
     align-items: start;
 }
@@ -113,6 +113,7 @@
 
 .friendly-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
     margin-bottom: 6px;
@@ -131,12 +132,15 @@
 .friendly-table td {
     padding: 6px 8px;
     border-bottom: 1px solid var(--im-line);
+    vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .friendly-table.sub { margin-top: 8px; }
 .friendly-table.sub th { background: var(--im-bg); }
 
-.friendly-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.friendly-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .friendly-table .rate { color: var(--im-ink-soft); }
 .friendly-table .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; }
 
@@ -161,6 +165,9 @@
     font-weight: 600;
     font-size: 13px;
 }
+
+.friendly-offer-head > span:first-child { overflow-wrap: anywhere; }
+.friendly-offer-head > span:last-child { white-space: nowrap; }
 
 .friendly-total {
     display: flex;
@@ -191,3 +198,15 @@
     color: var(--im-ink-soft);
     margin-left: auto;
 }
+
+
+/* Column widths so the line id (a UUID) gets room and numbers stay compact. */
+.friendly-table col.col-line { width: 34%; }
+.friendly-table col.col-prod { width: 26%; }
+.friendly-table col.col-qty { width: 12%; }
+.friendly-table col.col-gesture { width: 28%; }
+.friendly-table.sub col.col-line { width: 30%; }
+.friendly-table.sub col.col-prod { width: 24%; }
+.friendly-table.sub col.col-qty { width: 10%; }
+.friendly-table.sub col.col-amt { width: 12%; }
+.friendly-table.sub col.col-vat { width: 12%; }
