@@ -6,6 +6,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -25,6 +26,8 @@ import java.util.TreeMap;
  */
 @ApplicationScoped
 public class OfferSchemaRegistry {
+
+    private static final Logger LOGGER = Logger.getLogger(OfferSchemaRegistry.class);
 
     /**
      * All CDI beans producing offer appliers.
@@ -61,6 +64,12 @@ public class OfferSchemaRegistry {
 
     /**
      * Registers a single type/schema pair, ignoring incomplete declarations.
+     * <p>
+     * A type may be claimed by both an offer factory and an advantage factory (N+M,
+     * MIXED_BUNDLE). Offer factories are scanned first, so the schema that produces a valid
+     * engine offer is registered first; a later duplicate is rejected and logged rather than
+     * silently overwriting it, keeping exactly one registration — the offer-valid one — per
+     * type.
      *
      * @param type   The offer type discriminator, may be null.
      * @param schema The JSON Schema, may be null.
@@ -69,7 +78,11 @@ public class OfferSchemaRegistry {
         if (type == null || type.isBlank() || schema == null || schema.isBlank()) {
             return;
         }
-        schemasByType.put(type, schema);
+        String existing = schemasByType.putIfAbsent(type, schema);
+        if (existing != null) {
+            LOGGER.warnf("Duplicate schema registration for offer type '%s' ignored; "
+                    + "keeping the first (offer-valid) registration.", type);
+        }
     }
 
     /**

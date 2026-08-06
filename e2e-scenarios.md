@@ -566,10 +566,12 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   sans limite ; EAN inconnu absent de resolve (le widget le garde en chip
   `unknown`).
 - **O7 Registre de schémas — canari** : 8 types exposés dans le `<select>`
-  (alphabétique) ; ⚠ `N+M` et `MIXED_BUNDLE` sont enregistrés **deux fois** (offer
-  puis advantage — le second écrase) : vérifier que le schéma servi au formulaire
-  reste celui qui permet de créer une offre **valide pour le moteur** (une offre créée
-  via le formulaire pour chacun des 8 types doit se valoriser sans 500).
+  (alphabétique) ; `N+M` et `MIXED_BUNDLE` sont revendiqués par une factory d'offre **et**
+  une factory d'avantage, mais le registre ne conserve qu'**une seule** inscription par
+  type : les factories d'offre étant scannées en premier, le schéma qui crée une offre
+  **valide pour le moteur** gagne, et tout doublon ultérieur est **rejeté et journalisé**
+  (plus d'écrasement silencieux). Une offre créée via le formulaire pour chacun des 8 types
+  se valorise sans 500.
 
 ## P. Coutures transverses (2e passe d'audit)
 

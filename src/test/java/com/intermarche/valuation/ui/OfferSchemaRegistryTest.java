@@ -164,6 +164,20 @@ class OfferSchemaRegistryTest {
     }
 
     /**
+     * A type claimed by both an offer factory and an advantage factory (N+M, MIXED_BUNDLE)
+     * keeps exactly one registration: the offer scan runs first, so the offer-valid schema
+     * wins and the advantage duplicate is rejected rather than overwriting it.
+     */
+    @Test
+    void collectSchemasKeepsFirstRegistrationOnDuplicateType() {
+        OfferSchemaRegistry registry = newRegistry(
+                Collections.singletonList(offerFactory("N+M", "{offer}")),
+                Collections.singletonList(advantageFactory("N+M", "{advantage}")));
+        assertEquals("{offer}", registry.getSchema("N+M"));
+        assertEquals(1, registry.getKnownTypes().size());
+    }
+
+    /**
      * {@code getSchema} returns null for a null type (true arm of the null guard).
      */
     @Test
