@@ -102,6 +102,26 @@ public class BasketEvaluationTest {
         mockedStoreGroup.verify(() -> StoreGroup.findAllStoreGroups(any()), never());
     }
 
+    /**
+     * Tests the constructor when the basket carries a store code that resolves to no store.
+     * Verifies that an explicit configuration error is raised — mirroring the unknown-product
+     * contract — rather than letting a null store surface as a NullPointerException later.
+     */
+    @Test
+    void testConstructor_UnknownStore_ThrowsConfigurationError() {
+        // Arrange
+        Basket basket = new Basket();
+        basket.storeCode = "STORE_UNKNOWN";
+        mockedStore.when(() -> Store.findByCode("STORE_UNKNOWN")).thenReturn(null);
+        // Act
+        IllegalStateException thrown = assertThrows(IllegalStateException.class,
+                () -> new BasketEvaluation(basket));
+        // Assert
+        assertEquals("Configuration Error: Store not found for code 'STORE_UNKNOWN'",
+                thrown.getMessage());
+        mockedStoreGroup.verify(() -> StoreGroup.findAllStoreGroups(any()), never());
+    }
+
     // --------------------------------------------------
     // feedFrom Tests
     // --------------------------------------------------
@@ -351,6 +371,8 @@ public class BasketEvaluationTest {
         Basket basket = new Basket();
         basket.customerCode = "CUST_001";
         basket.storeCode = "STORE_A";
+        // The constructor now rejects an unresolvable store code, so a known store is mocked.
+        mockedStore.when(() -> Store.findByCode("STORE_A")).thenReturn(new Store());
 
         BasketEvaluation evaluation = new BasketEvaluation(basket);
 

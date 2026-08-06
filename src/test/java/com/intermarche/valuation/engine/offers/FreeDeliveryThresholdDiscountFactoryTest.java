@@ -569,6 +569,7 @@ public class FreeDeliveryThresholdDiscountFactoryTest {
     @Test
     void testApply_NoDiscountWhenProductAmountIsNull() throws Exception {
         // Arrange
+        setUpDatabase();
         List<FreeDeliveryThresholdDiscountFactory.DiscountTier> tiers = List.of(
                 new FreeDeliveryThresholdDiscountFactory.DiscountTier(
                         new BigDecimal("50.00"),

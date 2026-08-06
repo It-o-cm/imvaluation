@@ -103,6 +103,13 @@ public class BasketEvaluation {
         // Resolve Store from Basket storeCode
         if (this.basket != null && this.basket.storeCode != null) {
             this.store = Store.findByCode(this.basket.storeCode);
+            // Align with the unknown-product contract: a store code that resolves to
+            // nothing is a configuration error, not a NullPointerException raised later
+            // when the (null) store is dereferenced for pricing.
+            if (this.store == null) {
+                throw new IllegalStateException(
+                        "Configuration Error: Store not found for code '" + this.basket.storeCode + "'");
+            }
         } else {
             this.store = null;
         }
