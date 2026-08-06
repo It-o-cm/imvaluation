@@ -173,6 +173,7 @@ class GroupLIT {
         if (seeded) {
             return;
         }
+        CatalogReset.resetMutableCatalog();
         for (String[] step : SEED) {
             importCsv(step[0], readResource(step[1]));
         }

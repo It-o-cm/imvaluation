@@ -93,6 +93,7 @@ class GroupGIT {
         if (seeded) {
             return;
         }
+        CatalogReset.resetMutableCatalog();
         for (String[] step : SEED) {
             given().auth().preemptive().basic("admin", "admin")
                     .contentType(ContentType.TEXT)

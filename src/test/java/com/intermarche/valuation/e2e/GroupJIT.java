@@ -51,8 +51,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       or bundle offer builds an applier only when a target EAN is present in the basket
  *       (and its upsell twin, though built for every store offer, yields nothing when its EANs
  *       are absent), so a basket carrying only one scenario's EANs is blind to the others.</li>
- *   <li>POISON offers (J6, J9) are quarantined on dedicated stores ({@code 0104}/{@code 0103}
- *       for the two J6 configs, {@code 0105} for J9). A poison offer is rejected by the upsell
+ *   <li>POISON offers (J6, J9) are quarantined on private stores this class CREATES for the
+ *       purpose ({@code 0106} for J6A, {@code 0107} for J6B, {@code 0108} for J9) — codes outside
+ *       the {@code 0101}–{@code 0105} mirror catalog, so no sibling {@code @QuarkusTest} class ever
+ *       valuates them (the whole suite shares ONE drop-and-create H2 instance, so a poison pinned to
+ *       a shared catalog store would bleed across classes). A poison offer is rejected by the upsell
  *       factory's schema during {@code createDiscountAppliers} — step 2 of the engine, BEFORE
  *       any price resolution — so EVERY valuation of that store returns 500. Quarantining keeps
  *       the poison from bleeding into the {@code 0101} scenarios. A single {@code DEFAULT}/
@@ -114,16 +117,33 @@ class GroupJIT {
             "ean|storeCode|priceExcludingTax|priceIncludingTax|vatRate|priceUsage|priority|startDateTime|endDateTime\n";
 
     /**
+     * The store header for the private poison stores this class creates.
+     */
+    private static final String STORE_HEADER =
+            "code|name|streetLine1|streetLine2|postalCode|city|country|latitude|longitude\n";
+
+    /**
+     * Three private stores created for this class alone, outside the {@code 0101}–{@code 0105}
+     * mirror catalog, so the poison offers pinned to them can never leak into a sibling
+     * {@code @QuarkusTest} class sharing the same H2 instance: {@code 0106} (J6A), {@code 0107}
+     * (J6B), {@code 0108} (J9).
+     */
+    private static final String EXTRA_STORES = STORE_HEADER
+            + "0106|Poison Quarantine J6A|1 Rue Poison||00000|Nowhere|France|0.00|0.00\n"
+            + "0107|Poison Quarantine J6B|2 Rue Poison||00000|Nowhere|France|0.00|0.00\n"
+            + "0108|Poison Quarantine J9|3 Rue Poison||00000|Nowhere|France|0.00|0.00\n";
+
+    /**
      * Extra prices: the water probe ({@code …007}) is priced on the three poison stores so a
      * poison valuation reaches the applier-building step instead of failing on a missing price.
      */
     private static final String EXTRA_PRICES = PRICE_HEADER
-            + "3300000000007|0103|0.50|0.60|0.2000|DEFAULT|0|2026-01-12T00:00:00|\n"
-            + "3300000000007|0103|0.55|0.66|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|\n"
-            + "3300000000007|0104|0.50|0.60|0.2000|DEFAULT|0|2026-01-12T00:00:00|\n"
-            + "3300000000007|0104|0.55|0.66|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|\n"
-            + "3300000000007|0105|0.50|0.60|0.2000|DEFAULT|0|2026-01-12T00:00:00|\n"
-            + "3300000000007|0105|0.55|0.66|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|\n";
+            + "3300000000007|0106|0.50|0.60|0.2000|DEFAULT|0|2026-01-12T00:00:00|\n"
+            + "3300000000007|0106|0.55|0.66|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|\n"
+            + "3300000000007|0107|0.50|0.60|0.2000|DEFAULT|0|2026-01-12T00:00:00|\n"
+            + "3300000000007|0107|0.55|0.66|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|\n"
+            + "3300000000007|0108|0.50|0.60|0.2000|DEFAULT|0|2026-01-12T00:00:00|\n"
+            + "3300000000007|0108|0.55|0.66|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|\n";
 
     /**
      * The offer header shared by every extra offer row.
@@ -139,8 +159,9 @@ class GroupJIT {
      *   <li>{@code PROMO_J4_FIXED} — J4 capped fixed-amount N+M on {@code 0101}.</li>
      *   <li>{@code PROMO_J5_ALIAS} — J5 1+1 CHEAPEST, the aliasing defect, on {@code 0101}.</li>
      *   <li>{@code PROMO_J8_BUNDLE} — J8 multi-rate FIXED-price bundle on {@code 0101}.</li>
-     *   <li>{@code POISON_J6A} ({@code 0104}), {@code POISON_J6B} ({@code 0103}),
-     *       {@code POISON_J9} ({@code 0105}) — the quarantined poison offers.</li>
+     *   <li>{@code POISON_J6A} ({@code 0106}), {@code POISON_J6B} ({@code 0107}),
+     *       {@code POISON_J9} ({@code 0108}) — the quarantined poison offers, each on a private
+     *       store this class creates.</li>
      * </ul>
      */
     private static final String EXTRA_OFFERS = OFFER_HEADER
@@ -149,9 +170,9 @@ class GroupJIT {
             + "PROMO_J4_FIXED|N+M|{\"targetEans\": [\"3300000000012\"], \"quantityToPay\": 1, \"discountedQuantity\": 1, \"selectionStrategy\": \"CHEAPEST\", \"discountType\": \"FIXED_AMOUNT\", \"discountValue\": 50.0}|0101|\n"
             + "PROMO_J5_ALIAS|N+M|{\"targetEans\": [\"3300000000027\", \"3300000000026\"], \"quantityToPay\": 1, \"discountedQuantity\": 1, \"selectionStrategy\": \"CHEAPEST\", \"discountType\": \"PERCENTAGE\", \"discountValue\": 100.0}|0101|\n"
             + "PROMO_J8_BUNDLE|MIXED_BUNDLE|{\"bundlePrice\": 8.00, \"vatRate\": 0.20, \"contents\": [{\"ean\": \"3300000000022\", \"quantity\": 1.0}, {\"ean\": \"3300000000024\", \"quantity\": 1.0}]}|0101|\n"
-            + "POISON_J6A|N+M|{\"targetEans\": [\"3300000000007\"], \"quantityToPay\": 0, \"discountedQuantity\": 1, \"selectionStrategy\": \"CHEAPEST\", \"discountType\": \"PERCENTAGE\", \"discountValue\": 100.0}|0104|\n"
-            + "POISON_J6B|N+M|{\"targetEans\": [\"3300000000007\"], \"quantityToPay\": 0, \"discountedQuantity\": 0, \"selectionStrategy\": \"CHEAPEST\", \"discountType\": \"PERCENTAGE\", \"discountValue\": 100.0}|0103|\n"
-            + "POISON_J9|MIXED_BUNDLE|{\"discount\": {\"type\": \"PERCENTAGE\", \"value\": 10.0}, \"vatRate\": 0.20, \"contents\": [{\"ean\": \"3300000000007\", \"quantity\": 1.0}]}|0105|\n";
+            + "POISON_J6A|N+M|{\"targetEans\": [\"3300000000007\"], \"quantityToPay\": 0, \"discountedQuantity\": 1, \"selectionStrategy\": \"CHEAPEST\", \"discountType\": \"PERCENTAGE\", \"discountValue\": 100.0}|0106|\n"
+            + "POISON_J6B|N+M|{\"targetEans\": [\"3300000000007\"], \"quantityToPay\": 0, \"discountedQuantity\": 0, \"selectionStrategy\": \"CHEAPEST\", \"discountType\": \"PERCENTAGE\", \"discountValue\": 100.0}|0107|\n"
+            + "POISON_J9|MIXED_BUNDLE|{\"discount\": {\"type\": \"PERCENTAGE\", \"value\": 10.0}, \"vatRate\": 0.20, \"contents\": [{\"ean\": \"3300000000007\", \"quantity\": 1.0}]}|0108|\n";
 
     /**
      * Whether the mirror catalog and the two extra phases have been imported in this class run.
@@ -169,9 +190,11 @@ class GroupJIT {
         if (seeded) {
             return;
         }
+        CatalogReset.resetMutableCatalog();
         for (String[] step : SEED) {
             importCsv(step[0], readResource(step[1]));
         }
+        importCsv("/stores/import", EXTRA_STORES);
         importCsv("/prices/import", EXTRA_PRICES);
         importCsv("/offers/import", EXTRA_OFFERS);
         seeded = true;
@@ -694,13 +717,13 @@ class GroupJIT {
      * {@code bundlePrice} or a {@code discount}) so it imports cleanly, but the divergent schema of
      * {@code MixedBundleUpsellAdvantageFactory} REQUIRES {@code bundlePrice} and forbids
      * {@code discount}; that factory runs in {@code createDiscountAppliers} — step 2, before any
-     * pricing — so EVERY valuation of its store ({@code 0105}) is refused with a 500 whose trace
+     * pricing — so EVERY valuation of its store ({@code 0108}) is refused with a 500 whose trace
      * carries {@code Error building appliers from factory: Error validating offer: …}. A
      * configuration-borne denial of service.
      */
     @Test
     void j9_discountBundlePoison() {
-        assertPoison("J9", basket("J9", "0105", plain("3300000000007", "1")),
+        assertPoison("J9", basket("J9", "0108", plain("3300000000007", "1")),
                 "Error building appliers from factory: Error validating offer:");
     }
 
@@ -715,15 +738,15 @@ class GroupJIT {
      * with {@code Error building appliers from factory: Error validating offer: …}. The second
      * config ({@code quantityToPay:0} AND {@code discountedQuantity:0}, the catalog's
      * division-by-zero) is preempted by the SAME {@code quantityToPay} guard, so both quarantined
-     * stores ({@code 0104} for J6A, {@code 0103} for J6B) surface the identical validation
+     * stores ({@code 0106} for J6A, {@code 0107} for J6B) surface the identical validation
      * rejection. Poison offers targeting {@code …007}, probed with a priced {@code …007} basket so
      * the poison — not a missing price — is what fails.
      */
     @Test
     void j6_toxicConfigurations() {
-        assertPoison("J6A", basket("J6A", "0104", plain("3300000000007", "1")),
+        assertPoison("J6A", basket("J6A", "0106", plain("3300000000007", "1")),
                 "Error building appliers from factory: Error validating offer:");
-        assertPoison("J6B", basket("J6B", "0103", plain("3300000000007", "1")),
+        assertPoison("J6B", basket("J6B", "0107", plain("3300000000007", "1")),
                 "Error building appliers from factory: Error validating offer:");
     }
 
