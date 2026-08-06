@@ -44,8 +44,9 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   (Stores → StoreGroups → Products → ProductFamilies → Categories → Prices → Offers) →
   chaque import répond 200 `{"createdCount":N, "updatedCount":0}` ; rejouer le MÊME
   seed immédiatement → `createdCount:0, updatedCount:0` partout (idempotence par
-  checksum). ⚠ exception connue : magasin sans adresse → update « inutile » possible
-  (checksums d'adresse asymétriques), à figer.
+  checksum), **y compris un magasin sans adresse** : le checksum d'adresse est
+  symétrique (adresse absente normalisée en adresse vide avant calcul, comme le fait
+  l'import), donc un ré-import strictement identique reste un no-op — idempotence totale.
 
 ## B. Authentification & session
 

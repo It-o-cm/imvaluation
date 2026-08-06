@@ -211,6 +211,38 @@ public class StoreCsvResourceTest {
     }
 
     /**
+     * Tests that a strictly identical re-import of a store without address is a no-op.
+     * <p>
+     * The store is created with a null address (as a seed row without address columns
+     * would be), then the same address-less line is imported. The stored checksum of an
+     * absent address must equal the checksum the importer computes from blank address
+     * columns, so the re-import reports {@code updatedCount:0} rather than a needless update.
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = "ADMIN")
+    void testReimportAddresslessStore_NoUpdate() {
+        withTransaction(() -> {
+            Store s = new Store();
+            s.code = "S003";
+            s.name = "Store NoAddr";
+            s.address = null;
+            s.persist();
+            return s.id;
+        });
+        String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n" +
+                "S003|Store NoAddr|||||||";
+        authenticated()
+                .body(csvContent)
+                .contentType(ContentType.TEXT)
+                .when()
+                .post("/stores/import")
+                .then()
+                .statusCode(200)
+                .body(containsString("\"createdCount\":0"))
+                .body(containsString("\"updatedCount\":0"));
+    }
+
+    /**
      * Tests the processing logic when the input CSV contains no data lines (only header).
      * <p>
      * Covers: {@code processChunkWithFallback} with empty input.

@@ -110,7 +110,11 @@ public class Store extends BaseEntity {
      */
     @Override
     public int getChecksum() {
-        int addressChecksum = address == null ? 0 : address.getChecksum();
+        // Normalize an absent address to an empty one, so a store without address hashes the
+        // same value the importer computes from blank address columns. Without this, a null
+        // address contributed 0 while blank columns contribute the hash of empty fields, and
+        // a strictly identical re-import of an address-less store produced a needless update.
+        int addressChecksum = (address == null ? new Adresse() : address).getChecksum();
         int checksum = Objects.hash(code, name, addressChecksum);
         return checksum;
     }
