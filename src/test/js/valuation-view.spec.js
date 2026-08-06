@@ -195,7 +195,7 @@ describe('renderRequest', () => {
   /**
    * A full basket exercises all three header fields, the separator join, and every
    * gesture arm (forced, discount amount, discount percent, none) plus the missing-lineId
-   * fallback, which is passed through esc so its ampersand is itself escaped.
+   * fallback, which renders as a real em dash entity rather than being escaped.
    */
   it('renders the summary and every gesture variant for a full basket', () => {
     const basket = {
@@ -217,7 +217,7 @@ describe('renderRequest', () => {
       + '<thead><tr><th>Line</th><th>Product</th><th class="num">Qty</th><th>Gesture</th></tr></thead><tbody>'
       + '<tr><td>L1</td><td class="mono">E1</td><td class="num">2</td><td>Forced 3.50 &euro;</td></tr>'
       + '<tr><td>L2</td><td class="mono">E2</td><td class="num">1</td><td>-0.50 &euro;</td></tr>'
-      + '<tr><td>&amp;mdash;</td><td class="mono">E3</td><td class="num">3</td><td>-10%</td></tr>'
+      + '<tr><td>&mdash;</td><td class="mono">E3</td><td class="num">3</td><td>-10%</td></tr>'
       + '<tr><td>L4</td><td class="mono">E4</td><td class="num">1</td><td>&mdash;</td></tr>'
       + '</tbody></table>',
     );
@@ -334,7 +334,7 @@ describe('renderResponse', () => {
       + '<th class="num">Excl.</th><th class="num">Incl.</th><th class="num">VAT</th></tr></thead><tbody>'
       + '<tr><td>L1</td><td class="mono">E1</td><td class="num">2</td>'
       + '<td class="num">2.00 &euro;</td><td class="num">2.40 &euro;</td><td class="num rate">20.0%</td></tr>'
-      + '<tr><td>&amp;mdash;</td><td class="mono">E2</td><td class="num">1</td>'
+      + '<tr><td>&mdash;</td><td class="mono">E2</td><td class="num">1</td>'
       + '<td>&mdash;</td><td>&mdash;</td><td>&mdash;</td></tr>'
       + '</tbody></table></div>'
       + '<div class="friendly-offer"><div class="friendly-offer-head"><span>EMPTY</span>'

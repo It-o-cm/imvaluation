@@ -504,7 +504,9 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
 - **N6 Détail** : méta Status/HTTP/Duration/Total ; `errorMessage` en bandeau rouge ;
   cartes Request/Response avec onglets `Readable`/`JSON` (rendu client :
   `Forced {x} €`, `-{x} €`, `-{x}%`, `Add {q} × {ean} for {code}`,
-  `Eligible {x} € (threshold {y} €)`) ; sans réponse → `No response was produced.` ;
+  `Eligible {x} € (threshold {y} €)`) ; ligne sans `lineId` → **vrai tiret cadratin
+  (—)** dans la cellule, jamais l'entité `&mdash;` littérale (le placeholder ne passe
+  plus par l'échappement HTML) ; sans réponse → `No response was produced.` ;
   id inconnu → 303 liste + notice rouge `Valuation {id} no longer exists.`
 - **N7 Formulaire de test & replay** [W] : `POST /ui/valuations/new` (champ
   `request`) — vide → `The basket is empty.` ; erreurs rendues

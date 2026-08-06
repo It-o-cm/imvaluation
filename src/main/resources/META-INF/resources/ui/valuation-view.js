@@ -85,7 +85,7 @@
             if (it.manualForcedPrice != null) gesture = "Forced " + euro(it.manualForcedPrice);
             else if (it.manualDiscountAmount != null) gesture = "-" + euro(it.manualDiscountAmount);
             else if (it.manualDiscountPercent != null) gesture = "-" + esc(it.manualDiscountPercent) + "%";
-            html += "<tr><td>" + esc(it.lineId || "&mdash;") + "</td>"
+            html += "<tr><td>" + (it.lineId ? esc(it.lineId) : "&mdash;") + "</td>"
                 + "<td class=\"mono\">" + esc(it.produceEan) + "</td>"
                 + "<td class=\"num\">" + esc(it.quantity) + "</td>"
                 + "<td>" + gesture + "</td></tr>";
@@ -154,7 +154,7 @@
                         + "<th class=\"num\">Excl.</th><th class=\"num\">Incl.</th><th class=\"num\">VAT</th>"
                         + "</tr></thead><tbody>";
                     items.forEach(function (it) {
-                        html += "<tr><td>" + esc(it.lineId || "&mdash;") + "</td>"
+                        html += "<tr><td>" + (it.lineId ? esc(it.lineId) : "&mdash;") + "</td>"
                             + "<td class=\"mono\">" + esc(it.produceEan) + "</td>"
                             + "<td class=\"num\">" + esc(it.quantity) + "</td>"
                             + amountCells(it.amount) + "</tr>";
