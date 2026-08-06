@@ -15,6 +15,12 @@
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.version>3.30.6</quarkus.platform.version>
         <skipITs>true</skipITs>
+        <!-- Skip only the unit suite (surefire) while ITs still run under
+             failsafe: -DskipUTs=true for the RestAssured / engine campaign. -->
+        <skipUTs>false</skipUTs>
+        <!-- Skip the JavaScript test bench (vitest) with -DskipJsTests=true. -->
+        <skipJsTests>false</skipJsTests>
+        <exec-plugin.version>3.5.0</exec-plugin.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
     </properties>
 
@@ -122,6 +128,11 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jacoco</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>io.rest-assured</groupId>
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
@@ -180,6 +191,7 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>${surefire-plugin.version}</version>
                 <configuration>
+                    <skip>${skipUTs}</skip>
                     <argLine>--add-opens java.base/java.lang=ALL-UNNAMED</argLine>
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
@@ -207,6 +219,30 @@
                         <maven.home>${maven.home}</maven.home>
                     </systemPropertyVariables>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>${exec-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>js-tests</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${skipJsTests}</skip>
+                            <executable>npx</executable>
+                            <workingDirectory>${project.basedir}</workingDirectory>
+                            <arguments>
+                                <argument>vitest</argument>
+                                <argument>run</argument>
+                                <argument>--coverage</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

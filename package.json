@@ -1,0 +1,16 @@
+{
+  "name": "imvaluation-js-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Plain unit-test bench for the static browser JavaScript of imvaluation.",
+  "scripts": {
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@vitest/coverage-istanbul": "^2.1.9",
+    "jsdom": "^25.0.1",
+    "vitest": "^2.1.9"
+  }
+}

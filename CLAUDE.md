@@ -61,3 +61,36 @@
   regression tests: GQ must assert createPrice succeeds with priceUsage and
   rejects its absence; IM must assert that re-importing the same price CSV
   creates zero new rows (checksum no-op).
+
+## JS tests — plain unit tests on the browser sources
+- Bench: Vitest + jsdom + @vitest/coverage-istanbul. Specs in
+  src/test/js/**/*.spec.js, one spec per source file. Run with
+  `npx vitest run --coverage`, or as part of `mvn verify`
+  (exec-maven-plugin, test phase). Skip with `-DskipJsTests=true`.
+  Install deps once with `npm install`.
+- The sources under META-INF/resources/ui/*.js are browser IIFEs, not
+  ES modules, and are served verbatim: NEVER edit them to add exports.
+  They are made importable IN MEMORY by the `expose-ui-iife` Vite
+  plugin in vitest.config.js; tests reach their functions via
+  loadScript() from src/test/js/harness.js. If a source is not
+  exposable yet (multiple IIFEs, top-level return, auto-boot), EXTEND
+  the plugin — never edit src/main and never drop coverage to dodge it.
+- NEVER load a source with readFileSync + eval/new Function: it runs
+  the code but bypasses Vite, so Istanbul reports 0% coverage (the JS
+  twin of the JaCoCo attribution blindspot). Always go through
+  loadScript()/import so coverage is attributed to the real file path.
+- Coverage oracle: Istanbul BRANCH coverage on the target file, 100%
+  or a residue justified line-by-line in the campaign report. Cover
+  BOTH arms of every guard, ternary and `||`/`&&` fallback. Always
+  report the branch count (n/n), not only the %.
+- Style mirrors the Java suite: one describe per function, absolute
+  expected values (assert to the cent for money/rate formatting),
+  JSDoc on every helper and every test, English only.
+- Split logic vs wiring: pure functions (formatters, resolvers, graph
+  helpers) are asserted to the exact string/value; DOM wiring
+  (build/render/drag-drop) is driven against a jsdom document set per
+  test via document.body. Poll/interval code uses Vitest fake timers
+  and a mocked fetch — never a real network call or a real clock.
+- Assert the ACTUAL output, including quirks (e.g. a missing lineId
+  renders `&amp;mdash;` because esc escapes the `&`). Report quirks in
+  one line; never fix them under src/main during a test campaign.
