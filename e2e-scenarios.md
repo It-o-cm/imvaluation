@@ -530,8 +530,8 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   `Unknown store codes: …` → `Unknown store group codes: …`. Échec = **200** re-rendu
   (valeurs préservées), succès = **303** `/ui/offers` sans notice ; code immuable en
   édition (disabled non soumis) ; type sans schéma → spec persistée **sans
-  validation** ; id inconnu → **404** `Offer {id} not found` ; delete → 303 même si
-  l'id n'existait pas.
+  validation** ; id inconnu → **404** `Offer {id} not found` ; delete d'un id inexistant
+  → **404** `Offer {id} not found` (aligné sur l'édition), delete d'un id existant → 303.
 - **O3 Générateur de formulaire** [W] : bascule `Form`/`JSON` synchronisée ; JSON
   malformé → `The JSON is malformed: {msg}` et la bascule est **annulée** ; type sans
   schéma → `No schema is registered for type "{type}". Use the JSON tab to edit the

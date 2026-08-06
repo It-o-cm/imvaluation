@@ -775,10 +775,10 @@ class OfferUiResourceTest {
     // --------------------------------------------------
 
     /**
-     * Deleting an offer redirects to the list regardless of the deletion outcome.
+     * Deleting an existing offer redirects to the list (the successful-deletion arm).
      */
     @Test
-    void deleteRedirectsToList() {
+    void deleteExistingRedirectsToList() {
         OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class)) {
             mocked.when(() -> PanacheEntityBase.deleteById(2L)).thenReturn(true);
@@ -786,6 +786,21 @@ class OfferUiResourceTest {
             assertEquals(303, response.getStatus());
             assertEquals("/ui/offers", response.getLocation().getPath());
             assertNull(response.getLocation().getQuery());
+        }
+    }
+
+    /**
+     * Deleting a missing offer answers a 404 carrying the same message as edit/update,
+     * never a silent redirect (the deletion-failed arm).
+     */
+    @Test
+    void deleteMissingAnswers404() {
+        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
+        try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class)) {
+            mocked.when(() -> PanacheEntityBase.deleteById(7L)).thenReturn(false);
+            Response response = resource.delete(7L);
+            assertEquals(404, response.getStatus());
+            assertEquals("Offer 7 not found", response.getEntity());
         }
     }
 }

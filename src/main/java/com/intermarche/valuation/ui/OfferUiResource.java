@@ -460,6 +460,11 @@ public class OfferUiResource implements EngineTrait {
     public Response delete(@PathParam("id") Long id) {
         LOGGER.debug("Entering method delete for id: " + id);
         boolean deleted = Offer.deleteById(id);
+        if (!deleted) {
+            // Align with edit/update: a missing offer is a 404, never a silent redirect.
+            LOGGER.error("Offer with id " + id + " not found");
+            return Response.status(Response.Status.NOT_FOUND).entity("Offer " + id + " not found").build();
+        }
         LOGGER.debug("Exiting method delete. Result: " + deleted);
         return redirectToList();
     }
