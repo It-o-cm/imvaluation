@@ -1,0 +1,5 @@
+group_code|group_name|store_codes|store_group_codes
+DEPT_59|Département du Nord|0104|
+DEPT_75|Département Paris||
+REGION_NORTH|Région Nord|0101;0102;0103|DEPT_59
+REGION_SUD|Région Sud|0105|DEPT_75
