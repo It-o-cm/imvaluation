@@ -94,3 +94,29 @@
 - Assert the ACTUAL output, including quirks (e.g. a missing lineId
   renders `&amp;mdash;` because esc escapes the `&`). Report quirks in
   one line; never fix them under src/main during a test campaign.
+
+## E2E scenario tests (imvaluation — *IT classes)
+- Spec source: e2e-scenarios.md. One test class per group letter
+  (GroupBIT…), one @Test per scenario, the scenario id in the method
+  name and its Javadoc.
+- Two tiers: unmarked scenarios = @QuarkusTest + RestAssured (pure
+  HTTP, Basic auth). [W] scenarios = @QuarkusTest + Playwright
+  (quarkus-playwright, headless Chromium). [P] scenarios require the
+  prod-like profile: implement only if a harness exists, otherwise
+  list as justified residue. [D] is the default dev/test profile.
+- Seed recipe: a class whose scenarios need the referential seeds the
+  mirror catalog ONCE at class start by replaying the 7 CSV imports in
+  the mandated order (Stores → StoreGroups → Products →
+  ProductFamilies → Categories → Prices → Offers) through the HTTP
+  import endpoints (admin/admin Basic). Classes that only need
+  authentication skip the seed.
+- Transverse guards from the catalog: offers/advantages are HashSets —
+  NEVER assert by index, always find by predicate. 4xx/5xx bodies of
+  /valuation carry no entity: assert the message in
+  valuation_traces.error_message; calibrate raw bodies once before any
+  textual assertion.
+- Assert the LITERAL texts the catalog quotes; DB assertions via
+  Panache under QuarkusTransaction; never absolute ids or counters.
+- The style, Javadoc, scope and reporting rules of this file apply.
+- Campaign command: mvn -q verify -DskipUTs=true -DskipJsTests=true
+  -Dit.test=<ClassIT> -DskipITs=false.
