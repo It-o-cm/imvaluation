@@ -101,8 +101,22 @@ public class AuthUiResource {
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance login(@QueryParam("error") String error,
                                   @QueryParam("notice") String notice) {
-        String message = error == null ? null : "Invalid username or password.";
-        return Templates.login(message, notice);
+        return Templates.login(loginErrorMessage(error), notice);
+    }
+
+    /**
+     * Resolves the failure message shown on the login page for the {@code error} parameter.
+     * <p>
+     * Quarkus form authentication redirects here with exactly {@code error=true} when it
+     * rejects credentials. Only that value shows the generic failure message; any other
+     * value, an empty one included, shows nothing rather than reacting to a stray or
+     * hand-typed {@code error} query parameter.
+     *
+     * @param error The raw {@code error} query parameter, may be null.
+     * @return The message to display, or {@code null} to display none.
+     */
+    static String loginErrorMessage(String error) {
+        return "true".equals(error) ? "Invalid username or password." : null;
     }
 
     /**

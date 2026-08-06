@@ -53,8 +53,9 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   `/ui/login` → `POST /j_security_check` (`j_username`/`j_password`) → 302 `/ui/offers`
   (landing-page). Cookie `quarkus-credential` posé.
 - **B2 Login refusé** : mauvais mot de passe → redirection `/ui/login?error=true` →
-  `Invalid username or password.` ; le message s'affiche pour **toute** valeur de
-  `?error`, même vide (`?error=`) — contrat à figer.
+  `Invalid username or password.` ; le message ne s'affiche que pour la valeur **exacte**
+  `error=true` émise par l'échec d'authentification ; toute autre valeur (`?error=`
+  vide, `?error=false`, casse différente, paramètre absent) n'affiche rien.
 - **B3 Logout** : `POST /ui/logout` → cookie `quarkus-credential` vidé (maxAge 0,
   httpOnly, path /), 303 `/ui/login?notice=You+have+been+signed+out.` → bandeau vert
   `You have been signed out.` Aucun `GET /ui/logout` n'existe (405/404 à figer).

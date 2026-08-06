@@ -11,6 +11,7 @@ import java.security.Principal;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -98,7 +99,7 @@ public class AuthUiResourceTest {
 
     /**
      * Verifies the login page reaches the template with no error message when the error
-     * query parameter is absent (the null arm of the message ternary).
+     * query parameter is absent (the null arm of the message resolver).
      */
     @Test
     void testLoginWithoutErrorTakesNullMessageArm() {
@@ -108,12 +109,26 @@ public class AuthUiResourceTest {
 
     /**
      * Verifies the login page reaches the template with the generic invalid-credentials
-     * message when the error query parameter is present (the non-null arm of the ternary).
+     * message when the error query parameter is exactly {@code true} (the message arm).
      */
     @Test
     void testLoginWithErrorTakesInvalidCredentialsArm() {
         AuthUiResource resource = new AuthUiResource();
         assertThrows(UnsatisfiedLinkError.class, () -> resource.login("true", null));
+    }
+
+    /**
+     * Verifies the login failure message is shown only for the exact {@code error=true}
+     * value emitted by the authentication failure, and for no other value — a missing
+     * parameter, an empty one, a differently-cased or arbitrary one all show nothing.
+     */
+    @Test
+    void testLoginErrorMessageOnlyForExactTrue() {
+        assertEquals("Invalid username or password.", AuthUiResource.loginErrorMessage("true"));
+        assertNull(AuthUiResource.loginErrorMessage(null));
+        assertNull(AuthUiResource.loginErrorMessage(""));
+        assertNull(AuthUiResource.loginErrorMessage("false"));
+        assertNull(AuthUiResource.loginErrorMessage("TRUE"));
     }
 
     // --------------------------------------------------
