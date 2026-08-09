@@ -1,0 +1,12 @@
+offer_code|offer_type|specification|store_code|store_group_code
+PROMO_STORE_101|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer"], "targetEans": ["3300000000001"], "discountType": "PERCENTAGE", "value": 15.0}|0101|
+PROMO_STORE_102|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer"], "targetEans": ["3300000000004"], "discountType": "FIXED_AMOUNT", "value": 1.99}|0102|
+PROMO_GROUP_NORD|FREE_DELIVERY_THRESHOLD|{"tiers": [{"threshold": 30.0, "value": 100.0, "type": "PERCENTAGE"}]}||REGION_NORTH
+PROMO_2FOR1_3300|N+M|{"targetEans": ["3300000000001"], "quantityToPay": 2, "discountedQuantity": 1, "selectionStrategy": "CHEAPEST", "discountType": "PERCENTAGE", "discountValue": 100.0}|0101|
+PROMO_COFFEE_PACK|MIXED_BUNDLE|{"bundlePrice": 4.50, "vatRate": 0.20, "contents": [{"ean": "3300000000004", "quantity": 1.0}, {"ean": "3300000000013", "quantity": 1.0, "substituteEans": ["3300000000014"]}]}|0101|
+DELIVERY_HOME_0101|DELIVERY|{"tiers": [{"maxDistance": 8.0, "price": 5.90}, {"maxDistance": 16.0, "price": 9.90}], "vatRate": 0.20}|0101|
+BRI_APPLES_DISCOUNT|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer", "MixedBundleOffer"], "targetEans": ["3300000000001"], "discountType": "FIXED_AMOUNT", "value": 0.10}|0101|
+BASKET_CONSIGNMENT_0101|DEPOSIT_BASKET|{"basketVolume": 10.0, "basketPrice": 0.50, "vatRate": 0.20}|0101|
+FREE_DELIVERY_THRESHOLD_0101|FREE_DELIVERY_THRESHOLD|{"tiers": [{"threshold": 10.0, "value": 50.0, "type": "FIXED_AMOUNT"}, {"threshold": 20.0, "value": 100.0, "type": "FIXED_AMOUNT"}]}|0101|
+MEAL_VOUCHER_0101|MEAL_VOUCHER|{"flag": "RESTAURANT_VOUCHER_ELIGIBLE", "threshold": 25.00}|0101|
+VIGNETTE_CUISSON|VIGNETTE_DISCOUNT|{"catalog": [{"ean": "3300000000031", "vignettesRequired": 5, "discount": {"type": "PERCENTAGE", "value": 50.0}}, {"ean": "3300000000032", "vignettesRequired": 3, "discount": {"type": "FIXED_AMOUNT", "value": 2.00}}]}|0101|

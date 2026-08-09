@@ -107,6 +107,15 @@ public class AppUser extends BaseEntity {
     public String displayName;
 
     /**
+     * The e-mail address the self-service password reset link is sent to.
+     * <p>
+     * Optional: accounts without an address (machine or API accounts) simply cannot use
+     * the self-service reset. The column is generously sized to hold any realistic address.
+     */
+    @Column(name = "email", length = 190)
+    public String email;
+
+    /**
      * Whether the account may sign in.
      * <p>
      * Disabling an account is preferred over deleting it, so the audit trail left on the
@@ -259,6 +268,23 @@ public class AppUser extends BaseEntity {
     }
 
     /**
+     * Finds the active account carrying a given e-mail address.
+     * <p>
+     * The lookup is case-insensitive and skips disabled accounts, so a deactivated user
+     * can never reset their way back in. A blank address matches nothing rather than
+     * returning an arbitrary row.
+     *
+     * @param email The e-mail address to search for, may be null.
+     * @return The matching active account, or null when none matches.
+     */
+    public static AppUser findActiveByEmail(String email) {
+        if (email == null || email.isBlank()) {
+            return null;
+        }
+        return find("active = true and lower(email) = ?1", email.trim().toLowerCase()).firstResult();
+    }
+
+    /**
      * Counts the active users holding the administrator role.
      * <p>
      * Used to refuse the removal of the last administrator, which would otherwise lock
@@ -284,6 +310,6 @@ public class AppUser extends BaseEntity {
      */
     @Override
     public int getChecksum() {
-        return Objects.hash(username, password, roles, displayName, active, mustChangePassword);
+        return Objects.hash(username, password, roles, displayName, email, active, mustChangePassword);
     }
 }

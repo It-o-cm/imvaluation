@@ -41,6 +41,8 @@ public class PasswordChangeFilter implements ContainerRequestFilter {
             "/ui/password",
             "/ui/logout",
             "/ui/login",
+            "/ui/forgot",
+            "/ui/reset",
             "/j_security_check"
     };
 

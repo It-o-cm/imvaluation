@@ -1,6 +1,7 @@
 package com.intermarche.valuation.ui;
 
 import com.intermarche.valuation.domain.AppUser;
+import com.intermarche.valuation.security.PasswordResetService;
 import io.quarkus.qute.CheckedTemplate;
 import io.quarkus.qute.TemplateInstance;
 import io.quarkus.security.Authenticated;
@@ -17,13 +18,16 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
+import jakarta.ws.rs.core.UriInfo;
 import org.jboss.logging.Logger;
 
 import java.net.URI;
+import java.util.Objects;
 
 /**
  * Screens handling sign-in, sign-out and password management.
@@ -56,6 +60,12 @@ public class AuthUiResource {
     SecurityIdentity identity;
 
     /**
+     * The self-service password reset flow: token issuance, mailing and consumption.
+     */
+    @Inject
+    PasswordResetService passwordReset;
+
+    /**
      * Type-safe declarations of the Qute templates used by this resource.
      */
     @CheckedTemplate
@@ -79,6 +89,23 @@ public class AuthUiResource {
          * @return The template instance to render.
          */
         public static native TemplateInstance password(AppUser user, boolean forced, String error);
+
+        /**
+         * Renders the "forgot password" request page.
+         *
+         * @param sent Whether to show the neutral "link sent" confirmation.
+         * @return The template instance to render.
+         */
+        public static native TemplateInstance forgot(boolean sent);
+
+        /**
+         * Renders the "new password" page reached through the mailed link.
+         *
+         * @param token The raw reset token carried by the link.
+         * @param error An error message to display, may be null.
+         * @return The template instance to render.
+         */
+        public static native TemplateInstance reset(String token, String error);
     }
 
     // --------------------------------------------------
@@ -117,6 +144,109 @@ public class AuthUiResource {
      */
     static String loginErrorMessage(String error) {
         return "true".equals(error) ? "Invalid username or password." : null;
+    }
+
+    // --------------------------------------------------
+    // Forgot password
+    // --------------------------------------------------
+
+    /**
+     * Displays the "forgot password" request page.
+     *
+     * @param sent Present after a request was submitted, to show the neutral confirmation.
+     * @return The rendered request page.
+     */
+    @GET
+    @Path("/forgot")
+    @PermitAll
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance forgot(@QueryParam("sent") String sent) {
+        return Templates.forgot(sent != null);
+    }
+
+    /**
+     * Handles a "forgot password" request.
+     * <p>
+     * The outcome is deliberately not revealed: whether or not the address matches an
+     * account, the request always redirects to the same confirmation, so the page cannot
+     * be used to tell which addresses have accounts.
+     *
+     * @param email   The e-mail address typed on the form.
+     * @param uriInfo The request URI, used to build the link with the host that served it.
+     * @return A redirection back to the request page with the confirmation shown.
+     */
+    @POST
+    @Path("/forgot")
+    @PermitAll
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    @Produces(MediaType.TEXT_HTML)
+    public Response requestReset(@FormParam("email") String email, @Context UriInfo uriInfo) {
+        String baseUrl = Objects.toString(uriInfo.getBaseUri(), "");
+        passwordReset.requestReset(email, baseUrl);
+        return Response.seeOther(URI.create("/ui/forgot?sent=true")).build();
+    }
+
+    /**
+     * Displays the "new password" page reached through the mailed link.
+     *
+     * @param token The raw reset token carried by the link, may be null.
+     * @param error An error message to display, may be null.
+     * @return The rendered reset page.
+     */
+    @GET
+    @Path("/reset")
+    @PermitAll
+    @Produces(MediaType.TEXT_HTML)
+    public TemplateInstance reset(@QueryParam("token") String token, @QueryParam("error") String error) {
+        return Templates.reset(token == null ? "" : token, error);
+    }
+
+    /**
+     * Consumes a reset link and sets the new password.
+     * <p>
+     * The confirmation match is checked here; every other rule (token validity, password
+     * policy) is delegated to the reset service. On success the user is sent back to the
+     * login page with a confirmation, so they sign in with the new password.
+     *
+     * @param token    The raw token carried by the link.
+     * @param password The new password.
+     * @param confirm  The new password, typed a second time.
+     * @return A redirection to the login page on success, back to the reset form otherwise.
+     */
+    @POST
+    @Path("/reset")
+    @PermitAll
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    @Produces(MediaType.TEXT_HTML)
+    public Response doReset(@FormParam("token") String token,
+                            @FormParam("password") String password,
+                            @FormParam("confirm") String confirm) {
+        if (password == null || !password.equals(confirm)) {
+            return redirectToReset(token, "The two passwords do not match.");
+        }
+        String error = passwordReset.resetPassword(token, password);
+        if (error != null) {
+            return redirectToReset(token, error);
+        }
+        URI target = UriBuilder.fromPath("/ui/login")
+                .queryParam("notice", "Your password has been changed. You can sign in.")
+                .build();
+        return Response.seeOther(target).build();
+    }
+
+    /**
+     * Redirects back to the reset form, carrying the token and an error to display.
+     *
+     * @param token The raw token to keep in the form, may be null.
+     * @param error The error message to display.
+     * @return A 303 See Other response to the reset form.
+     */
+    private Response redirectToReset(String token, String error) {
+        URI target = UriBuilder.fromPath("/ui/reset")
+                .queryParam("token", token == null ? "" : token)
+                .queryParam("error", error)
+                .build();
+        return Response.seeOther(target).build();
     }
 
     /**

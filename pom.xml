@@ -156,6 +156,13 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-security-jpa</artifactId>
         </dependency>
+        <!-- Sends the self-service password-reset links. Outside production the mailer is
+             mocked by default: the mail, and thus the link, is written to the log, so the
+             flow is exercisable in dev without any SMTP server. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-mailer</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-scheduler</artifactId>

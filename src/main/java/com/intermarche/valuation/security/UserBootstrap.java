@@ -44,6 +44,16 @@ public class UserBootstrap {
     String bootstrapPassword;
 
     /**
+     * E-mail address of the account created on an empty database.
+     * <p>
+     * Set so the bootstrap administrator can use the self-service password reset from the
+     * very first start. Environments override it; the default is a placeholder that never
+     * receives real mail outside a configured SMTP setup.
+     */
+    @ConfigProperty(name = "valuation.bootstrap.admin.email", defaultValue = "admin@valuation.local")
+    String bootstrapEmail;
+
+    /**
      * Creates the initial administrator if the user table holds no account.
      *
      * @param event The application startup event.
@@ -58,6 +68,7 @@ public class UserBootstrap {
         admin.setPassword(bootstrapPassword);
         admin.setRoleSet(Set.of(AppUser.ROLE_VIEWER, AppUser.ROLE_MANAGER, AppUser.ROLE_ADMIN));
         admin.displayName = "Bootstrap administrator";
+        admin.email = bootstrapEmail;
         admin.active = true;
         // The password comes from the configuration, so it is known outside the account:
         // the first sign-in is confined to the password screen until it is replaced.

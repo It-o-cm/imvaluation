@@ -1,0 +1,6 @@
+code|name|streetLine1|streetLine2|postalCode|city|country|latitude|longitude
+0101|Intermarché Test 1|1 Rue du Test|ZI Nord|59000|Lille|France|50.63|3.06
+0102|Intermarché Test 2|12 Avenue des Fleurs||33000|Bordeaux|France|44.83|-0.57
+0103|Intermarché Test 3|99 Boulevard de la Liberte|Etage 2|69000|Lyon|France|45.75|4.85
+0104|Intermarché Test 4|25 Rue de Rivoli||75001|Paris|France|48.86|2.33
+0105|Intermarché Test 5|8 Place de la Gare|Bat C|67000|Strasbourg|France|48.57|7.75
