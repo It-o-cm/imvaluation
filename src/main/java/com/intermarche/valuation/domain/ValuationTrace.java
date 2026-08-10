@@ -4,8 +4,9 @@ import io.quarkus.panache.common.Page;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Index;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -111,14 +112,14 @@ public class ValuationTrace extends BaseEntity {
     /**
      * The submitted basket, exactly as received.
      */
-    @Lob
+    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @Column(name = "request_payload")
     public String requestPayload;
 
     /**
      * The evaluation returned to the caller, exactly as serialized.
      */
-    @Lob
+    @JdbcTypeCode(SqlTypes.LONGVARCHAR)
     @Column(name = "response_payload")
     public String responsePayload;
 
