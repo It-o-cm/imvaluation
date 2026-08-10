@@ -1,6 +1,7 @@
 package com.intermarche.valuation.e2e;
 
 import com.intermarche.valuation.domain.AppUser;
+import com.intermarche.valuation.domain.Store;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.http.Cookie;
@@ -11,6 +12,7 @@ import java.util.Set;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -284,5 +286,35 @@ class GroupBIT {
     @Test
     @Disabled("[P] requires the prod-like profile (password-change enforcement disabled in %test)")
     void b9_adminResetForcesChangeLoop() {
+    }
+
+    /**
+     * B10 — the standard health probe is public by design: {@code GET /q/health} answers 200
+     * with {@code {"status":"UP"}} anonymously, with neither a session cookie nor Basic
+     * credentials, because impos and the deployment harness poll it as a machine probe. This
+     * is the public-by-design counterpart of B4 (public assets): a probe is not gated by the
+     * auth chain. The {@code imvaluation-ready} check needs at least one store to report UP,
+     * and this class carries no referential seed, so the test seeds one store in its own
+     * transaction when the catalog is empty and removes it afterwards, leaving no footprint
+     * for the shared H2 catalog.
+     */
+    @Test
+    void b10_healthProbeIsServedAnonymously() {
+        QuarkusTransaction.requiringNew().run(() -> {
+            if (Store.count() == 0) {
+                Store store = new Store();
+                store.code = "B10HEALTH";
+                store.name = "B10 Health Probe Store";
+                store.persist();
+            }
+        });
+        try {
+            given().redirects().follow(false)
+                    .when().get("/q/health")
+                    .then().statusCode(200)
+                    .body("status", equalTo("UP"));
+        } finally {
+            QuarkusTransaction.requiringNew().run(() -> Store.delete("code", "B10HEALTH"));
+        }
     }
 }
