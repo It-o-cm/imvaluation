@@ -1,0 +1,1410 @@
+./run-e2e-campaign.sh: No such file or directory
+=== Group A ===
+Group A is complete and green.
+
+## Summary
+
+**`src/test/java/com/intermarche/valuation/e2e/GroupAIT.java`** — written from scratch (did not exist). No `src/main` touched.
+
+```
+mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupAIT -DskipITs=false
+→ BUILD SUCCESS — Tests run: 5, Failures: 0, Errors: 0, Skipped: 1
+```
+
+| Scenario | Tier | Status |
+|---|---|---|
+| **A1** bootstrap admin on empty base | Panache DB assertions | ✅ |
+| **A2** count>0 blocks re-creation | Panache + reflective `onStart` re-invoke | ✅ |
+| **A3** incomplete prod startup `[P]` | `@Disabled` residue (no prod-boot harness) | ⏭ |
+| **A4** amnesia hint on empty catalog | RestAssured form session | ✅ |
+| **A5** mirror seed & idempotence | RestAssured Basic, 7 imports ×2 | ✅ |
+
+**Iterations to green: 2** — only A4 failed first (`Offer::deleteAll` method reference bypasses Panache's call-site enhancement → `implementationInjectionMissing`; fixed with a lambda `() -> Offer.deleteAll()`).
+
+**Key findings**
+- **A5 idempotence confirmed to the count**: first pass created Stores 6 / Groups 4 / Products 33 / Families 9 / Categories 30 / Prices 94 / Offers 11 (all `updatedCount:0`); immediate second pass **0/0 everywhere**. Added an address-less store `0106` to exercise the symmetric address checksum — its re-import is also a no-op.
+- **A1**: asserted the DB outcome (roles `VIEWER,MANAGER,ADMIN` canonical order, `Bootstrap administrator`, `active`, `mustChangePassword`) rather than the boot-time WARN log.
+- **A4**: the hint renders as `&mdash;`, so assertions use two entity-free substrings.
+- Kept the class **order-independent** on the shared in-memory DB (only A5 seeds; A4 clears offers itself) — no `@TestMethodOrder`.
+
+Report at **`reports/e2e-A.md`**. Not committed — the campaign script owns the commit.
+Group A is complete and green.
+
+## Summary
+
+**`src/test/java/com/intermarche/valuation/e2e/GroupAIT.java`** — written from scratch (did not exist). No `src/main` touched.
+
+```
+mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupAIT -DskipITs=false
+→ BUILD SUCCESS — Tests run: 5, Failures: 0, Errors: 0, Skipped: 1
+```
+
+| Scenario | Tier | Status |
+|---|---|---|
+| **A1** bootstrap admin on empty base | Panache DB assertions | ✅ |
+| **A2** count>0 blocks re-creation | Panache + reflective `onStart` re-invoke | ✅ |
+| **A3** incomplete prod startup `[P]` | `@Disabled` residue (no prod-boot harness) | ⏭ |
+| **A4** amnesia hint on empty catalog | RestAssured form session | ✅ |
+| **A5** mirror seed & idempotence | RestAssured Basic, 7 imports ×2 | ✅ |
+
+**Iterations to green: 2** — only A4 failed first (`Offer::deleteAll` method reference bypasses Panache's call-site enhancement → `implementationInjectionMissing`; fixed with a lambda `() -> Offer.deleteAll()`).
+
+**Key findings**
+- **A5 idempotence confirmed to the count**: first pass created Stores 6 / Groups 4 / Products 33 / Families 9 / Categories 30 / Prices 94 / Offers 11 (all `updatedCount:0`); immediate second pass **0/0 everywhere**. Added an address-less store `0106` to exercise the symmetric address checksum — its re-import is also a no-op.
+- **A1**: asserted the DB outcome (roles `VIEWER,MANAGER,ADMIN` canonical order, `Bootstrap administrator`, `active`, `mustChangePassword`) rather than the boot-time WARN log.
+- **A4**: the hint renders as `&mdash;`, so assertions use two entity-free substrings.
+- Kept the class **order-independent** on the shared in-memory DB (only A5 seeds; A4 clears offers itself) — no `@TestMethodOrder`.
+
+Report at **`reports/e2e-A.md`**. Not committed — the campaign script owns the commit.
+Tout est vert et le commit est fait (`a0db89d` amendé, message exact, **pas de push**).
+
+## Résultat de la campagne
+```
+mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupAIT -DskipITs=false
+```
+**BUILD SUCCESS** — `Tests run: 5, Failures: 0, Errors: 0, Skipped: 1` (~3,1 s).
+
+## Scénarios couverts et étage de chacun
+| Scénario | Méthode | Étage |
+|---|---|---|
+| A1 — bootstrap admin sur base vide | `a1_bootstrapAdministratorCreatedOnEmptyBase` | RestAssured/Panache (lecture `AppUser` sous `QuarkusTransaction`) ✅ |
+| A2 — bootstrap conditionnel (count>0 bloque) | `a2_bootstrapDoesNotRecreateWhenUsersExist` | Panache + réflexion sur l'observer `UserBootstrap.onStart` ✅ |
+| A3 — démarrage prod incomplet `[P]` | `a3_prodStartupFailsWithoutSecrets` | **@Disabled** (résidu justifié) ⏭ |
+| A4 — amnésie assumée (hint catalogue vide) | `a4_emptyCatalogShowsAmnesiaHint` | RestAssured (session form) ✅ |
+| A5 — seed miroir & idempotence par checksum | `a5_mirrorSeedIsIdempotentByChecksum` | RestAssured (Basic admin/admin, 7 imports ×2 passes) ✅ |
+
+## Résidu justifié
+- **A3 `[P]`** : reproduire un échec de boot sur `VALUATION_ADMIN_PASSWORD` / `VALUATION_SESSION_KEY` manquants exige un second contexte applicatif démarré en profil prod-like délibérément mal configuré. Aucun harnais prod-like n'existe → `@Disabled` avec raison, 1 résidu sur 5.
+
+## Stage (uniquement le groupe A)
+Commité :
+- `src/test/java/com/intermarche/valuation/e2e/GroupAIT.java`
+- `reports/e2e-A.md`
+- `CLAUDE.md` (modifié) et `.claude/commands/gen-e2e-group.md` (nouveau)
+
+Pas de ressource seed/golden externe pour le groupe A : les 7 payloads CSV de A5 sont embarqués inline dans la classe (rien sous `src/test/resources`).
+
+Laissés **hors commit** volontairement : `GroupBIT.java`, `reports/e2e-calibrage-B.md`, `OfferGraphQLClientTest.java`, les logs `campaign*.log`, le PDF `docs/…`, et les scripts `run-*.sh`.
+
+Message de commit : `test: e2e scenarios group A` (exact, amendé pour retirer le trailer). Aucun `git push`.
+Tout est vert et le commit est fait (`a0db89d` amendé, message exact, **pas de push**).
+
+## Résultat de la campagne
+```
+mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupAIT -DskipITs=false
+```
+**BUILD SUCCESS** — `Tests run: 5, Failures: 0, Errors: 0, Skipped: 1` (~3,1 s).
+
+## Scénarios couverts et étage de chacun
+| Scénario | Méthode | Étage |
+|---|---|---|
+| A1 — bootstrap admin sur base vide | `a1_bootstrapAdministratorCreatedOnEmptyBase` | RestAssured/Panache (lecture `AppUser` sous `QuarkusTransaction`) ✅ |
+| A2 — bootstrap conditionnel (count>0 bloque) | `a2_bootstrapDoesNotRecreateWhenUsersExist` | Panache + réflexion sur l'observer `UserBootstrap.onStart` ✅ |
+| A3 — démarrage prod incomplet `[P]` | `a3_prodStartupFailsWithoutSecrets` | **@Disabled** (résidu justifié) ⏭ |
+| A4 — amnésie assumée (hint catalogue vide) | `a4_emptyCatalogShowsAmnesiaHint` | RestAssured (session form) ✅ |
+| A5 — seed miroir & idempotence par checksum | `a5_mirrorSeedIsIdempotentByChecksum` | RestAssured (Basic admin/admin, 7 imports ×2 passes) ✅ |
+
+## Résidu justifié
+- **A3 `[P]`** : reproduire un échec de boot sur `VALUATION_ADMIN_PASSWORD` / `VALUATION_SESSION_KEY` manquants exige un second contexte applicatif démarré en profil prod-like délibérément mal configuré. Aucun harnais prod-like n'existe → `@Disabled` avec raison, 1 résidu sur 5.
+
+## Stage (uniquement le groupe A)
+Commité :
+- `src/test/java/com/intermarche/valuation/e2e/GroupAIT.java`
+- `reports/e2e-A.md`
+- `CLAUDE.md` (modifié) et `.claude/commands/gen-e2e-group.md` (nouveau)
+
+Pas de ressource seed/golden externe pour le groupe A : les 7 payloads CSV de A5 sont embarqués inline dans la classe (rien sous `src/test/resources`).
+
+Laissés **hors commit** volontairement : `GroupBIT.java`, `reports/e2e-calibrage-B.md`, `OfferGraphQLClientTest.java`, les logs `campaign*.log`, le PDF `docs/…`, et les scripts `run-*.sh`.
+
+Message de commit : `test: e2e scenarios group A` (exact, amendé pour retirer le trailer). Aucun `git push`.
+OK: Group A — expected commit landed as HEAD.
+=== Group C ===
+Group C is complete and green. Summary:
+
+## Group C — Accounts & roles — done ✅
+
+**`GroupCIT.java` written from scratch** (didn't exist), all **6 scenarios** implemented, **Tests run: 6, Failures: 0** — BUILD SUCCESS. **3 iterations** to green. No seed needed, **no `@Disabled` residue** (no `[W]`/`[P]` scenarios in this letter).
+
+| Id | Coverage | Tier |
+|----|----------|------|
+| C1 | 4 ordered creation refusals + 303 success, `mustChangePassword` forced, password never re-shown | RestAssured |
+| C2 | Immutable-username hint, blank-vs-supplied password reset, unknown-id 404 on GET & POST | RestAssured |
+| C3 | Demote/disable (200), delete-last (303), delete-self (303), unknown-id (303) | RestAssured |
+| C4 | GraphQL MANAGER↔ADMIN query/mutation trap, imports=ADMIN, `/valuation`=any authenticated | RestAssured + GraphQL |
+| C5 | VIEWER list-button/nav gating + 403 on write endpoints | RestAssured |
+| C6 | Unknown role silently dropped; unchecked `active` ⇒ disabled | RestAssured |
+
+**Calibration findings** (catalog vs reality):
+1. Notice apostrophes are percent-encoded in `Location` (`%27`), not literal `'`.
+2. The validation banner HTML-escapes apostrophes (`An account named &#39;admin&#39; already exists.`) — asserted the actual escaped output.
+3. Media-type match precedes authorization: import with no `Content-Type` → **415** before 403; the guards now send `text/plain`.
+4. C3 "all in 303" only holds for the three *delete* guards; the demote/disable guard is a **200** form re-render.
+5. GraphQL `@RolesAllowed` denial renders as HTTP **200 + `"errors"`** (the F3 unknown) — matrix asserted on that key, not a fragile message.
+
+**Key pitfall solved:** the bootstrap `admin` is always an active admin, so C3 installs a disposable sole-active-admin with an inactive-admin caller and restores state in a `finally`, keeping the shared account usable for the rest of the suite.
+
+Report written to `reports/e2e-C.md`. Scope respected — only `GroupCIT.java` and the report touched; nothing under `src/main`. Per the workflow, I did **not** commit — the campaign script owns that.
+Group C is complete and green. Summary:
+
+## Group C — Accounts & roles — done ✅
+
+**`GroupCIT.java` written from scratch** (didn't exist), all **6 scenarios** implemented, **Tests run: 6, Failures: 0** — BUILD SUCCESS. **3 iterations** to green. No seed needed, **no `@Disabled` residue** (no `[W]`/`[P]` scenarios in this letter).
+
+| Id | Coverage | Tier |
+|----|----------|------|
+| C1 | 4 ordered creation refusals + 303 success, `mustChangePassword` forced, password never re-shown | RestAssured |
+| C2 | Immutable-username hint, blank-vs-supplied password reset, unknown-id 404 on GET & POST | RestAssured |
+| C3 | Demote/disable (200), delete-last (303), delete-self (303), unknown-id (303) | RestAssured |
+| C4 | GraphQL MANAGER↔ADMIN query/mutation trap, imports=ADMIN, `/valuation`=any authenticated | RestAssured + GraphQL |
+| C5 | VIEWER list-button/nav gating + 403 on write endpoints | RestAssured |
+| C6 | Unknown role silently dropped; unchecked `active` ⇒ disabled | RestAssured |
+
+**Calibration findings** (catalog vs reality):
+1. Notice apostrophes are percent-encoded in `Location` (`%27`), not literal `'`.
+2. The validation banner HTML-escapes apostrophes (`An account named &#39;admin&#39; already exists.`) — asserted the actual escaped output.
+3. Media-type match precedes authorization: import with no `Content-Type` → **415** before 403; the guards now send `text/plain`.
+4. C3 "all in 303" only holds for the three *delete* guards; the demote/disable guard is a **200** form re-render.
+5. GraphQL `@RolesAllowed` denial renders as HTTP **200 + `"errors"`** (the F3 unknown) — matrix asserted on that key, not a fragile message.
+
+**Key pitfall solved:** the bootstrap `admin` is always an active admin, so C3 installs a disposable sole-active-admin with an inactive-admin caller and restores state in a `finally`, keeping the shared account usable for the rest of the suite.
+
+Report written to `reports/e2e-C.md`. Scope respected — only `GroupCIT.java` and the report touched; nothing under `src/main`. Per the workflow, I did **not** commit — the campaign script owns that.
+Campagne verte, commit fait (pas de push). Récapitulatif.
+
+## Résultat campagne
+
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupCIT -DskipITs=false`
+→ **Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS**
+
+(Les nombreuses stack traces `ForbiddenException` / 400 dans le log sont les chemins négatifs volontaires des scénarios C3/C4 — comportement attendu, pas des erreurs de test.)
+
+## Scénarios couverts et étage de chacun
+
+| Id | Scénario | Étage |
+|----|----------|-------|
+| C1 | Création de compte — refus ordonnés puis succès | RestAssured (Basic) |
+| C2 | Édition — username immuable, reset mot de passe, 404 | RestAssured (Basic) |
+| C3 | Garde-fous du dernier administrateur | RestAssured (Basic) |
+| C4 | Rôles non hiérarchiques | RestAssured (Basic) **+ GraphQL** |
+| C5 | Parcours VIEWER dans l'IHM | RestAssured (Basic) |
+| C6 | Assainissement des rôles | RestAssured (Basic) |
+
+- **Playwright (`[W]`) : aucun** dans le groupe C.
+- **`@Disabled` : aucun** — les 6 scénarios sont implémentés et verts (Skipped: 0).
+
+## Résidu justifié
+
+**Aucun.** Le groupe C ne contient ni scénario `[P]` (prod-like) ni `[W]` (navigateur) dans le catalogue. Pas de seed miroir (comptes créés directement via Panache ; matrice GraphQL observée sur catalogue vide ; gardes d'import refusant avant tout parsing CSV) → aucune ressource de seed/golden. `reports/e2e-C.md` documente les 5 calibrages (encodage `%27`, escape `&#39;`, 415 avant 403 sur `/…/import`, C3 « 303 » partiel, dénégation GraphQL en 200+`errors`).
+
+## Staging / commit
+
+`CLAUDE.md` et `.claude/` inchangés (non stagés). J'ai désindexé `GroupBIT.java` (déjà en index depuis un travail antérieur, hors périmètre C) puis stagé **uniquement** :
+- `src/test/java/com/intermarche/valuation/e2e/GroupCIT.java`
+- `reports/e2e-C.md`
+
+Commit **2cfa416** — `test: e2e scenarios group C`. Pas de `git push`.
+Campagne verte, commit fait (pas de push). Récapitulatif.
+
+## Résultat campagne
+
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupCIT -DskipITs=false`
+→ **Tests run: 6, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS**
+
+(Les nombreuses stack traces `ForbiddenException` / 400 dans le log sont les chemins négatifs volontaires des scénarios C3/C4 — comportement attendu, pas des erreurs de test.)
+
+## Scénarios couverts et étage de chacun
+
+| Id | Scénario | Étage |
+|----|----------|-------|
+| C1 | Création de compte — refus ordonnés puis succès | RestAssured (Basic) |
+| C2 | Édition — username immuable, reset mot de passe, 404 | RestAssured (Basic) |
+| C3 | Garde-fous du dernier administrateur | RestAssured (Basic) |
+| C4 | Rôles non hiérarchiques | RestAssured (Basic) **+ GraphQL** |
+| C5 | Parcours VIEWER dans l'IHM | RestAssured (Basic) |
+| C6 | Assainissement des rôles | RestAssured (Basic) |
+
+- **Playwright (`[W]`) : aucun** dans le groupe C.
+- **`@Disabled` : aucun** — les 6 scénarios sont implémentés et verts (Skipped: 0).
+
+## Résidu justifié
+
+**Aucun.** Le groupe C ne contient ni scénario `[P]` (prod-like) ni `[W]` (navigateur) dans le catalogue. Pas de seed miroir (comptes créés directement via Panache ; matrice GraphQL observée sur catalogue vide ; gardes d'import refusant avant tout parsing CSV) → aucune ressource de seed/golden. `reports/e2e-C.md` documente les 5 calibrages (encodage `%27`, escape `&#39;`, 415 avant 403 sur `/…/import`, C3 « 303 » partiel, dénégation GraphQL en 200+`errors`).
+
+## Staging / commit
+
+`CLAUDE.md` et `.claude/` inchangés (non stagés). J'ai désindexé `GroupBIT.java` (déjà en index depuis un travail antérieur, hors périmètre C) puis stagé **uniquement** :
+- `src/test/java/com/intermarche/valuation/e2e/GroupCIT.java`
+- `reports/e2e-C.md`
+
+Commit **2cfa416** — `test: e2e scenarios group C`. Pas de `git push`.
+OK: Group C — expected commit landed as HEAD.
+=== Group D ===
+Group D is complete and green. Summary:
+
+## Group D — CSV imports, the common mechanics ✅
+
+**`GroupDIT.java`** written from scratch (no prior class to complete). Campaign is **BUILD SUCCESS** — `Tests run: 9, Failures: 0, Skipped: 1`.
+
+**Tiering** — all of D1–D9 are unmarked in the catalog → the whole group is `@QuarkusTest` + RestAssured, HTTP Basic (`admin/admin`, plus a MANAGER for D9). **No mirror seed needed** — every scenario imports its own throwaway rows through the dependency-free `/stores/import` (and `/prices/import` for D4).
+
+| | Scenario | Verdict |
+|---|---|---|
+| D1 | nominal + blank lines ignored | ✅ |
+| D2 | not-enough-columns error / extra cols accepted | ✅ |
+| D3 | malformed error-JSON de-facto contract | ✅ |
+| D4 | leading blank line shifts header into data | ✅ |
+| D5 | staged transactional fallback (24 survive, 1 isolated) | ✅ |
+| D6 | checksum idempotence (`updated_at` untouched) | ✅ |
+| D7 | in-file duplicate key, last line wins | ✅ |
+| D8 | stream 500s | ⏭ justified `@Disabled` residue |
+| D9 | MANAGER → 403 on all 7 import endpoints | ✅ |
+
+**Two iterations to green:** (1) fixed a `{@code /*/import}` in Javadoc whose `*/` closed the comment and broke compilation; (2) calibrated D5 — the faulty 13th data row reports as **`Line 14`** (header is physical line 1) and the isolated message is the Narayana commit wrapper `ARJUNA016053: Could not commit transaction.`, not the raw `@NotBlank` text.
+
+**Key calibration findings** (full detail in `reports/e2e-D.md`): D3's malformed JSON confirmed (missing opening quote on the first error → textual-only asserts); D4's "header-as-data business error" is resource-dependent, so `/prices/import` was chosen to surface it faithfully; the staged-fallback WARN log is emitted but not asserted (the 24-survivors + isolated-line pair is the observable proof). D8 is the sole residue: `IOException`/`Throwable` stream faults aren't injectable through a well-formed RestAssured request.
+
+Scope respected — only `GroupDIT.java` and `reports/e2e-D.md` touched, nothing under `src/main`. **Not committed** — the campaign script owns the commit.
+Group D is complete and green. Summary:
+
+## Group D — CSV imports, the common mechanics ✅
+
+**`GroupDIT.java`** written from scratch (no prior class to complete). Campaign is **BUILD SUCCESS** — `Tests run: 9, Failures: 0, Skipped: 1`.
+
+**Tiering** — all of D1–D9 are unmarked in the catalog → the whole group is `@QuarkusTest` + RestAssured, HTTP Basic (`admin/admin`, plus a MANAGER for D9). **No mirror seed needed** — every scenario imports its own throwaway rows through the dependency-free `/stores/import` (and `/prices/import` for D4).
+
+| | Scenario | Verdict |
+|---|---|---|
+| D1 | nominal + blank lines ignored | ✅ |
+| D2 | not-enough-columns error / extra cols accepted | ✅ |
+| D3 | malformed error-JSON de-facto contract | ✅ |
+| D4 | leading blank line shifts header into data | ✅ |
+| D5 | staged transactional fallback (24 survive, 1 isolated) | ✅ |
+| D6 | checksum idempotence (`updated_at` untouched) | ✅ |
+| D7 | in-file duplicate key, last line wins | ✅ |
+| D8 | stream 500s | ⏭ justified `@Disabled` residue |
+| D9 | MANAGER → 403 on all 7 import endpoints | ✅ |
+
+**Two iterations to green:** (1) fixed a `{@code /*/import}` in Javadoc whose `*/` closed the comment and broke compilation; (2) calibrated D5 — the faulty 13th data row reports as **`Line 14`** (header is physical line 1) and the isolated message is the Narayana commit wrapper `ARJUNA016053: Could not commit transaction.`, not the raw `@NotBlank` text.
+
+**Key calibration findings** (full detail in `reports/e2e-D.md`): D3's malformed JSON confirmed (missing opening quote on the first error → textual-only asserts); D4's "header-as-data business error" is resource-dependent, so `/prices/import` was chosen to surface it faithfully; the staged-fallback WARN log is emitted but not asserted (the 24-survivors + isolated-line pair is the observable proof). D8 is the sole residue: `IOException`/`Throwable` stream faults aren't injectable through a well-formed RestAssured request.
+
+Scope respected — only `GroupDIT.java` and `reports/e2e-D.md` touched, nothing under `src/main`. **Not committed** — the campaign script owns the commit.
+Campagne verte, commit fait. Voici le bilan.
+
+## Résultat — `BUILD SUCCESS`
+`Tests run: 9, Failures: 0, Errors: 0, Skipped: 1` (8 scénarios actifs verts, D8 en résidu justifié).
+
+Groupe D entièrement **non marqué** dans le catalogue → tout l'étage est `@QuarkusTest` + RestAssured (HTTP Basic `admin/admin`, plus un MANANGER dédié pour D9). Aucun `[P]` ni `[W]` dans cette lettre.
+
+| Scénario | Étage | Endpoint | Verdict |
+|---|---|---|---|
+| **D1** Import nominal, lignes vides ignorées | RestAssured | `/stores/import` | ✅ |
+| **D2** Colonnes insuffisantes / extra acceptées | RestAssured | `/stores/import` | ✅ |
+| **D3** Contrat JSON d'erreur malformé | RestAssured | `/stores/import` | ✅ |
+| **D4** Ligne vide en tête décale l'en-tête en données | RestAssured | `/prices/import` | ✅ |
+| **D5** Fallback transactionnel étagé | RestAssured | `/stores/import` | ✅ |
+| **D6** Idempotence par checksum | RestAssured | `/stores/import` | ✅ |
+| **D7** Clé dupliquée dans le fichier, dernière gagne | RestAssured | `/stores/import` | ✅ |
+| **D8** Erreurs de flux (500) | `@Disabled` | — | ⏭ résidu |
+| **D9** Rôle insuffisant (MANAGER → 403) | RestAssured | les 7 imports | ✅ |
+
+## Résidu justifié
+- **D8** (`@Disabled`) : les deux chemins — `IOException` en lecture du corps (500 `Error reading file:`) et `Throwable` inattendu (500 `Unexcepted error:`, la coquille épinglée par le catalogue) — exigent une **injection de fautes au niveau infrastructure** (corps avorté, transfer-encoding corrompu) qu'une requête RestAssured bien formée ne peut pas produire. Raison portée dans l'annotation.
+
+## Commit
+`3ba2603 test: e2e scenarios group D` — staging limité à **`GroupDIT.java`** et **`reports/e2e-D.md`** (tous deux nouveaux). Pas de seed/golden pour ce groupe (chaque scénario importe ses propres lignes jetables), pas de changement sur `CLAUDE.md` ni `.claude/`. Aucun `git push`.
+Campagne verte, commit fait. Voici le bilan.
+
+## Résultat — `BUILD SUCCESS`
+`Tests run: 9, Failures: 0, Errors: 0, Skipped: 1` (8 scénarios actifs verts, D8 en résidu justifié).
+
+Groupe D entièrement **non marqué** dans le catalogue → tout l'étage est `@QuarkusTest` + RestAssured (HTTP Basic `admin/admin`, plus un MANANGER dédié pour D9). Aucun `[P]` ni `[W]` dans cette lettre.
+
+| Scénario | Étage | Endpoint | Verdict |
+|---|---|---|---|
+| **D1** Import nominal, lignes vides ignorées | RestAssured | `/stores/import` | ✅ |
+| **D2** Colonnes insuffisantes / extra acceptées | RestAssured | `/stores/import` | ✅ |
+| **D3** Contrat JSON d'erreur malformé | RestAssured | `/stores/import` | ✅ |
+| **D4** Ligne vide en tête décale l'en-tête en données | RestAssured | `/prices/import` | ✅ |
+| **D5** Fallback transactionnel étagé | RestAssured | `/stores/import` | ✅ |
+| **D6** Idempotence par checksum | RestAssured | `/stores/import` | ✅ |
+| **D7** Clé dupliquée dans le fichier, dernière gagne | RestAssured | `/stores/import` | ✅ |
+| **D8** Erreurs de flux (500) | `@Disabled` | — | ⏭ résidu |
+| **D9** Rôle insuffisant (MANAGER → 403) | RestAssured | les 7 imports | ✅ |
+
+## Résidu justifié
+- **D8** (`@Disabled`) : les deux chemins — `IOException` en lecture du corps (500 `Error reading file:`) et `Throwable` inattendu (500 `Unexcepted error:`, la coquille épinglée par le catalogue) — exigent une **injection de fautes au niveau infrastructure** (corps avorté, transfer-encoding corrompu) qu'une requête RestAssured bien formée ne peut pas produire. Raison portée dans l'annotation.
+
+## Commit
+`3ba2603 test: e2e scenarios group D` — staging limité à **`GroupDIT.java`** et **`reports/e2e-D.md`** (tous deux nouveaux). Pas de seed/golden pour ce groupe (chaque scénario importe ses propres lignes jetables), pas de changement sur `CLAUDE.md` ni `.claude/`. Aucun `git push`.
+OK: Group D — expected commit landed as HEAD.
+=== Group E ===
+Done. Group E is complete and green.
+
+## Summary
+
+Created `src/test/java/com/intermarche/valuation/e2e/GroupEIT.java` (written from scratch — no prior class existed) and `reports/e2e-E.md`.
+
+**Result: `Tests run: 27, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`**, 2 iterations to green.
+
+**Coverage** — all E1–E7 catalog scenarios plus every Q-D E-surface message, one `@Test` per facet, all unmarked → `@QuarkusTest` + RestAssured, Basic `admin/admin`. No mirror seed needed (each scenario imports its own throwaway prerequisites through the endpoints under test, mirroring Group D's philosophy). **No `@Disabled` residue** — no `[W]`/`[P]` scenarios in this letter.
+
+Key behaviors pinned: E1 upsert-by-code + silent `safeParseDouble`; E2 additive store links + ordering guard + self-containment *accepted*; E3 blank-`active`⇒`false` trap; E4 replacement + `cannot contain itself`; E5 `(ean,level1,level5)` key with mid-level change detected; E6 composite-key branches (endDate updates, priority creates, invalid usage, non-ISO date nulled, unquoted EAN); E7 targeting/spec/length rules + unknown-type canary + *replacement* re-link.
+
+**Calibration findings** (documented in-code and in the report):
+1. **E4 frozen defect does NOT reproduce** — the catalog claims the update is counted but never persisted; observed reality is that it *is* persisted (the pre-fetched family stays managed in the request session that the commit flushes). This was the one assertion flipped between iteration 1 (26/27) and 2. I asserted observed reality rather than the catalog's claim, per campaign rules.
+2. Direct-vs-commit-wrapped error lines (Narayana wrapper for E1/E3/E6-priority/E7-length — Line-prefix + zero-row pinned, not the wrapped text).
+3. E6 usage message asserted on the common substring `PriceUsage is mandatory` (both spellings valid depending on staged path).
+4. The three distinct "not found" spellings and the quoted (E5) vs unquoted (E6) EAN asymmetry, all confirmed by code + runtime.
+
+Scope respected: only the test class and report touched; no `src/main` change. Not committed — the campaign script owns the commit.
+Done. Group E is complete and green.
+
+## Summary
+
+Created `src/test/java/com/intermarche/valuation/e2e/GroupEIT.java` (written from scratch — no prior class existed) and `reports/e2e-E.md`.
+
+**Result: `Tests run: 27, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`**, 2 iterations to green.
+
+**Coverage** — all E1–E7 catalog scenarios plus every Q-D E-surface message, one `@Test` per facet, all unmarked → `@QuarkusTest` + RestAssured, Basic `admin/admin`. No mirror seed needed (each scenario imports its own throwaway prerequisites through the endpoints under test, mirroring Group D's philosophy). **No `@Disabled` residue** — no `[W]`/`[P]` scenarios in this letter.
+
+Key behaviors pinned: E1 upsert-by-code + silent `safeParseDouble`; E2 additive store links + ordering guard + self-containment *accepted*; E3 blank-`active`⇒`false` trap; E4 replacement + `cannot contain itself`; E5 `(ean,level1,level5)` key with mid-level change detected; E6 composite-key branches (endDate updates, priority creates, invalid usage, non-ISO date nulled, unquoted EAN); E7 targeting/spec/length rules + unknown-type canary + *replacement* re-link.
+
+**Calibration findings** (documented in-code and in the report):
+1. **E4 frozen defect does NOT reproduce** — the catalog claims the update is counted but never persisted; observed reality is that it *is* persisted (the pre-fetched family stays managed in the request session that the commit flushes). This was the one assertion flipped between iteration 1 (26/27) and 2. I asserted observed reality rather than the catalog's claim, per campaign rules.
+2. Direct-vs-commit-wrapped error lines (Narayana wrapper for E1/E3/E6-priority/E7-length — Line-prefix + zero-row pinned, not the wrapped text).
+3. E6 usage message asserted on the common substring `PriceUsage is mandatory` (both spellings valid depending on staged path).
+4. The three distinct "not found" spellings and the quoted (E5) vs unquoted (E6) EAN asymmetry, all confirmed by code + runtime.
+
+Scope respected: only the test class and report touched; no `src/main` change. Not committed — the campaign script owns the commit.
+Campagne groupe E : **tout est vert.**
+
+## Résultat
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupEIT -DskipITs=false` → **BUILD SUCCESS**, `Tests run: 27, Failures: 0, Errors: 0, Skipped: 0` (2 itérations jusqu'au vert). Les stack-traces H2/EAN dans les logs sont attendues : ce sont les chemins d'erreur négatifs (imports CSV malformés) que les scénarios provoquent volontairement.
+
+## Scénarios couverts et étage
+Les **27** scénarios (E1→E7, une ligne par facette) sont **tous en `@QuarkusTest` + RestAssured** (HTTP pur, Basic `admin/admin`). Aucun `[W]` ni `[P]` dans cette lettre → **0 Playwright, 0 `@Disabled`**.
+
+- **E1** (Stores) — upsert par code + coords silencieusement optionnelles ; nom vide rejeté
+- **E2** (Store-groups) — liaison additive ; store inconnu ; garde d'ordre sous-groupe ; auto-contenance *acceptée*
+- **E3** (Products) — `active` vide ⇒ `false` (piège) ; `productType` inconnu → `null`, ligne isolée
+- **E4** (Product-families) — update existante (calibrage : défaut « gelé » ne se reproduit pas) ; EAN/sous-famille inconnus ; auto-référence *rejetée*
+- **E5** (Categories) — clé `(ean, level1, level5)` ; EAN inconnu **entre quotes**
+- **E6** (Prices) — endDate update in-place ; priorité → nouvelle clé ; usage manquant ; EAN **sans quotes** (asymétrie E5) ; priorité vide ; date non-ISO nullée
+- **E7** (Offers) — sans cible ; store/group inconnus ; type accepté verbatim ; spécification JSON invalide / >1000 chars ; cibles **remplacées** (opposé de l'additif E2)
+
+## Résidu justifié
+**Aucun.** Section « Residue » du rapport confirme : pas de `@Disabled`, pas de `[P]`/`[W]`. Toutes les branches E1–E7 et tous les messages Q-D de surface E sont couverts en tests vivants.
+
+## Commit
+Stagé **uniquement** `GroupEIT.java` + `reports/e2e-E.md` (aucune ressource seed/golden modifiée, `CLAUDE.md`/`.claude` inchangés). Commit `c37390a` sur `tests-agent`, message exact `test: e2e scenarios group E`. Les autres fichiers non-suivis (GroupBIT.java, logs de campagne, scripts, PDF, etc.) ont été laissés hors du commit. **Aucun `git push`.**
+Campagne groupe E : **tout est vert.**
+
+## Résultat
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupEIT -DskipITs=false` → **BUILD SUCCESS**, `Tests run: 27, Failures: 0, Errors: 0, Skipped: 0` (2 itérations jusqu'au vert). Les stack-traces H2/EAN dans les logs sont attendues : ce sont les chemins d'erreur négatifs (imports CSV malformés) que les scénarios provoquent volontairement.
+
+## Scénarios couverts et étage
+Les **27** scénarios (E1→E7, une ligne par facette) sont **tous en `@QuarkusTest` + RestAssured** (HTTP pur, Basic `admin/admin`). Aucun `[W]` ni `[P]` dans cette lettre → **0 Playwright, 0 `@Disabled`**.
+
+- **E1** (Stores) — upsert par code + coords silencieusement optionnelles ; nom vide rejeté
+- **E2** (Store-groups) — liaison additive ; store inconnu ; garde d'ordre sous-groupe ; auto-contenance *acceptée*
+- **E3** (Products) — `active` vide ⇒ `false` (piège) ; `productType` inconnu → `null`, ligne isolée
+- **E4** (Product-families) — update existante (calibrage : défaut « gelé » ne se reproduit pas) ; EAN/sous-famille inconnus ; auto-référence *rejetée*
+- **E5** (Categories) — clé `(ean, level1, level5)` ; EAN inconnu **entre quotes**
+- **E6** (Prices) — endDate update in-place ; priorité → nouvelle clé ; usage manquant ; EAN **sans quotes** (asymétrie E5) ; priorité vide ; date non-ISO nullée
+- **E7** (Offers) — sans cible ; store/group inconnus ; type accepté verbatim ; spécification JSON invalide / >1000 chars ; cibles **remplacées** (opposé de l'additif E2)
+
+## Résidu justifié
+**Aucun.** Section « Residue » du rapport confirme : pas de `@Disabled`, pas de `[P]`/`[W]`. Toutes les branches E1–E7 et tous les messages Q-D de surface E sont couverts en tests vivants.
+
+## Commit
+Stagé **uniquement** `GroupEIT.java` + `reports/e2e-E.md` (aucune ressource seed/golden modifiée, `CLAUDE.md`/`.claude` inchangés). Commit `c37390a` sur `tests-agent`, message exact `test: e2e scenarios group E`. Les autres fichiers non-suivis (GroupBIT.java, logs de campagne, scripts, PDF, etc.) ont été laissés hors du commit. **Aucun `git push`.**
+OK: Group E — expected commit landed as HEAD.
+=== Group F ===
+Group F is complete and green. Summary of what I did:
+
+## Result
+`GroupFIT.java` — **written from scratch** (didn't exist). All **11 scenarios (F1–F11)** pass: `Tests run: 11, Failures: 0, Errors: 0` → **BUILD SUCCESS**. 2 iterations (write + one calibration pass). No `@Disabled` residue — Group F has no `[W]`/`[P]` marks, so every scenario is a pure-HTTP **RestAssured** GraphQL test over Basic auth.
+
+## Key decisions
+- **No mirror seed.** Group F builds its own throwaway entities through the very GraphQL mutations under test (per-scenario `F2…`/`F7…` prefixes), so no CSV replay was needed. The F1 single-role accounts are created via Panache, mirroring Group C's C4 approach.
+- **Transverse guards honored**: HashSet links checked by predicate (never index), no absolute ids/counts, order-independent.
+
+## The big calibration finding (the catalog's F3 "unknown", now pinned)
+SmallRye masks **every exception that escapes `GraphQLTrait.execute()`** as the literal string **`"System error"`**. The dividing line is *where* the throw is caught, not the exception type:
+- **Verbatim** — only in-lambda `GraphQLException` wraps: F2 conflicts, F4 generics (`An error occurred during <op>.`), F8 null-start `updatePrice` NPE.
+- **Masked to `"System error"`** — everything escaping the lambda: unwrapped `NoSuchElementException` (so **F3 not-found, F9 update, F11 duplicate trap** all render generic, *contradicting* the catalog's "clean message" hopes) and commit-time failures (**F7 FK** violation, `@NotBlank`).
+
+Documented écarts vs the catalog in the report and pinned as observed reality. Additional pitfalls fixed: `createOffer` success paths need `specification: "{}"` (else masked at commit), scalar `delete*` mutations take no selection set, and unknown-subgroup on `createStoreGroup` is *silently accepted* (Hibernate drops the null child).
+
+Report written to `reports/e2e-F.md`. Scope respected — only `GroupFIT.java` and the report were touched; nothing under `src/main`. Did **not** commit (the campaign script owns that). I also saved the SmallRye masking behavior to memory for future GraphQL work.
+Group F is complete and green. Summary of what I did:
+
+## Result
+`GroupFIT.java` — **written from scratch** (didn't exist). All **11 scenarios (F1–F11)** pass: `Tests run: 11, Failures: 0, Errors: 0` → **BUILD SUCCESS**. 2 iterations (write + one calibration pass). No `@Disabled` residue — Group F has no `[W]`/`[P]` marks, so every scenario is a pure-HTTP **RestAssured** GraphQL test over Basic auth.
+
+## Key decisions
+- **No mirror seed.** Group F builds its own throwaway entities through the very GraphQL mutations under test (per-scenario `F2…`/`F7…` prefixes), so no CSV replay was needed. The F1 single-role accounts are created via Panache, mirroring Group C's C4 approach.
+- **Transverse guards honored**: HashSet links checked by predicate (never index), no absolute ids/counts, order-independent.
+
+## The big calibration finding (the catalog's F3 "unknown", now pinned)
+SmallRye masks **every exception that escapes `GraphQLTrait.execute()`** as the literal string **`"System error"`**. The dividing line is *where* the throw is caught, not the exception type:
+- **Verbatim** — only in-lambda `GraphQLException` wraps: F2 conflicts, F4 generics (`An error occurred during <op>.`), F8 null-start `updatePrice` NPE.
+- **Masked to `"System error"`** — everything escaping the lambda: unwrapped `NoSuchElementException` (so **F3 not-found, F9 update, F11 duplicate trap** all render generic, *contradicting* the catalog's "clean message" hopes) and commit-time failures (**F7 FK** violation, `@NotBlank`).
+
+Documented écarts vs the catalog in the report and pinned as observed reality. Additional pitfalls fixed: `createOffer` success paths need `specification: "{}"` (else masked at commit), scalar `delete*` mutations take no selection set, and unknown-subgroup on `createStoreGroup` is *silently accepted* (Hibernate drops the null child).
+
+Report written to `reports/e2e-F.md`. Scope respected — only `GroupFIT.java` and the report were touched; nothing under `src/main`. Did **not** commit (the campaign script owns that). I also saved the SmallRye masking behavior to memory for future GraphQL work.
+✅ **Campagne e2e groupe F : tout est vert — BUILD SUCCESS.**
+
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupFIT -DskipITs=false` → `Tests run: 11, Failures: 0, Errors: 0, Skipped: 0`. Les stack-traces `NoSuchElementException` / FK `23503` dans les logs sont les **chemins d'erreur négatifs volontaires** des scénarios (F3, F7, F11…), pas des échecs.
+
+## Scénarios couverts (F1–F11) — tous **RestAssured** (@QuarkusTest + HTTP GraphQL, Basic auth)
+
+| Id | Étage | Objet |
+|----|-------|-------|
+| F1 | RestAssured | Matrice de sécurité : queries=MANAGER, mutations=ADMIN (piège rôle plat C4, deux sens). |
+| F2 | RestAssured | Les 11 textes exacts `AlreadyExistsException`. |
+| F3 | RestAssured | Not-found : `NoSuchElementException` non-wrappée **masquée en `"System error"`**. |
+| F4 | RestAssured | Génériques catch-all `An error occurred during <op>.` |
+| F5 | RestAssured | `null` = inchangé vs `[]` = vidage → offre sans cible. |
+| F6 | RestAssured | `code` immuable ignoré sur update (offer/group/family). |
+| F7 | RestAssured | Suppressions : id absent → `false`, FK, cascade ALL de `deleteProductFamily`. |
+| F8 | RestAssured | Cas vicieux prix (`currentPrice` null, doublon start null, NPE masquée). |
+| F9 | RestAssured | Asymétrie sous-groupe inconnu create vs update. |
+| F10 | RestAssured | Cycles indirects A→B→A acceptés (visited sets). |
+| F11 | RestAssured | Doublon dans `storeCodes` pris pour un store manquant. |
+
+**Étages :** 11/11 RestAssured, **0 Playwright** (`[W]`), **0 `@Disabled`**.
+
+**Résidu justifié :** aucun — le groupe F n'a aucune marque `[P]`/`[W]`, donc tous les scénarios sont implémentés et verts.
+
+## Commit
+- Staged **uniquement** : `src/test/java/com/intermarche/valuation/e2e/GroupFIT.java` + `reports/e2e-F.md`.
+- Aucune ressource seed/golden modifiée ; `CLAUDE.md` et `.claude/` inchangés → non stagés.
+- Les autres fichiers untracked (logs de campagne, `GroupBIT.java`, `OfferGraphQLClientTest.java`, scripts, PDF, `e2e-calibrage-B.md`) laissés intacts.
+- Commit `0eb589a` — message exact `test: e2e scenarios group F`. **Aucun `git push`.**
+✅ **Campagne e2e groupe F : tout est vert — BUILD SUCCESS.**
+
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupFIT -DskipITs=false` → `Tests run: 11, Failures: 0, Errors: 0, Skipped: 0`. Les stack-traces `NoSuchElementException` / FK `23503` dans les logs sont les **chemins d'erreur négatifs volontaires** des scénarios (F3, F7, F11…), pas des échecs.
+
+## Scénarios couverts (F1–F11) — tous **RestAssured** (@QuarkusTest + HTTP GraphQL, Basic auth)
+
+| Id | Étage | Objet |
+|----|-------|-------|
+| F1 | RestAssured | Matrice de sécurité : queries=MANAGER, mutations=ADMIN (piège rôle plat C4, deux sens). |
+| F2 | RestAssured | Les 11 textes exacts `AlreadyExistsException`. |
+| F3 | RestAssured | Not-found : `NoSuchElementException` non-wrappée **masquée en `"System error"`**. |
+| F4 | RestAssured | Génériques catch-all `An error occurred during <op>.` |
+| F5 | RestAssured | `null` = inchangé vs `[]` = vidage → offre sans cible. |
+| F6 | RestAssured | `code` immuable ignoré sur update (offer/group/family). |
+| F7 | RestAssured | Suppressions : id absent → `false`, FK, cascade ALL de `deleteProductFamily`. |
+| F8 | RestAssured | Cas vicieux prix (`currentPrice` null, doublon start null, NPE masquée). |
+| F9 | RestAssured | Asymétrie sous-groupe inconnu create vs update. |
+| F10 | RestAssured | Cycles indirects A→B→A acceptés (visited sets). |
+| F11 | RestAssured | Doublon dans `storeCodes` pris pour un store manquant. |
+
+**Étages :** 11/11 RestAssured, **0 Playwright** (`[W]`), **0 `@Disabled`**.
+
+**Résidu justifié :** aucun — le groupe F n'a aucune marque `[P]`/`[W]`, donc tous les scénarios sont implémentés et verts.
+
+## Commit
+- Staged **uniquement** : `src/test/java/com/intermarche/valuation/e2e/GroupFIT.java` + `reports/e2e-F.md`.
+- Aucune ressource seed/golden modifiée ; `CLAUDE.md` et `.claude/` inchangés → non stagés.
+- Les autres fichiers untracked (logs de campagne, `GroupBIT.java`, `OfferGraphQLClientTest.java`, scripts, PDF, `e2e-calibrage-B.md`) laissés intacts.
+- Commit `0eb589a` — message exact `test: e2e scenarios group F`. **Aucun `git push`.**
+OK: Group F — expected commit landed as HEAD.
+=== Group G ===
+**BUILD SUCCESS** — Group G is complete and green.
+
+## Summary
+
+I generated `GroupGIT.java` covering all 7 catalog scenarios for the `/valuation` contract, plus the mirror-catalog seed and the campaign report.
+
+**Delivered:**
+- `src/test/java/com/intermarche/valuation/e2e/GroupGIT.java` — 8 active `@Test` + 1 `@Disabled` residue. Tests run: 9, Failures: 0, Skipped: 1.
+- `src/test/resources/seed/01..07-*.csv` — the 7-import mirror catalog, transcribed verbatim from the `*ImporterClient` sources.
+- `reports/e2e-G.md`.
+
+**Tiering:** all G1–G7 are unmarked → RestAssured/Basic. The one `[P]` sub-clause of G1 (`mustChangePassword` doesn't block the API) is the single `@Disabled` residue — the enforcement filter is off in `%test`.
+
+**Method:** the seed was needed (all priced scenarios) and runs once via a static-flag-guarded `@BeforeEach`. Every 4xx/5xx assertion reads `valuation_traces.error_message` under `QuarkusTransaction`; offers/advantages are matched by predicate, never index.
+
+**Key calibration findings (reality ≠ catalog):**
+1. **`availableToUpcell` is absent** from the response — the field's `@JsonIgnore` masks its getter; the catalog claims it's part of the shape. Pinned its absence.
+2. **G3's 422 is unreachable** — the basic applier is a catch-all, so the only unconsumed-item states (null/zero quantity, null EAN) are schema-rejected at 400 first. Pinned that reality.
+3. **Unknown-store 500 is unwrapped** (thrown in the evaluation constructor), while unknown-EAN/bad-date/expired-price are wrapped with `Error building appliers from factory:`.
+4. **Validation messages are French-localised**, so only the English `Error validating offer:` prefix + field token are asserted.
+5. **`MEAL_VOUCHER` fires below its threshold** whenever an eligible product is present.
+6. **G7's two 400s differ by trace** — malformed-JSON (provider 400) and 415 record no trace; schema-400 does. Asserted via `ValuationTrace.count()`.
+
+Pitfalls resolved: `@BeforeAll` seeding hit `Connection refused` (RestAssured port not yet wired) → moved to guarded `@BeforeEach`; RestAssured float parsing → `BigDecimal.compareTo` plus a raw-body check for the `0.0000` sentinel.
+
+Not committed — the campaign script owns the commit. Nothing under `src/main` was touched.
+**BUILD SUCCESS** — Group G is complete and green.
+
+## Summary
+
+I generated `GroupGIT.java` covering all 7 catalog scenarios for the `/valuation` contract, plus the mirror-catalog seed and the campaign report.
+
+**Delivered:**
+- `src/test/java/com/intermarche/valuation/e2e/GroupGIT.java` — 8 active `@Test` + 1 `@Disabled` residue. Tests run: 9, Failures: 0, Skipped: 1.
+- `src/test/resources/seed/01..07-*.csv` — the 7-import mirror catalog, transcribed verbatim from the `*ImporterClient` sources.
+- `reports/e2e-G.md`.
+
+**Tiering:** all G1–G7 are unmarked → RestAssured/Basic. The one `[P]` sub-clause of G1 (`mustChangePassword` doesn't block the API) is the single `@Disabled` residue — the enforcement filter is off in `%test`.
+
+**Method:** the seed was needed (all priced scenarios) and runs once via a static-flag-guarded `@BeforeEach`. Every 4xx/5xx assertion reads `valuation_traces.error_message` under `QuarkusTransaction`; offers/advantages are matched by predicate, never index.
+
+**Key calibration findings (reality ≠ catalog):**
+1. **`availableToUpcell` is absent** from the response — the field's `@JsonIgnore` masks its getter; the catalog claims it's part of the shape. Pinned its absence.
+2. **G3's 422 is unreachable** — the basic applier is a catch-all, so the only unconsumed-item states (null/zero quantity, null EAN) are schema-rejected at 400 first. Pinned that reality.
+3. **Unknown-store 500 is unwrapped** (thrown in the evaluation constructor), while unknown-EAN/bad-date/expired-price are wrapped with `Error building appliers from factory:`.
+4. **Validation messages are French-localised**, so only the English `Error validating offer:` prefix + field token are asserted.
+5. **`MEAL_VOUCHER` fires below its threshold** whenever an eligible product is present.
+6. **G7's two 400s differ by trace** — malformed-JSON (provider 400) and 415 record no trace; schema-400 does. Asserted via `ValuationTrace.count()`.
+
+Pitfalls resolved: `@BeforeAll` seeding hit `Connection refused` (RestAssured port not yet wired) → moved to guarded `@BeforeEach`; RestAssured float parsing → `BigDecimal.compareTo` plus a raw-body check for the `0.0000` sentinel.
+
+Not committed — the campaign script owns the commit. Nothing under `src/main` was touched.
+Tout est vert — campagne commitée. Voici le bilan.
+
+## Résultat de la campagne — Groupe G (`/valuation`, le contrat)
+
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupGIT -DskipITs=false`
+→ **Tests run: 9, Failures: 0, Errors: 0, Skipped: 1** (le skip est le résidu `[P]` justifié).
+
+Les stacktraces vues dans la sortie sont des logs serveur **attendus** (les cas 4xx/5xx de G2/G4/G7 : validation schéma, JSON malformé, erreurs de config) — aucun échec de test.
+
+### Scénarios couverts et étage de chacun
+
+| Id | Étage | Méthode |
+|----|-------|---------|
+| G1 | RestAssured | `g1_apiChallengesInBasicAndAnyRoleValuates` — 401 Basic (pas de redirect), VIEWER → 200 |
+| G2 | RestAssured | `g2_schemaViolationsAreRejectedAndTraced` (10 violations → 400 + trace `REJECTED`) + `g2_unknownFieldIsTolerated` (200 + `SUCCESS`) |
+| G3 | RestAssured *(calibration)* | `g3_unconsumedItems422IsUnreachable` — le 422 est inatteignable par le contrat, réalité épinglée |
+| G4 | RestAssured | `g4_configurationErrorsAreFailedAndTraced` — 4 erreurs config → 500 + trace `FAILED`, payload null |
+| G5 | RestAssured | `g5_responseShapeAndAdvantageDiscriminants` — forme du 200 + 3 discriminants d'avantage |
+| G6 | RestAssured | `g6_structuralInvariantsHold` — Σ items = montant offre, `vatAmount = TTC−HT`, Σ breakdown = total |
+| G7 | RestAssured | `g7_transportFailuresLeaveNoTrace` — text/plain → 415, JSON malformé → 400, zéro trace |
+| G1 `[P]` | **@Disabled justifié** | `g1_mustChangePasswordDoesNotBlockApi` |
+
+### Résidu justifié (le seul skip)
+- **Sous-clause G1 `[P]`** — « `mustChangePassword=true` ne bloque pas l'appel API » : requiert le filtre d'enforcement du profil prod-like, désactivé par `%test.app.password-change.enforced=false`, sans harnais prod-like disponible. `@Disabled` documenté, non implémenté.
+
+Aucun scénario `[W]`/Playwright dans ce groupe — le contrat `/valuation` est du pur HTTP.
+
+### Commit
+`9dbe91d test: e2e scenarios group G` — 9 fichiers, +902 lignes :
+- `GroupGIT.java`
+- les 7 ressources de seed `src/test/resources/seed/01..07-*.csv` (nouvelles, nécessaires au seed du mirror catalog)
+- `reports/e2e-G.md`
+
+CLAUDE.md et `.claude/` inchangés → non stagés. Les fichiers hors périmètre (GroupBIT.java, OfferGraphQLClientTest.java, logs de campagne, scripts, PDF, `e2e-calibrage-B.md`) ont été **laissés intacts**. **Aucun `git push`.**
+Tout est vert — campagne commitée. Voici le bilan.
+
+## Résultat de la campagne — Groupe G (`/valuation`, le contrat)
+
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupGIT -DskipITs=false`
+→ **Tests run: 9, Failures: 0, Errors: 0, Skipped: 1** (le skip est le résidu `[P]` justifié).
+
+Les stacktraces vues dans la sortie sont des logs serveur **attendus** (les cas 4xx/5xx de G2/G4/G7 : validation schéma, JSON malformé, erreurs de config) — aucun échec de test.
+
+### Scénarios couverts et étage de chacun
+
+| Id | Étage | Méthode |
+|----|-------|---------|
+| G1 | RestAssured | `g1_apiChallengesInBasicAndAnyRoleValuates` — 401 Basic (pas de redirect), VIEWER → 200 |
+| G2 | RestAssured | `g2_schemaViolationsAreRejectedAndTraced` (10 violations → 400 + trace `REJECTED`) + `g2_unknownFieldIsTolerated` (200 + `SUCCESS`) |
+| G3 | RestAssured *(calibration)* | `g3_unconsumedItems422IsUnreachable` — le 422 est inatteignable par le contrat, réalité épinglée |
+| G4 | RestAssured | `g4_configurationErrorsAreFailedAndTraced` — 4 erreurs config → 500 + trace `FAILED`, payload null |
+| G5 | RestAssured | `g5_responseShapeAndAdvantageDiscriminants` — forme du 200 + 3 discriminants d'avantage |
+| G6 | RestAssured | `g6_structuralInvariantsHold` — Σ items = montant offre, `vatAmount = TTC−HT`, Σ breakdown = total |
+| G7 | RestAssured | `g7_transportFailuresLeaveNoTrace` — text/plain → 415, JSON malformé → 400, zéro trace |
+| G1 `[P]` | **@Disabled justifié** | `g1_mustChangePasswordDoesNotBlockApi` |
+
+### Résidu justifié (le seul skip)
+- **Sous-clause G1 `[P]`** — « `mustChangePassword=true` ne bloque pas l'appel API » : requiert le filtre d'enforcement du profil prod-like, désactivé par `%test.app.password-change.enforced=false`, sans harnais prod-like disponible. `@Disabled` documenté, non implémenté.
+
+Aucun scénario `[W]`/Playwright dans ce groupe — le contrat `/valuation` est du pur HTTP.
+
+### Commit
+`9dbe91d test: e2e scenarios group G` — 9 fichiers, +902 lignes :
+- `GroupGIT.java`
+- les 7 ressources de seed `src/test/resources/seed/01..07-*.csv` (nouvelles, nécessaires au seed du mirror catalog)
+- `reports/e2e-G.md`
+
+CLAUDE.md et `.claude/` inchangés → non stagés. Les fichiers hors périmètre (GroupBIT.java, OfferGraphQLClientTest.java, logs de campagne, scripts, PDF, `e2e-calibrage-B.md`) ont été **laissés intacts**. **Aucun `git push`.**
+OK: Group G — expected commit landed as HEAD.
+=== Group H ===
+Done. Group H is complete and green.
+
+## Summary
+
+Created `src/test/java/com/intermarche/valuation/e2e/GroupHIT.java` (new class — didn't exist) covering all 8 scenarios of §H "Résolution des prix & lignes standard", plus the report at `reports/e2e-H.md`.
+
+**Result:** `Tests run: 8, Failures: 0, Errors: 0, Skipped: 0` — **BUILD SUCCESS**, 0 residue, 2 iterations to green.
+
+All scenarios are unmarked → pure **RestAssured / HTTP Basic**. The mirror seed (7 CSVs) was needed and replayed once at class start; a few tests add their own catalog states through the same import endpoints, on products/stores no other H test touches (order-independent):
+- **H1–H2** simple line + overlap/priority (priority-1 wins; documentary same-priority tie on `033`)
+- **H3–H4** `[start,end)` window (exclusive end, past-end 500) + explicit `priceDate`
+- **H5** line-borne transient price (no-DB access, DEFAULT≡BASE_FOR_DISCOUNT, 3 partial combos ignored)
+- **H6** line merge (same profile → 1 offer with per-line restitution; different profile & scale quirk `1.0` vs `1.00` → 2 offers)
+- **H7** WEIGHT/VOLUME (ham 0.5kg→12.00; missing-reference 500s; imported VOLUME product)
+- **H8** the counter-intuitive DEFAULT→BASE_FOR_DISCOUNT switch
+
+**Key calibration findings** (all in the report):
+1. **H1 total is `2.76`, not the catalog's `3.00`** — the seed adds a priority-1 DEFAULT that wins (`order by priority DESC`); `3.00` is the superseded priority-0 price, which the tie/H2 clause itself depends on.
+2. **`JsonPath.getString` normalizes numeric scale** (`0.2000`→`"0.2"`) — the sole first-run failure; all rate/money assertions use `BigDecimal.compareTo`.
+3. The H2 same-priority tie is genuinely indeterminate — winner `30.00` this run, journaled to stdout.
+
+I did not commit (the campaign script owns that) and never touched `src/main`.
+Done. Group H is complete and green.
+
+## Summary
+
+Created `src/test/java/com/intermarche/valuation/e2e/GroupHIT.java` (new class — didn't exist) covering all 8 scenarios of §H "Résolution des prix & lignes standard", plus the report at `reports/e2e-H.md`.
+
+**Result:** `Tests run: 8, Failures: 0, Errors: 0, Skipped: 0` — **BUILD SUCCESS**, 0 residue, 2 iterations to green.
+
+All scenarios are unmarked → pure **RestAssured / HTTP Basic**. The mirror seed (7 CSVs) was needed and replayed once at class start; a few tests add their own catalog states through the same import endpoints, on products/stores no other H test touches (order-independent):
+- **H1–H2** simple line + overlap/priority (priority-1 wins; documentary same-priority tie on `033`)
+- **H3–H4** `[start,end)` window (exclusive end, past-end 500) + explicit `priceDate`
+- **H5** line-borne transient price (no-DB access, DEFAULT≡BASE_FOR_DISCOUNT, 3 partial combos ignored)
+- **H6** line merge (same profile → 1 offer with per-line restitution; different profile & scale quirk `1.0` vs `1.00` → 2 offers)
+- **H7** WEIGHT/VOLUME (ham 0.5kg→12.00; missing-reference 500s; imported VOLUME product)
+- **H8** the counter-intuitive DEFAULT→BASE_FOR_DISCOUNT switch
+
+**Key calibration findings** (all in the report):
+1. **H1 total is `2.76`, not the catalog's `3.00`** — the seed adds a priority-1 DEFAULT that wins (`order by priority DESC`); `3.00` is the superseded priority-0 price, which the tie/H2 clause itself depends on.
+2. **`JsonPath.getString` normalizes numeric scale** (`0.2000`→`"0.2"`) — the sole first-run failure; all rate/money assertions use `BigDecimal.compareTo`.
+3. The H2 same-priority tie is genuinely indeterminate — winner `30.00` this run, journaled to stdout.
+
+I did not commit (the campaign script owns that) and never touched `src/main`.
+Campagne verte. **BUILD SUCCESS — Tests run: 8, Failures: 0, Errors: 0, Skipped: 0.** Les `ERROR` visibles dans la console sont attendus : ce sont les scénarios négatifs (H3/H4/H7 attendent des 500 `No active price` / `Invalid date format` / `no valid reference weight/volume`), dont le message est assuré via `valuation_traces.error_message`.
+
+## Scénarios couverts et leur étage
+
+Tous les scénarios du groupe H sont non-marqués dans le catalogue → **RestAssured / HTTP pur** (Basic `admin/admin`), aucun `[W]` ni `[P]`.
+
+| Id | Étage | Ce qui est épinglé |
+|----|-------|--------------------|
+| H1 | RestAssured | Ligne simple lait `002` → un `Standard, Qty=1.0`, taux 20 %, breakdown TVA mono-taux = total |
+| H2 | RestAssured | Overlap : priorité-1 DEFAULT gagne (`order by priority DESC`) ; égalité de priorité documentaire (gagnant journalisé) |
+| H3 | RestAssured | Fenêtre `[start, end)` : borne fin exclusive ; passé la fin → 500 ; fin nulle = +∞ |
+| H4 | RestAssured | `priceDate` explicite : avant start → 500 ; start inclusif → 200 ; date seule → 500 `Invalid date format` |
+| H5 | RestAssured | Prix porté transitoire (3 champs) → zéro accès DB ; 3 combos partiels ignorés → catalogue |
+| H6 | RestAssured | Merge même profil → un offre + restitution ligne à ligne ; profils/scale différents → deux offres |
+| H7 | RestAssured | WEIGHT/VOLUME : jambon `008` @0.5kg → 12.00 TTC ; réf. manquante → 500 ; VOLUME réel via `referenceVolume` |
+| H8 | RestAssured | Bascule DEFAULT → BASE_FOR_DISCOUNT : une remise enregistrée relève la ligne au prix référence +10 % |
+
+## Résidu justifié
+**Aucun.** Pas de scénario `[P]` ni `[W]` en groupe H — les 8 sont HTTP-testables et verts, donc aucun `@Disabled`. (Note transverse : le quirk gelé H7 « `standardQuantity` divise par `referenceWeight` même pour un VOLUME » relève du groupe L/L6, hors périmètre ici.)
+
+## Commit
+Staged **uniquement** `GroupHIT.java` et `reports/e2e-H.md` (aucune ressource seed/golden modifiée — pas de fichier tracké en `M` ; CLAUDE.md et `.claude/` inchangés). Commité `7f92e41 test: e2e scenarios group H`. **Pas de push**, conformément à la consigne.
+Campagne verte. **BUILD SUCCESS — Tests run: 8, Failures: 0, Errors: 0, Skipped: 0.** Les `ERROR` visibles dans la console sont attendus : ce sont les scénarios négatifs (H3/H4/H7 attendent des 500 `No active price` / `Invalid date format` / `no valid reference weight/volume`), dont le message est assuré via `valuation_traces.error_message`.
+
+## Scénarios couverts et leur étage
+
+Tous les scénarios du groupe H sont non-marqués dans le catalogue → **RestAssured / HTTP pur** (Basic `admin/admin`), aucun `[W]` ni `[P]`.
+
+| Id | Étage | Ce qui est épinglé |
+|----|-------|--------------------|
+| H1 | RestAssured | Ligne simple lait `002` → un `Standard, Qty=1.0`, taux 20 %, breakdown TVA mono-taux = total |
+| H2 | RestAssured | Overlap : priorité-1 DEFAULT gagne (`order by priority DESC`) ; égalité de priorité documentaire (gagnant journalisé) |
+| H3 | RestAssured | Fenêtre `[start, end)` : borne fin exclusive ; passé la fin → 500 ; fin nulle = +∞ |
+| H4 | RestAssured | `priceDate` explicite : avant start → 500 ; start inclusif → 200 ; date seule → 500 `Invalid date format` |
+| H5 | RestAssured | Prix porté transitoire (3 champs) → zéro accès DB ; 3 combos partiels ignorés → catalogue |
+| H6 | RestAssured | Merge même profil → un offre + restitution ligne à ligne ; profils/scale différents → deux offres |
+| H7 | RestAssured | WEIGHT/VOLUME : jambon `008` @0.5kg → 12.00 TTC ; réf. manquante → 500 ; VOLUME réel via `referenceVolume` |
+| H8 | RestAssured | Bascule DEFAULT → BASE_FOR_DISCOUNT : une remise enregistrée relève la ligne au prix référence +10 % |
+
+## Résidu justifié
+**Aucun.** Pas de scénario `[P]` ni `[W]` en groupe H — les 8 sont HTTP-testables et verts, donc aucun `@Disabled`. (Note transverse : le quirk gelé H7 « `standardQuantity` divise par `referenceWeight` même pour un VOLUME » relève du groupe L/L6, hors périmètre ici.)
+
+## Commit
+Staged **uniquement** `GroupHIT.java` et `reports/e2e-H.md` (aucune ressource seed/golden modifiée — pas de fichier tracké en `M` ; CLAUDE.md et `.claude/` inchangés). Commité `7f92e41 test: e2e scenarios group H`. **Pas de push**, conformément à la consigne.
+OK: Group H — expected commit landed as HEAD.
+=== Group I ===
+Group I is complete and green.
+
+## Summary
+
+Generated `src/test/java/com/intermarche/valuation/e2e/GroupIIT.java` — the full letter block **I1–I6** (manual cash-desk gestures), all pure RestAssured `@QuarkusTest` over HTTP Basic `admin/admin`. **6 tests, 0 failures, BUILD SUCCESS**, 2 iterations to green. Report at `reports/e2e-I.md`.
+
+Scenarios and what they pin:
+- **I1** — the three gestures: forced `1.0` on `…005`→1.00 (rate kept), amount `0.5` on `…006`→5.50, percent `50` on `…031`→7.20, with the literal `(forced price 1.0)`/`(amount -0.5)`/`(percent -50%)` types.
+- **I2** — zero floor: amount 20.0 on a 12.00 line → 0.00 HT and TTC, never negative.
+- **I3** — double gesture forbidden: 3 pairs + triplet → 500, message asserted on `valuation_traces.error_message`.
+- **I4** — ultra-priority exclusion via before/after on apple `…001`: control shows discount+suggestion+MEAL_VOUCHER; gestured twin shows zero `discountAmount` advantages, zero `suggestion`, MEAL_VOUCHER plate 0.00, `availableToUpcell` absent.
+- **I5** — targeted multi-line: gesture covers exactly L2 (qty 2.0, amount 1.56, restores L2 only), L1's 3 apples stay eligible.
+- **I6** — per-unit: forced 5.0 × qty 2 → 10.00, not a flat line.
+
+Key findings (in the report): the gesture prices `priceIncludingTax × quantity` directly, bypassing the WEIGHT reference divisor (coincides here because refs are 1.000); a forced price still needs a DEFAULT catalog price for the rate; JSON number scale drives the offer-type literal. The one calibration fix: I5 initially checked L1 eligibility by offer *type* containing the EAN, but the N+M 2FOR1 offer carries no raw EAN — reworked to sum item quantities by `produceEan` instead.
+
+Per instructions, I did **not** commit — the campaign script owns the commit. No `src/main` changes; touched only `GroupIIT.java` and `reports/e2e-I.md`.
+Group I is complete and green.
+
+## Summary
+
+Generated `src/test/java/com/intermarche/valuation/e2e/GroupIIT.java` — the full letter block **I1–I6** (manual cash-desk gestures), all pure RestAssured `@QuarkusTest` over HTTP Basic `admin/admin`. **6 tests, 0 failures, BUILD SUCCESS**, 2 iterations to green. Report at `reports/e2e-I.md`.
+
+Scenarios and what they pin:
+- **I1** — the three gestures: forced `1.0` on `…005`→1.00 (rate kept), amount `0.5` on `…006`→5.50, percent `50` on `…031`→7.20, with the literal `(forced price 1.0)`/`(amount -0.5)`/`(percent -50%)` types.
+- **I2** — zero floor: amount 20.0 on a 12.00 line → 0.00 HT and TTC, never negative.
+- **I3** — double gesture forbidden: 3 pairs + triplet → 500, message asserted on `valuation_traces.error_message`.
+- **I4** — ultra-priority exclusion via before/after on apple `…001`: control shows discount+suggestion+MEAL_VOUCHER; gestured twin shows zero `discountAmount` advantages, zero `suggestion`, MEAL_VOUCHER plate 0.00, `availableToUpcell` absent.
+- **I5** — targeted multi-line: gesture covers exactly L2 (qty 2.0, amount 1.56, restores L2 only), L1's 3 apples stay eligible.
+- **I6** — per-unit: forced 5.0 × qty 2 → 10.00, not a flat line.
+
+Key findings (in the report): the gesture prices `priceIncludingTax × quantity` directly, bypassing the WEIGHT reference divisor (coincides here because refs are 1.000); a forced price still needs a DEFAULT catalog price for the rate; JSON number scale drives the offer-type literal. The one calibration fix: I5 initially checked L1 eligibility by offer *type* containing the EAN, but the N+M 2FOR1 offer carries no raw EAN — reworked to sum item quantities by `produceEan` instead.
+
+Per instructions, I did **not** commit — the campaign script owns the commit. No `src/main` changes; touched only `GroupIIT.java` and `reports/e2e-I.md`.
+Campagne verte — commit effectué (pas de push).
+
+## Résultat
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupIIT -DskipITs=false` → **exit 0**, `GroupIIT` : **6 tests, 0 failure, 0 error, 0 skipped**. Les stacktraces `more than one manual gesture` dans les logs sont le rejet **attendu** de I3 (500 vérifié sur `valuation_traces.error_message`), pas un échec.
+
+## Scénarios couverts (bloc I1…I6) — tous étage RestAssured
+
+| Id | Étage | Ce qui est épinglé |
+|----|-------|--------------------|
+| I1 | RestAssured | Les trois gestes sur `0101` : forced `1.0` sur penne `…005` → `1.00` TTC (taux `0.2000` conservé) ; amount `0.5` sur huile `…006` → `5.50` ; percent `50` sur poêle `…031` → `7.20`. Types littéraux `(forced price 1.0)`/`(amount -0.5)`/`(percent -50%)` ; ligne gérée ne laisse aucune offre standard sur son EAN. |
+| I2 | RestAssured | Plancher zéro : prix transient `10.00/12.00/0.20` + `manualDiscountAmount 20.0` → `0.00` TTC **et** HT, jamais négatif. |
+| I3 | RestAssured | Double geste interdit : 3 paires + triplet, chacun 500 avec le littéral `Item EAN '3300000000006' carries more than one manual gesture (…)` sur `error_message`. |
+| I4 | RestAssured | Ultra-priorité & exclusion totale, avant/après sur la pomme `…001` : CONTROL porte `discountAmount`+`suggestion`+plate `MEAL_VOUCHER` ; le jumeau GÉRÉ n'a que l'offre geste, **zéro** `discountAmount`, **zéro** `suggestion`, plate `0.00` ; `availableToUpcell` absent du corps (calibrage G5). |
+| I5 | RestAssured | Geste ciblé multi-lignes : L1 `…001`×3 + L2 `…001`×2 (amount 0.3). Une seule offre geste couvre `2.0`, restaure L2 seul, montant `1.56` ; les offres non-geste couvrent exactement les `3.0` de L1. |
+| I6 | RestAssured | Geste par unité : forced `5.0` sur qté `2` de `…006` → `10.00` TTC (5.00 × 2), pas un forfait ligne. |
+
+## Résidu justifié
+**Aucun.** Section I sans marque `[P]`/`[W]`/`[D]` → aucun Playwright, aucun profil prod-like, aucun `@Disabled`.
+
+## Staging / commit
+- Staged **uniquement** : `src/test/java/com/intermarche/valuation/e2e/GroupIIT.java` + `reports/e2e-I.md`.
+- Aucune ressource seed/golden n'a changé ; CLAUDE.md et `.claude/` inchangés → non stagés.
+- Commit `aeedfed` — message exact `test: e2e scenarios group I`. Pas de `git push`.
+Campagne verte — commit effectué (pas de push).
+
+## Résultat
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupIIT -DskipITs=false` → **exit 0**, `GroupIIT` : **6 tests, 0 failure, 0 error, 0 skipped**. Les stacktraces `more than one manual gesture` dans les logs sont le rejet **attendu** de I3 (500 vérifié sur `valuation_traces.error_message`), pas un échec.
+
+## Scénarios couverts (bloc I1…I6) — tous étage RestAssured
+
+| Id | Étage | Ce qui est épinglé |
+|----|-------|--------------------|
+| I1 | RestAssured | Les trois gestes sur `0101` : forced `1.0` sur penne `…005` → `1.00` TTC (taux `0.2000` conservé) ; amount `0.5` sur huile `…006` → `5.50` ; percent `50` sur poêle `…031` → `7.20`. Types littéraux `(forced price 1.0)`/`(amount -0.5)`/`(percent -50%)` ; ligne gérée ne laisse aucune offre standard sur son EAN. |
+| I2 | RestAssured | Plancher zéro : prix transient `10.00/12.00/0.20` + `manualDiscountAmount 20.0` → `0.00` TTC **et** HT, jamais négatif. |
+| I3 | RestAssured | Double geste interdit : 3 paires + triplet, chacun 500 avec le littéral `Item EAN '3300000000006' carries more than one manual gesture (…)` sur `error_message`. |
+| I4 | RestAssured | Ultra-priorité & exclusion totale, avant/après sur la pomme `…001` : CONTROL porte `discountAmount`+`suggestion`+plate `MEAL_VOUCHER` ; le jumeau GÉRÉ n'a que l'offre geste, **zéro** `discountAmount`, **zéro** `suggestion`, plate `0.00` ; `availableToUpcell` absent du corps (calibrage G5). |
+| I5 | RestAssured | Geste ciblé multi-lignes : L1 `…001`×3 + L2 `…001`×2 (amount 0.3). Une seule offre geste couvre `2.0`, restaure L2 seul, montant `1.56` ; les offres non-geste couvrent exactement les `3.0` de L1. |
+| I6 | RestAssured | Geste par unité : forced `5.0` sur qté `2` de `…006` → `10.00` TTC (5.00 × 2), pas un forfait ligne. |
+
+## Résidu justifié
+**Aucun.** Section I sans marque `[P]`/`[W]`/`[D]` → aucun Playwright, aucun profil prod-like, aucun `@Disabled`.
+
+## Staging / commit
+- Staged **uniquement** : `src/test/java/com/intermarche/valuation/e2e/GroupIIT.java` + `reports/e2e-I.md`.
+- Aucune ressource seed/golden n'a changé ; CLAUDE.md et `.claude/` inchangés → non stagés.
+- Commit `aeedfed` — message exact `test: e2e scenarios group I`. Pas de `git push`.
+OK: Group I — expected commit landed as HEAD.
+=== Group J ===
+Group J is complete and green.
+
+## Summary
+
+**`GroupJIT.java` — 11/11 scenarios pass**, all RestAssured HTTP (section J has no `[W]`/`[P]` marks, so no Playwright, no `@Disabled` residue). Report written to `reports/e2e-J.md`. No `src/main` edits, no shared seed-CSV edits — only the new test class, its inline seed strings, and the report. **Not committed** (the campaign script owns the commit).
+
+**Isolation design** (the crux, since `@QuarkusTest` shares one catalog across the class):
+- J1, J2, J7, J10, J11 use the seed offers on store `0101`.
+- J3/J4/J5/J8 needed custom N+M/bundle offers → imported onto `0101` with **disjoint UNIT-product EANs**, so each scenario's basket is blind to the others' offers.
+- J6/J9 are **poison** offers (rejected by the upsell schema at engine step 2, before pricing, 500-ing every valuation of the store) → quarantined on dedicated stores `0104`/`0103`/`0105`, each given one `…007` price so the poison, not a missing price, is what fails.
+
+**Calibration findings** (catalog vs code — all in the report):
+- **J5**: my predicted aliasing value (0.00) was wrong; the real buggy total is **10.56** vs the correct per-lot **7.92** — the two lots both alias the final `…027` lot. Fixed after run 1.
+- **J10**: catalog says "2 lots max" but the code yields **3** (`min(floor(5/1), floor(3/1))`) — and 3 is the only count that makes the chips a genuine last-resort substitute. Pinned at 3.
+- **J8**: a discount-mode bundle is unreachable (it poisons, = J9), so the multi-rate VAT derivation is proven on a reachable fixed-price bundle: effective rate **0.1515** (`9.50/8.25−1`), not the declared 0.20.
+- **J6**: both toxic configs fail the same `quantityToPay` min-1 upsell guard, which preempts the catalog's division-by-zero — both surface the identical validation message.
+- Locale-formatted upsell literals (`%.2f`, comma in fr_FR) are rebuilt in-test with the same `String.format` in the same JVM, so no hard-coded separator.
+
+The one iteration to green was J5's expected value; run 2 was fully green.
+Group J is complete and green.
+
+## Summary
+
+**`GroupJIT.java` — 11/11 scenarios pass**, all RestAssured HTTP (section J has no `[W]`/`[P]` marks, so no Playwright, no `@Disabled` residue). Report written to `reports/e2e-J.md`. No `src/main` edits, no shared seed-CSV edits — only the new test class, its inline seed strings, and the report. **Not committed** (the campaign script owns the commit).
+
+**Isolation design** (the crux, since `@QuarkusTest` shares one catalog across the class):
+- J1, J2, J7, J10, J11 use the seed offers on store `0101`.
+- J3/J4/J5/J8 needed custom N+M/bundle offers → imported onto `0101` with **disjoint UNIT-product EANs**, so each scenario's basket is blind to the others' offers.
+- J6/J9 are **poison** offers (rejected by the upsell schema at engine step 2, before pricing, 500-ing every valuation of the store) → quarantined on dedicated stores `0104`/`0103`/`0105`, each given one `…007` price so the poison, not a missing price, is what fails.
+
+**Calibration findings** (catalog vs code — all in the report):
+- **J5**: my predicted aliasing value (0.00) was wrong; the real buggy total is **10.56** vs the correct per-lot **7.92** — the two lots both alias the final `…027` lot. Fixed after run 1.
+- **J10**: catalog says "2 lots max" but the code yields **3** (`min(floor(5/1), floor(3/1))`) — and 3 is the only count that makes the chips a genuine last-resort substitute. Pinned at 3.
+- **J8**: a discount-mode bundle is unreachable (it poisons, = J9), so the multi-rate VAT derivation is proven on a reachable fixed-price bundle: effective rate **0.1515** (`9.50/8.25−1`), not the declared 0.20.
+- **J6**: both toxic configs fail the same `quantityToPay` min-1 upsell guard, which preempts the catalog's division-by-zero — both surface the identical validation message.
+- Locale-formatted upsell literals (`%.2f`, comma in fr_FR) are rebuilt in-test with the same `String.format` in the same JVM, so no hard-coded separator.
+
+The one iteration to green was J5's expected value; run 2 was fully green.
+Campagne groupe J : **tout est vert**.
+
+## Résultat
+`Tests run: 11, Failures: 0, Errors: 0, Skipped: 0` — BUILD SUCCESS. Les lignes `ERROR` dans le log sont les rejets 500 **attendus** des scénarios poison (J6/J9), asservis via `valuation_traces.error_message`.
+
+## Scénarios couverts & étage
+Les 11 scénarios de la section J sont **non marqués** → tous en **@QuarkusTest + RestAssured** (HTTP pur, Basic admin/admin). Aucun `[W]`/Playwright, aucun `[P]`, donc aucun `@Disabled`.
+
+| Id | Étage | Objet |
+|----|-------|-------|
+| J1 | RestAssured | N+M exact, application 2 items, `lineId` source |
+| J2 | RestAssured | reste Standard + suggestion upsell N+M |
+| J3 | RestAssured | CHEAPEST vs MOST_EXPENSIVE, au centime |
+| J4 | RestAssured | FIXED_AMOUNT plafonné au bloc, jamais négatif |
+| J5 | RestAssured | défaut d'aliasing multi-lot (NÉGATIF, gravé 10.56 vs 7.92) |
+| J6 | RestAssured | configs N+M toxiques = poison magasin (NÉGATIF) |
+| J7 | RestAssured | bundle prix fixe, substitut, inerte si composant manquant |
+| J8 | RestAssured | TVA dérivée des biens (0.1515), pas la valeur déclarée |
+| J9 | RestAssured | bundle mode `discount` = poison global (NÉGATIF) |
+| J10 | RestAssured | capacité bundle = min par composant, substitut en dernier |
+| J11 | RestAssured | upsell bundle suggère le composant déficient le moins cher |
+
+## Résidu justifié
+**Aucun.** Section J sans marque `[P]`/`[W]`-sans-harnais ; tout est implémenté et vert en RestAssured.
+
+## Commit
+Staged **uniquement** `GroupJIT.java` + `reports/e2e-J.md`. Aucune ressource seed/golden modifiée (les offres/prix supplémentaires J3/J4/J5/J8 + poisons sont en CSV inline dans la classe, seeds partagés intacts) ; `CLAUDE.md` et `.claude/` inchangés.
+
+Commit `6f72134` — message exact `test: e2e scenarios group J`. Pas de push.
+Campagne groupe J : **tout est vert**.
+
+## Résultat
+`Tests run: 11, Failures: 0, Errors: 0, Skipped: 0` — BUILD SUCCESS. Les lignes `ERROR` dans le log sont les rejets 500 **attendus** des scénarios poison (J6/J9), asservis via `valuation_traces.error_message`.
+
+## Scénarios couverts & étage
+Les 11 scénarios de la section J sont **non marqués** → tous en **@QuarkusTest + RestAssured** (HTTP pur, Basic admin/admin). Aucun `[W]`/Playwright, aucun `[P]`, donc aucun `@Disabled`.
+
+| Id | Étage | Objet |
+|----|-------|-------|
+| J1 | RestAssured | N+M exact, application 2 items, `lineId` source |
+| J2 | RestAssured | reste Standard + suggestion upsell N+M |
+| J3 | RestAssured | CHEAPEST vs MOST_EXPENSIVE, au centime |
+| J4 | RestAssured | FIXED_AMOUNT plafonné au bloc, jamais négatif |
+| J5 | RestAssured | défaut d'aliasing multi-lot (NÉGATIF, gravé 10.56 vs 7.92) |
+| J6 | RestAssured | configs N+M toxiques = poison magasin (NÉGATIF) |
+| J7 | RestAssured | bundle prix fixe, substitut, inerte si composant manquant |
+| J8 | RestAssured | TVA dérivée des biens (0.1515), pas la valeur déclarée |
+| J9 | RestAssured | bundle mode `discount` = poison global (NÉGATIF) |
+| J10 | RestAssured | capacité bundle = min par composant, substitut en dernier |
+| J11 | RestAssured | upsell bundle suggère le composant déficient le moins cher |
+
+## Résidu justifié
+**Aucun.** Section J sans marque `[P]`/`[W]`-sans-harnais ; tout est implémenté et vert en RestAssured.
+
+## Commit
+Staged **uniquement** `GroupJIT.java` + `reports/e2e-J.md`. Aucune ressource seed/golden modifiée (les offres/prix supplémentaires J3/J4/J5/J8 + poisons sont en CSV inline dans la classe, seeds partagés intacts) ; `CLAUDE.md` et `.claude/` inchangés.
+
+Commit `6f72134` — message exact `test: e2e scenarios group J`. Pas de push.
+OK: Group J — expected commit landed as HEAD.
+=== Group K ===
+Done. Group K is complete and green.
+
+## Summary
+
+Created `src/test/java/com/intermarche/valuation/e2e/GroupKIT.java` (new class) covering all **9 scenarios K1–K9** from the "Remises — bons immédiats & vignettes" section, plus the report at `reports/e2e-K.md`.
+
+**Result:** `Tests run: 9, Failures: 0, Errors: 0, Skipped: 0` — **BUILD SUCCESS**, green on the first campaign run (all amounts derived from source before writing, no calibration re-runs).
+
+**Tiering:** all 9 are unmarked → `@QuarkusTest` + RestAssured, Basic `admin/admin`. No `[W]`/`[P]` scenarios, so no Playwright/prod-like harness. The mirror seed was needed (both discount engines price against real catalog prices), replayed once in the mandated 7-import order plus three additive phases.
+
+**Key calibration findings (catalog vs. code):**
+- The discounted standard line is priced on **`BASE_FOR_DISCOUNT`, not `DEFAULT`** — `BasicOfferApplier` switches to `refPrice` the moment a discount applier registers on it. This drives every K1/K2/K3/K5/K6 base amount (apple base `0.99`/`1.19`, not `0.90`/`1.08`).
+- K1 graves the historic "wrong-sign" regression as GREEN (two vouchers stack, both reduce → `0.74`/`0.89`); K2/K6 grave the uncapped-formula negative totals to the cent.
+- **K7 & K8 both surface under `Error building appliers from factory:`** — K8's `/ by zero` fires during the early efficiency-score `apply()` inside `createOfferAppliers`, before the apply-time wrapper. The test asserts the invariant substring `/ by zero`, which holds either way.
+- K4 (the "couture") is proven as a pure retrieval-method contrast: store-only types (IMMEDIATE_VOUCHER, DEPOSIT_BASKET) ignore a group attach; store+group types (N+M, MIXED_BUNDLE, VIGNETTE) honour it — 5 of the 8 types probed, the other 3 documented residue sharing the identical `findByStoreAndType`/`getOffers` methods.
+
+Per the workflow, I did **not** commit — the campaign script owns the commit. Untracked scaffolding files (`campaign-*.log`, `run-*.sh`, `OfferGraphQLClientTest.java`, `GroupBIT.java`, etc.) were left as they were.
+Done. Group K is complete and green.
+
+## Summary
+
+Created `src/test/java/com/intermarche/valuation/e2e/GroupKIT.java` (new class) covering all **9 scenarios K1–K9** from the "Remises — bons immédiats & vignettes" section, plus the report at `reports/e2e-K.md`.
+
+**Result:** `Tests run: 9, Failures: 0, Errors: 0, Skipped: 0` — **BUILD SUCCESS**, green on the first campaign run (all amounts derived from source before writing, no calibration re-runs).
+
+**Tiering:** all 9 are unmarked → `@QuarkusTest` + RestAssured, Basic `admin/admin`. No `[W]`/`[P]` scenarios, so no Playwright/prod-like harness. The mirror seed was needed (both discount engines price against real catalog prices), replayed once in the mandated 7-import order plus three additive phases.
+
+**Key calibration findings (catalog vs. code):**
+- The discounted standard line is priced on **`BASE_FOR_DISCOUNT`, not `DEFAULT`** — `BasicOfferApplier` switches to `refPrice` the moment a discount applier registers on it. This drives every K1/K2/K3/K5/K6 base amount (apple base `0.99`/`1.19`, not `0.90`/`1.08`).
+- K1 graves the historic "wrong-sign" regression as GREEN (two vouchers stack, both reduce → `0.74`/`0.89`); K2/K6 grave the uncapped-formula negative totals to the cent.
+- **K7 & K8 both surface under `Error building appliers from factory:`** — K8's `/ by zero` fires during the early efficiency-score `apply()` inside `createOfferAppliers`, before the apply-time wrapper. The test asserts the invariant substring `/ by zero`, which holds either way.
+- K4 (the "couture") is proven as a pure retrieval-method contrast: store-only types (IMMEDIATE_VOUCHER, DEPOSIT_BASKET) ignore a group attach; store+group types (N+M, MIXED_BUNDLE, VIGNETTE) honour it — 5 of the 8 types probed, the other 3 documented residue sharing the identical `findByStoreAndType`/`getOffers` methods.
+
+Per the workflow, I did **not** commit — the campaign script owns the commit. Untracked scaffolding files (`campaign-*.log`, `run-*.sh`, `OfferGraphQLClientTest.java`, `GroupBIT.java`, etc.) were left as they were.
+Campagne groupe K — **tout vert**. `Tests run: 9, Failures: 0, Errors: 0, Skipped: 0`, BUILD exit 0.
+
+## Scénarios couverts (9/9) et étage
+
+Tous les scénarios du groupe K sont **non marqués → `@QuarkusTest` + RestAssured** (HTTP pur, Basic `admin/admin`). Aucun `[W]` (donc pas de Playwright) ni `[P]` (donc pas de profil prod-like), donc **aucun `@Disabled`**.
+
+| Id | Étage | Objet |
+|----|-------|-------|
+| K1 | RestAssured | Deux `IMMEDIATE_VOUCHER` cumulés sur une ligne, tous deux réducteurs → `0.74`/`0.89` (régression "wrong-sign" historique, GREEN) |
+| K2 | RestAssured | Formules non plafonnées → total NÉGATIF (`−1.27`/`−1.51`, `−9.12`/`−10.94`) |
+| K3 | RestAssured | `targetOfferClass` en `contains` insensible à la casse ; N+M vs no-match |
+| K4 | RestAssured | Couture scope store/group (voir résidu) |
+| K5 | RestAssured | Vignettes nominales `min(floor(qty), vignettes/required)` |
+| K6 | RestAssured | Vignette FIXED non plafonnée → négatif |
+| K7 | RestAssured | EAN inconnu dans `vignettes` → 500, trace `Error building appliers from factory:` |
+| K8 | RestAssured | `vignettesRequired: 0` → `/ by zero` à l'apply (trace) |
+| K9 | RestAssured | Vignettes inertes → 200 propre, aucun avantage |
+
+Les traces d'erreur `/ by zero` et `Error building appliers…` dans le log sont **attendues** : ce sont les chemins d'échec de K7/K8, asservis sur `valuation_traces.error_message`.
+
+## Résidu justifié
+Aucun `@Disabled`. Seul résidu documenté : **K4** exerce 5 des 8 types d'offres (IMMEDIATE_VOUCHER + DEPOSIT_BASKET côté *store-only ignoré*, N+M + MIXED_BUNDLE + VIGNETTE côté *store+group honoré*). Les 3 restants (DELIVERY, FREE_DELIVERY_THRESHOLD, MEAL_VOUCHER) partagent **exactement** les mêmes deux méthodes de récupération (`findByStoreAndType` / `getOffers`) que les types probés — résidu de contrat, pas de trou de couverture.
+
+## Commit
+Staged **uniquement** `GroupKIT.java` et `reports/e2e-K.md` (2 nouveaux fichiers). Aucune ressource de seed/golden, `CLAUDE.md` ni `.claude/` n'a changé → rien d'autre stagé. Les fichiers non suivis (`campaign-*.log`, `run-*.sh`, `GroupBIT.java`, etc.) laissés intacts.
+
+Commit `cb50900` avec le message exact `test: e2e scenarios group K`. Pas de push.
+Campagne groupe K — **tout vert**. `Tests run: 9, Failures: 0, Errors: 0, Skipped: 0`, BUILD exit 0.
+
+## Scénarios couverts (9/9) et étage
+
+Tous les scénarios du groupe K sont **non marqués → `@QuarkusTest` + RestAssured** (HTTP pur, Basic `admin/admin`). Aucun `[W]` (donc pas de Playwright) ni `[P]` (donc pas de profil prod-like), donc **aucun `@Disabled`**.
+
+| Id | Étage | Objet |
+|----|-------|-------|
+| K1 | RestAssured | Deux `IMMEDIATE_VOUCHER` cumulés sur une ligne, tous deux réducteurs → `0.74`/`0.89` (régression "wrong-sign" historique, GREEN) |
+| K2 | RestAssured | Formules non plafonnées → total NÉGATIF (`−1.27`/`−1.51`, `−9.12`/`−10.94`) |
+| K3 | RestAssured | `targetOfferClass` en `contains` insensible à la casse ; N+M vs no-match |
+| K4 | RestAssured | Couture scope store/group (voir résidu) |
+| K5 | RestAssured | Vignettes nominales `min(floor(qty), vignettes/required)` |
+| K6 | RestAssured | Vignette FIXED non plafonnée → négatif |
+| K7 | RestAssured | EAN inconnu dans `vignettes` → 500, trace `Error building appliers from factory:` |
+| K8 | RestAssured | `vignettesRequired: 0` → `/ by zero` à l'apply (trace) |
+| K9 | RestAssured | Vignettes inertes → 200 propre, aucun avantage |
+
+Les traces d'erreur `/ by zero` et `Error building appliers…` dans le log sont **attendues** : ce sont les chemins d'échec de K7/K8, asservis sur `valuation_traces.error_message`.
+
+## Résidu justifié
+Aucun `@Disabled`. Seul résidu documenté : **K4** exerce 5 des 8 types d'offres (IMMEDIATE_VOUCHER + DEPOSIT_BASKET côté *store-only ignoré*, N+M + MIXED_BUNDLE + VIGNETTE côté *store+group honoré*). Les 3 restants (DELIVERY, FREE_DELIVERY_THRESHOLD, MEAL_VOUCHER) partagent **exactement** les mêmes deux méthodes de récupération (`findByStoreAndType` / `getOffers`) que les types probés — résidu de contrat, pas de trou de couverture.
+
+## Commit
+Staged **uniquement** `GroupKIT.java` et `reports/e2e-K.md` (2 nouveaux fichiers). Aucune ressource de seed/golden, `CLAUDE.md` ni `.claude/` n'a changé → rien d'autre stagé. Les fichiers non suivis (`campaign-*.log`, `run-*.sh`, `GroupBIT.java`, etc.) laissés intacts.
+
+Commit `cb50900` avec le message exact `test: e2e scenarios group K`. Pas de push.
+OK: Group K — expected commit landed as HEAD.
+=== Group L ===
+Group L is complete and green.
+
+## Summary
+
+Wrote `src/test/java/com/intermarche/valuation/e2e/GroupLIT.java` (new class) covering all **7 scenarios** of the L section — livraison, consigne, franco de port — plus the report at `reports/e2e-L.md`. Campaign: **`Tests run: 7, Failures: 0, Errors: 0` — BUILD SUCCESS**, 2 iterations to green.
+
+**Scenarios (all RestAssured, pure HTTP, Basic admin/admin):**
+- **L1** nominal `HOME_DELIVERY` (Seclin → 9.90€ tier, no valued items, total 15.90/13.25)
+- **L2** distance beyond every tier → no delivery, 200, merchandise valued
+- **L3** four coordinate guards (no address / address without lat-lon / no-offer store / no-coord store `0199`), asserted on `valuation_traces.error_message`
+- **L4** PICKUP/IN_STORE/absent modes → no delivery even with address
+- **L5** second DELIVERY + second DEPOSIT_BASKET → `Multiple … offers` 500
+- **L6** consigne (trimmed/case-insensitive instruction → `2 x 0.5€`, no-instruction/zero-volume → nothing)
+- **L7** franco (above → full 9.90 refund capped, below → kept, no-delivery → nothing)
+
+**Seed:** mirror catalog replayed once + 3 additive extra phases (store `0199` with empty coords, mirrored `…005` prices on `0104`/`0199`, and the L5 double-offer poisons quarantined on `0104`).
+
+**Key calibration findings (catalog vs reality):**
+- Seclin is **10.23 km**, not the catalog's ~11 km — still in the 16 km tier; `%.2f` is locale-formatted (comma under fr_FR) so the type is asserted by prefix + suffix.
+- Type strings **drop trailing zeros** (`9.9€`, `0.5€`) via `BigDecimal.toString()`; the numeric amounts stay exact — the only recalibration between runs.
+- L5 message carries `'0104'` (quarantine store), format verbatim; catalog quoted `'0101'`.
+- L7 tiers are **FIXED_AMOUNT 50/100**, not percentages — both cap to the 9.90€ delivery, so the tier distinction is inert.
+- Group franco (`PROMO_GROUP_NORD`) is dead (store-only retrieval).
+
+**Residue:** none. No `[W]`/`[P]` scenarios in the L section. No `src/main` changes; only the new IT class, its seed resources (inline), and the report were touched. Not committed — per the workflow the campaign script owns the commit.
+Group L is complete and green.
+
+## Summary
+
+Wrote `src/test/java/com/intermarche/valuation/e2e/GroupLIT.java` (new class) covering all **7 scenarios** of the L section — livraison, consigne, franco de port — plus the report at `reports/e2e-L.md`. Campaign: **`Tests run: 7, Failures: 0, Errors: 0` — BUILD SUCCESS**, 2 iterations to green.
+
+**Scenarios (all RestAssured, pure HTTP, Basic admin/admin):**
+- **L1** nominal `HOME_DELIVERY` (Seclin → 9.90€ tier, no valued items, total 15.90/13.25)
+- **L2** distance beyond every tier → no delivery, 200, merchandise valued
+- **L3** four coordinate guards (no address / address without lat-lon / no-offer store / no-coord store `0199`), asserted on `valuation_traces.error_message`
+- **L4** PICKUP/IN_STORE/absent modes → no delivery even with address
+- **L5** second DELIVERY + second DEPOSIT_BASKET → `Multiple … offers` 500
+- **L6** consigne (trimmed/case-insensitive instruction → `2 x 0.5€`, no-instruction/zero-volume → nothing)
+- **L7** franco (above → full 9.90 refund capped, below → kept, no-delivery → nothing)
+
+**Seed:** mirror catalog replayed once + 3 additive extra phases (store `0199` with empty coords, mirrored `…005` prices on `0104`/`0199`, and the L5 double-offer poisons quarantined on `0104`).
+
+**Key calibration findings (catalog vs reality):**
+- Seclin is **10.23 km**, not the catalog's ~11 km — still in the 16 km tier; `%.2f` is locale-formatted (comma under fr_FR) so the type is asserted by prefix + suffix.
+- Type strings **drop trailing zeros** (`9.9€`, `0.5€`) via `BigDecimal.toString()`; the numeric amounts stay exact — the only recalibration between runs.
+- L5 message carries `'0104'` (quarantine store), format verbatim; catalog quoted `'0101'`.
+- L7 tiers are **FIXED_AMOUNT 50/100**, not percentages — both cap to the 9.90€ delivery, so the tier distinction is inert.
+- Group franco (`PROMO_GROUP_NORD`) is dead (store-only retrieval).
+
+**Residue:** none. No `[W]`/`[P]` scenarios in the L section. No `src/main` changes; only the new IT class, its seed resources (inline), and the report were touched. Not committed — per the workflow the campaign script owns the commit.
+Campagne verte, commit effectué (pas de push).
+
+## Résultat
+
+**`Tests run: 7, Failures: 0, Errors: 0, Skipped: 0`** — tout est vert. Les traces d'exception dans le log étaient les chemins d'erreur 500 attendus (poisons L5), asservis sur `valuation_traces.error_message`.
+
+## Scénarios couverts et étage de chacun
+
+| Id | Étage | Ce qu'il fixe |
+|----|-------|---------------|
+| **L1** Livraison nominale | RestAssured | Seclin sur `0101` → `Delivery: DELIVERY_HOME_0101 (…km) for 9.9€`, 9.90 TTC / 8.25 HT, total 15.90/13.25 |
+| **L2** Hors paliers | RestAssured | ~299 km → aucune offre livraison, 200, marchandise 6.00/5.00 |
+| **L3** Coordonnées manquantes | RestAssured | 4 sondes 500 (pas d'adresse, adresse sans lat/lon, `0102` sans offre → le guard précède la recherche, `0199` sans coordonnées) |
+| **L4** Modes sans livraison | RestAssured | PICKUP (avec adresse), IN_STORE, mode absent → aucune livraison, aucune erreur |
+| **L5** Offres multiples interdites | RestAssured | 2e DELIVERY + 2e DEPOSIT_BASKET sur `0104` → 500 `Configuration Error: … '0104'. Expected 1, found 2.` |
+| **L6** Consigne | RestAssured | `  deposit BASKET  ` trimmé/insensible à la casse → `Deposit Basket: 2 x 0.5€`, 1.00/0.83 ; sans instruction / volume nul → rien |
+| **L7** Franco de port | RestAssured | Au-dessus (24.00) → franco rembourse 9.90/8.25, total revient à 24.00/20.00 ; en dessous → livraison gardée ; IN_STORE → pas de franco |
+
+**Les 7 sont en RestAssured** (HTTP pur, Basic `admin/admin`).
+
+## Résidu justifié
+**Aucun.** La section L de `e2e-scenarios.md` ne porte aucune marque `[W]`/`[P]`/`[D]` → pas de Playwright, pas de profil prod-like, donc **aucun `@Disabled`**. Les seeds additifs (store `0199`, prix `…005`, poisons L5) sont des constantes string inline dans la classe, donc **aucune ressource seed/golden séparée n'a changé**.
+
+## Staging
+Commit `4cde481` — **`test: e2e scenarios group L`**, contenant uniquement :
+- `src/test/java/com/intermarche/valuation/e2e/GroupLIT.java`
+- `reports/e2e-L.md`
+
+`CLAUDE.md` et `.claude/` inchangés (non stagés). Aucun `git push`.
+Campagne verte, commit effectué (pas de push).
+
+## Résultat
+
+**`Tests run: 7, Failures: 0, Errors: 0, Skipped: 0`** — tout est vert. Les traces d'exception dans le log étaient les chemins d'erreur 500 attendus (poisons L5), asservis sur `valuation_traces.error_message`.
+
+## Scénarios couverts et étage de chacun
+
+| Id | Étage | Ce qu'il fixe |
+|----|-------|---------------|
+| **L1** Livraison nominale | RestAssured | Seclin sur `0101` → `Delivery: DELIVERY_HOME_0101 (…km) for 9.9€`, 9.90 TTC / 8.25 HT, total 15.90/13.25 |
+| **L2** Hors paliers | RestAssured | ~299 km → aucune offre livraison, 200, marchandise 6.00/5.00 |
+| **L3** Coordonnées manquantes | RestAssured | 4 sondes 500 (pas d'adresse, adresse sans lat/lon, `0102` sans offre → le guard précède la recherche, `0199` sans coordonnées) |
+| **L4** Modes sans livraison | RestAssured | PICKUP (avec adresse), IN_STORE, mode absent → aucune livraison, aucune erreur |
+| **L5** Offres multiples interdites | RestAssured | 2e DELIVERY + 2e DEPOSIT_BASKET sur `0104` → 500 `Configuration Error: … '0104'. Expected 1, found 2.` |
+| **L6** Consigne | RestAssured | `  deposit BASKET  ` trimmé/insensible à la casse → `Deposit Basket: 2 x 0.5€`, 1.00/0.83 ; sans instruction / volume nul → rien |
+| **L7** Franco de port | RestAssured | Au-dessus (24.00) → franco rembourse 9.90/8.25, total revient à 24.00/20.00 ; en dessous → livraison gardée ; IN_STORE → pas de franco |
+
+**Les 7 sont en RestAssured** (HTTP pur, Basic `admin/admin`).
+
+## Résidu justifié
+**Aucun.** La section L de `e2e-scenarios.md` ne porte aucune marque `[W]`/`[P]`/`[D]` → pas de Playwright, pas de profil prod-like, donc **aucun `@Disabled`**. Les seeds additifs (store `0199`, prix `…005`, poisons L5) sont des constantes string inline dans la classe, donc **aucune ressource seed/golden séparée n'a changé**.
+
+## Staging
+Commit `4cde481` — **`test: e2e scenarios group L`**, contenant uniquement :
+- `src/test/java/com/intermarche/valuation/e2e/GroupLIT.java`
+- `reports/e2e-L.md`
+
+`CLAUDE.md` et `.claude/` inchangés (non stagés). Aucun `git push`.
+OK: Group L — expected commit landed as HEAD.
+=== Group M ===
+Group M complete. Summary:
+
+**`GroupMIT.java`** created (new class) — 4 `@Test` methods, all **RestAssured** (`@QuarkusTest`, Basic `admin/admin`). Campaign **green on the first run**: `Tests run: 4, Failures: 0, Errors: 0` — BUILD SUCCESS.
+
+Scenarios derived from section M (all unmarked → RestAssured, no `[W]`/`[P]`, zero `@Disabled`):
+- **M1** nominal plate — apples (via `POMMES`) + eau (via `EAU_MINERALE`) + excluded lait; one advantage, `offerCode=MEAL_VOUCHER_0101`, `threshold=25.00` exposed, plate `>0` and `<` total.
+- **M2** invisible cap — 50 eau = exact **30.00** uncapped plate `>` 25.00 threshold; raw body carries **no `payableAmount`** (no getter — confirmed).
+- **M3** net-of-discounts (apple plate `>0`, `<2.40`, real `discountAmount` present) + case-sensitivity (additive lowercase-flag offer `M3_LOWERCASE_0102` on `0102` → plate `0.00`).
+- **M4** exclusions — flag-less lait → plate emitted at `0.00`; delivery/deposit services excluded (plate = exact **3.00** eau); gestured line invisible (`0.00`).
+
+Seed: **mirror needed** (7 CSVs, mandated order) + **one additive offer** (lowercase-flag meal voucher on `0102`; eau already priced there, no extra price row).
+
+Key calibration finding worth flagging: the catalog frames M1's flag resolution as a hierarchy climb `POMMES ← FRUITS ← ALIMENTAIRE`, but the seed places the flag **directly on the leaf families** — no seeded product is eligible via an ancestor-only flag, so the ancestor-only climb is a **documented residue** (not exercisable without mutating the family seed, which is out of scope). Full details in `reports/e2e-M.md`.
+
+Scope respected: touched only `GroupMIT.java` and `reports/e2e-M.md`; no `src/main` changes; **not committed** (campaign script owns the commit).
+Group M complete. Summary:
+
+**`GroupMIT.java`** created (new class) — 4 `@Test` methods, all **RestAssured** (`@QuarkusTest`, Basic `admin/admin`). Campaign **green on the first run**: `Tests run: 4, Failures: 0, Errors: 0` — BUILD SUCCESS.
+
+Scenarios derived from section M (all unmarked → RestAssured, no `[W]`/`[P]`, zero `@Disabled`):
+- **M1** nominal plate — apples (via `POMMES`) + eau (via `EAU_MINERALE`) + excluded lait; one advantage, `offerCode=MEAL_VOUCHER_0101`, `threshold=25.00` exposed, plate `>0` and `<` total.
+- **M2** invisible cap — 50 eau = exact **30.00** uncapped plate `>` 25.00 threshold; raw body carries **no `payableAmount`** (no getter — confirmed).
+- **M3** net-of-discounts (apple plate `>0`, `<2.40`, real `discountAmount` present) + case-sensitivity (additive lowercase-flag offer `M3_LOWERCASE_0102` on `0102` → plate `0.00`).
+- **M4** exclusions — flag-less lait → plate emitted at `0.00`; delivery/deposit services excluded (plate = exact **3.00** eau); gestured line invisible (`0.00`).
+
+Seed: **mirror needed** (7 CSVs, mandated order) + **one additive offer** (lowercase-flag meal voucher on `0102`; eau already priced there, no extra price row).
+
+Key calibration finding worth flagging: the catalog frames M1's flag resolution as a hierarchy climb `POMMES ← FRUITS ← ALIMENTAIRE`, but the seed places the flag **directly on the leaf families** — no seeded product is eligible via an ancestor-only flag, so the ancestor-only climb is a **documented residue** (not exercisable without mutating the family seed, which is out of scope). Full details in `reports/e2e-M.md`.
+
+Scope respected: touched only `GroupMIT.java` and `reports/e2e-M.md`; no `src/main` changes; **not committed** (campaign script owns the commit).
+Tout est vert. Campagne lancée avec `mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupMIT -DskipITs=false` → **Tests run: 4, Failures: 0, Errors: 0** (exit 0), 1 itération.
+
+## Scénarios couverts & étage
+
+| Id | `@Test` | Étage |
+|----|---------|-------|
+| **M1** Assiette nominale | `m1_nominalPlate` | RestAssured |
+| **M2** Plafond invisible | `m2_invisibleCap` | RestAssured |
+| **M3** Assiette nette / casse du flag | `m3_netOfDiscountsAndCaseSensitiveFlag` | RestAssured |
+| **M4** Exclusions & plate toujours émise | `m4_exclusionsAndAlwaysEmitted` | RestAssured |
+
+Les 4 scénarios de la section M sont **non marqués** → tous en **RestAssured** (`@QuarkusTest`, HTTP Basic `admin/admin`). Aucun `[W]` (donc pas de Playwright), aucun `[P]`, **aucun `@Disabled`** : chaque scénario M est un test live.
+
+**Seed** : mirror catalog rejoué une fois (7 imports dans l'ordre), plus une phase additive inline pour la sonde de casse M3 (`M3_LOWERCASE_0102` sur `0102`, flag minuscule) — aucune ressource seed/golden nouvelle ou modifiée.
+
+## Résidu justifié
+
+- **M1 — grimpée hiérarchique ancestrale non exercée** : le seed place le flag `RESTAURANT_VOUCHER_ELIGIBLE` directement sur les familles feuilles (`POMMES`, `EAU_MINERALE`) ; aucun produit seedé n'est éligible via un flag d'ancêtre seul. La grimpée du DAG existe dans le code mais résout à la feuille — non exerçable sans muter le seed familial (hors périmètre). Documenté, **pas `@Disabled`** (M1 asserte quand même éligibilité + exclusion + threshold exposé).
+
+## Commit
+
+Stagé **uniquement** `src/test/java/.../e2e/GroupMIT.java` et `reports/e2e-M.md` (CLAUDE.md et `.claude/` inchangés, aucune ressource seed/golden touchée). Commit `7e3152b` — `test: e2e scenarios group M`. Aucun `git push`.
+Tout est vert. Campagne lancée avec `mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupMIT -DskipITs=false` → **Tests run: 4, Failures: 0, Errors: 0** (exit 0), 1 itération.
+
+## Scénarios couverts & étage
+
+| Id | `@Test` | Étage |
+|----|---------|-------|
+| **M1** Assiette nominale | `m1_nominalPlate` | RestAssured |
+| **M2** Plafond invisible | `m2_invisibleCap` | RestAssured |
+| **M3** Assiette nette / casse du flag | `m3_netOfDiscountsAndCaseSensitiveFlag` | RestAssured |
+| **M4** Exclusions & plate toujours émise | `m4_exclusionsAndAlwaysEmitted` | RestAssured |
+
+Les 4 scénarios de la section M sont **non marqués** → tous en **RestAssured** (`@QuarkusTest`, HTTP Basic `admin/admin`). Aucun `[W]` (donc pas de Playwright), aucun `[P]`, **aucun `@Disabled`** : chaque scénario M est un test live.
+
+**Seed** : mirror catalog rejoué une fois (7 imports dans l'ordre), plus une phase additive inline pour la sonde de casse M3 (`M3_LOWERCASE_0102` sur `0102`, flag minuscule) — aucune ressource seed/golden nouvelle ou modifiée.
+
+## Résidu justifié
+
+- **M1 — grimpée hiérarchique ancestrale non exercée** : le seed place le flag `RESTAURANT_VOUCHER_ELIGIBLE` directement sur les familles feuilles (`POMMES`, `EAU_MINERALE`) ; aucun produit seedé n'est éligible via un flag d'ancêtre seul. La grimpée du DAG existe dans le code mais résout à la feuille — non exerçable sans muter le seed familial (hors périmètre). Documenté, **pas `@Disabled`** (M1 asserte quand même éligibilité + exclusion + threshold exposé).
+
+## Commit
+
+Stagé **uniquement** `src/test/java/.../e2e/GroupMIT.java` et `reports/e2e-M.md` (CLAUDE.md et `.claude/` inchangés, aucune ressource seed/golden touchée). Commit `7e3152b` — `test: e2e scenarios group M`. Aucun `git push`.
+OK: Group M — expected commit landed as HEAD.
+=== Group N ===
+Done. Group N is complete and green.
+
+## Summary
+
+Created `src/test/java/com/intermarche/valuation/e2e/GroupNIT.java` (new class) covering all **7 catalog scenarios** of section **N — Traces & administration des valorisations**, plus the Q-E "Valuations" message surface. Campaign is green:
+
+```
+Tests run: 16, Failures: 0, Errors: 0, Skipped: 3 — BUILD SUCCESS
+```
+
+**Tiering** (16 @Test, 13 active + 3 @Disabled [W] residues):
+- **N1** (4 tests) — the four statuses' exact content. 200/400/500 over HTTP asserting `valuation_traces` columns via Panache; the **HTTP-unreachable 422+responsePayload arm and the 1997-char truncation** exercised through the injected `ValuationTraceService.record` with a genuine `engine.evaluate` result.
+- **N2** — disable → zero trace + off-banner + immediate re-enable.
+- **N3** — retention validation notices + VIEWER/MANAGER `403` on config & purge.
+- **N4** (2) — manual `Purge all now` 303; scheduled purge via antedated `createdAt` (`DateTimeProvider`) + a direct `purgeExpired()` call.
+- **N5/N6/N7** — full **server surface** over HTTP (filters/badges/empty state, `/rows` refresh source, detail meta/error-banner/no-response/303-unknown-id, test-form empty/400/success + trace creation, replay preload & silent-empty), with the pure-JS behaviours (`valuation-refresh.js`, `valuation-view.js`, `schema-form.js`) as 3 justified `@Disabled` [W] residues.
+
+**Key calibrations:** N1's 422 is unreachable via the contract (confirmed against G3); N1's `requestPayload` is the re-serialized basket so an unknown wire field is dropped; and the single red→green fix — N5's filter value is **echoed into the search input**, making `body.contains(customer)` a false positive on empty pages, so positives assert on the row badge and the strict-status mismatch asserts the empty-state message.
+
+Report written to `reports/e2e-N.md`. Nothing under `src/main` was touched; no commit made (the campaign script owns that).
+
+One note on the `[W]` tier: there's **no `quarkus-playwright` dependency in the build**, and adding it falls outside this task's scope (touch only `GroupNIT.java`, its resources, and the report). I therefore covered every server-side surface of the [W] scenarios over HTTP and disabled only the irreducibly-browser behaviours — rather than adding the dependency myself.
+Done. Group N is complete and green.
+
+## Summary
+
+Created `src/test/java/com/intermarche/valuation/e2e/GroupNIT.java` (new class) covering all **7 catalog scenarios** of section **N — Traces & administration des valorisations**, plus the Q-E "Valuations" message surface. Campaign is green:
+
+```
+Tests run: 16, Failures: 0, Errors: 0, Skipped: 3 — BUILD SUCCESS
+```
+
+**Tiering** (16 @Test, 13 active + 3 @Disabled [W] residues):
+- **N1** (4 tests) — the four statuses' exact content. 200/400/500 over HTTP asserting `valuation_traces` columns via Panache; the **HTTP-unreachable 422+responsePayload arm and the 1997-char truncation** exercised through the injected `ValuationTraceService.record` with a genuine `engine.evaluate` result.
+- **N2** — disable → zero trace + off-banner + immediate re-enable.
+- **N3** — retention validation notices + VIEWER/MANAGER `403` on config & purge.
+- **N4** (2) — manual `Purge all now` 303; scheduled purge via antedated `createdAt` (`DateTimeProvider`) + a direct `purgeExpired()` call.
+- **N5/N6/N7** — full **server surface** over HTTP (filters/badges/empty state, `/rows` refresh source, detail meta/error-banner/no-response/303-unknown-id, test-form empty/400/success + trace creation, replay preload & silent-empty), with the pure-JS behaviours (`valuation-refresh.js`, `valuation-view.js`, `schema-form.js`) as 3 justified `@Disabled` [W] residues.
+
+**Key calibrations:** N1's 422 is unreachable via the contract (confirmed against G3); N1's `requestPayload` is the re-serialized basket so an unknown wire field is dropped; and the single red→green fix — N5's filter value is **echoed into the search input**, making `body.contains(customer)` a false positive on empty pages, so positives assert on the row badge and the strict-status mismatch asserts the empty-state message.
+
+Report written to `reports/e2e-N.md`. Nothing under `src/main` was touched; no commit made (the campaign script owns that).
+
+One note on the `[W]` tier: there's **no `quarkus-playwright` dependency in the build**, and adding it falls outside this task's scope (touch only `GroupNIT.java`, its resources, and the report). I therefore covered every server-side surface of the [W] scenarios over HTTP and disabled only the irreducibly-browser behaviours — rather than adding the dependency myself.
+Tout est vert. Campagne, commit et scope conformes.
+
+## Résultat de la campagne
+
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupNIT -DskipITs=false` → **BUILD SUCCESS**, exit 0.
+**16 tests, 0 failures, 0 errors, 3 skipped** (résidus `[W]` en `@Disabled` justifié).
+
+Les `ERROR`/`WARN` dans les logs sont attendus : ce sont les rejets HTTP volontairement provoqués (basket sans `storeCode` → 400, EAN inconnu → 500) que les scénarios N1/N5/N6/N7 vérifient.
+
+## Scénarios couverts et étage de chacun
+
+| Scénario | Étage | Méthodes |
+|----------|-------|----------|
+| **N1** | RestAssured + recorder injecté | `n1_successTraceContentAndReserializedRequest`, `n1_rejectedTraceContent`, `n1_failedNoPayloadTraceContent`, `n1_failedWithPayloadAndTruncation` (200/400/500 en HTTP ; 422+payload & troncature 1997 via `ValuationTraceService.record` injecté) |
+| **N2** | RestAssured | `n2_disableLeavesNoTraceBannerAndImmediateReenable` |
+| **N3** | RestAssured | `n3_configValidationAndRoleGuards` (rétention≥1, notices, VIEWER/MANAGER 403 sur config+purge) |
+| **N4** | RestAssured + recorder injecté | `n4_manualPurgeAll`, `n4_scheduledPurgeRemovesExpiredKeepsFresh` |
+| **N5** | RestAssured | `n5_listFiltersBadgesAndEmptyState`, `n5_rowsRefreshFragment` |
+| **N6** | RestAssured | `n6_detailMetaErrorBannerNoResponseAndUnknownId` |
+| **N7** | RestAssured | `n7_testFormSubmissions`, `n7_replayPreloadAndSilentEmpty` |
+
+## Résidu justifié (3 × `@Disabled`, tous `[W]` navigateur-only)
+
+- `n5_autoRefreshTimer` — timer d'auto-refresh 1 s (`valuation-refresh.js`) ; source serveur `/rows` couverte par `n5_rowsRefreshFragment`.
+- `n6_readableJsonClientRendering` — rendu onglet `Readable`/`JSON` + placeholder em-dash (`valuation-view.js`).
+- `n7_formJsonToggle` — bascule `Form`/`JSON` + génération de schéma client (`schema-form.js`).
+
+Aucun harnais Playwright / `quarkus-playwright` n'existe dans le build ; toute la **surface serveur** des scénarios `[W]` est couverte en HTTP, seuls les comportements strictement navigateur restent en résidu (couverts par la suite Vitest). Pas de scénario `[P]` dans ce groupe.
+
+## Commit
+
+Staging limité à `src/test/java/.../GroupNIT.java` et `reports/e2e-N.md` (aucune ressource seed/golden, `CLAUDE.md` ou `.claude/` modifiée — donc rien d'autre à stager). Commit `08d5e9c` — message exact `test: e2e scenarios group N`. Pas de push.
+Tout est vert. Campagne, commit et scope conformes.
+
+## Résultat de la campagne
+
+`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupNIT -DskipITs=false` → **BUILD SUCCESS**, exit 0.
+**16 tests, 0 failures, 0 errors, 3 skipped** (résidus `[W]` en `@Disabled` justifié).
+
+Les `ERROR`/`WARN` dans les logs sont attendus : ce sont les rejets HTTP volontairement provoqués (basket sans `storeCode` → 400, EAN inconnu → 500) que les scénarios N1/N5/N6/N7 vérifient.
+
+## Scénarios couverts et étage de chacun
+
+| Scénario | Étage | Méthodes |
+|----------|-------|----------|
+| **N1** | RestAssured + recorder injecté | `n1_successTraceContentAndReserializedRequest`, `n1_rejectedTraceContent`, `n1_failedNoPayloadTraceContent`, `n1_failedWithPayloadAndTruncation` (200/400/500 en HTTP ; 422+payload & troncature 1997 via `ValuationTraceService.record` injecté) |
+| **N2** | RestAssured | `n2_disableLeavesNoTraceBannerAndImmediateReenable` |
+| **N3** | RestAssured | `n3_configValidationAndRoleGuards` (rétention≥1, notices, VIEWER/MANAGER 403 sur config+purge) |
+| **N4** | RestAssured + recorder injecté | `n4_manualPurgeAll`, `n4_scheduledPurgeRemovesExpiredKeepsFresh` |
+| **N5** | RestAssured | `n5_listFiltersBadgesAndEmptyState`, `n5_rowsRefreshFragment` |
+| **N6** | RestAssured | `n6_detailMetaErrorBannerNoResponseAndUnknownId` |
+| **N7** | RestAssured | `n7_testFormSubmissions`, `n7_replayPreloadAndSilentEmpty` |
+
+## Résidu justifié (3 × `@Disabled`, tous `[W]` navigateur-only)
+
+- `n5_autoRefreshTimer` — timer d'auto-refresh 1 s (`valuation-refresh.js`) ; source serveur `/rows` couverte par `n5_rowsRefreshFragment`.
+- `n6_readableJsonClientRendering` — rendu onglet `Readable`/`JSON` + placeholder em-dash (`valuation-view.js`).
+- `n7_formJsonToggle` — bascule `Form`/`JSON` + génération de schéma client (`schema-form.js`).
+
+Aucun harnais Playwright / `quarkus-playwright` n'existe dans le build ; toute la **surface serveur** des scénarios `[W]` est couverte en HTTP, seuls les comportements strictement navigateur restent en résidu (couverts par la suite Vitest). Pas de scénario `[P]` dans ce groupe.
+
+## Commit
+
+Staging limité à `src/test/java/.../GroupNIT.java` et `reports/e2e-N.md` (aucune ressource seed/golden, `CLAUDE.md` ou `.claude/` modifiée — donc rien d'autre à stager). Commit `08d5e9c` — message exact `test: e2e scenarios group N`. Pas de push.
+OK: Group N — expected commit landed as HEAD.
+=== Group P ===
+Group P is complete and green.
+
+## Summary
+
+`GroupPIT.java` written from scratch — **8 tests, 0 failures, 1 skipped** (`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupPIT -DskipITs=false`), 2 iterations to green. Mirror seed replayed once, plus additive poison/probe phases.
+
+**Tiers** — all P scenarios are unmarked → `@QuarkusTest` + RestAssured (+ a few GraphQL deletes and two `DateTimeProvider` calls in P8):
+
+- **P1** ✅ idempotence (10× identical) + the zero-dry-amount division-by-zero score
+- **P2** ✅ maximal 7-line home-delivery basket, every family fires, all five G6 invariants hold
+- **P3** ✅ unparsable JSON refused at PERSIST; schema-nonconforming refused at VALUATION
+- **P4** ✅ recursive `Offer.eans` (targetEans / contents[].ean / substituteEans) + `@PreUpdate` re-derivation
+- **P5** ⏭️ `@Disabled` justified residue
+- **P6** ✅ empty `availableToUpcell` + no suggestion on a fully-consumed basket
+- **P7** ✅ scale-sensitive checksum (`1.20`→`1.2000` = 1 update)
+- **P8** ✅ `DateTimeProvider.clear()` restores pricing + reverse-order GraphQL teardown
+
+**Key calibrations frozen:**
+- **P1** — the division-by-zero is *unreachable*, not observable: `bundlePrice` (`exclusiveMinimum:0`) and N+M `quantityToPay` (`minimum:1`) reject every zeroing config at valuation, so `Infinity`/`NaN` is dead code masked by the schemas (the score is internal, never in the JSON).
+- **P4** — `/ui/offers/export` 404s (the `/export` path loses to the `/{id}` template); used `GET /ui/offers?ean=…` instead (same `eans` query).
+- **P6** — Jackson *omits* the empty `availableToUpcell` rather than emitting `{}`.
+- **P2** — "each family once" → "appears" (two immediate vouchers + two franco offers legitimately double-fire on `0101`); G6 invariants are the real contract.
+
+**Residue:** P5 only — `MassProductImporterClient` is a standalone `main()` on fixed port 8090, not a `@QuarkusTest` fixture; an 80k-product soak test has no automated harness and would pollute the shared catalog.
+
+Report written to `reports/e2e-P.md`. Scope respected: only `GroupPIT.java` and the report touched, no `src/main` change, no commit (the campaign script owns it).
+Group P is complete and green.
+
+## Summary
+
+`GroupPIT.java` written from scratch — **8 tests, 0 failures, 1 skipped** (`mvn -q verify -DskipUTs=true -DskipJsTests=true -Dit.test=GroupPIT -DskipITs=false`), 2 iterations to green. Mirror seed replayed once, plus additive poison/probe phases.
+
+**Tiers** — all P scenarios are unmarked → `@QuarkusTest` + RestAssured (+ a few GraphQL deletes and two `DateTimeProvider` calls in P8):
+
+- **P1** ✅ idempotence (10× identical) + the zero-dry-amount division-by-zero score
+- **P2** ✅ maximal 7-line home-delivery basket, every family fires, all five G6 invariants hold
+- **P3** ✅ unparsable JSON refused at PERSIST; schema-nonconforming refused at VALUATION
+- **P4** ✅ recursive `Offer.eans` (targetEans / contents[].ean / substituteEans) + `@PreUpdate` re-derivation
+- **P5** ⏭️ `@Disabled` justified residue
+- **P6** ✅ empty `availableToUpcell` + no suggestion on a fully-consumed basket
+- **P7** ✅ scale-sensitive checksum (`1.20`→`1.2000` = 1 update)
+- **P8** ✅ `DateTimeProvider.clear()` restores pricing + reverse-order GraphQL teardown
+
+**Key calibrations frozen:**
+- **P1** — the division-by-zero is *unreachable*, not observable: `bundlePrice` (`exclusiveMinimum:0`) and N+M `quantityToPay` (`minimum:1`) reject every zeroing config at valuation, so `Infinity`/`NaN` is dead code masked by the schemas (the score is internal, never in the JSON).
+- **P4** — `/ui/offers/export` 404s (the `/export` path loses to the `/{id}` template); used `GET /ui/offers?ean=…` instead (same `eans` query).
+- **P6** — Jackson *omits* the empty `availableToUpcell` rather than emitting `{}`.
+- **P2** — "each family once" → "appears" (two immediate vouchers + two franco offers legitimately double-fire on `0101`); G6 invariants are the real contract.
+
+**Residue:** P5 only — `MassProductImporterClient` is a standalone `main()` on fixed port 8090, not a `@QuarkusTest` fixture; an 80k-product soak test has no automated harness and would pollute the shared catalog.
+
+Report written to `reports/e2e-P.md`. Scope respected: only `GroupPIT.java` and the report touched, no `src/main` change, no commit (the campaign script owns it).
+Tout est vert. Campagne du groupe P terminée et committée.
+
+## Résultat de la campagne
+`mvn -q verify … -Dit.test=GroupPIT` → **Tests run 8, Failures 0, Errors 0, Skipped 1** (BUILD SUCCESS). Les stack-traces `Error validating offer:` / `Error building appliers from factory:` vues en console sont les rejets 500 **attendus** des poisons P1/P3 (assertés sur `valuation_traces.error_message`), pas des échecs.
+
+## Scénarios couverts et étage de chacun
+
+| Id | Scénario | Étage |
+|----|----------|-------|
+| P1 | Idempotence observable (10× même panier) + division-par-zéro du score prouvée INATTEIGNABLE | RestAssured |
+| P2 | Panier de référence maximal — toutes les familles d'offres + 5 invariants structurels G6 | RestAssured |
+| P3 | Deux chemins d'échec de spec : JSON illisible au PERSIST ; non-conforme au schéma à la VALUATION | RestAssured |
+| P4 | Index récursif `Offer.eans` (targetEans / contents[].ean / substituteEans) + `@PreUpdate` | RestAssured (filtre UI) |
+| P5 | Volumétrie 80 000 produits + soak quadratique | **@Disabled** (résidu justifié) |
+| P6 | `availableToUpcell` vide + aucune suggestion sur panier entièrement consommé | RestAssured |
+| P7 | Checksum prix scale-sensible (`1.20` réimporté en `1.2000` → un update) | RestAssured |
+| P8 | Hygiène : `DateTimeProvider.clear()` + teardown GraphQL en ordre inverse | RestAssured + GraphQL |
+
+Aucun scénario `[W]` ni `[P]` dans cette lettre → pas de Playwright ni de profil prod-like.
+
+## Résidu justifié
+- **P5** en `@Disabled` : `MassProductImporterClient` n'existe que comme `main()` standalone sur le port fixe `8090` (pas la porte aléatoire `@QuarkusTest`), sans assertion ni budget temps ; l'import 80 000 produits + soak quadratique n'a pas de harnais automatisé et polluerait le catalogue partagé. Rien à observer déterministe en CI. Unique résidu.
+
+## Staging / commit
+- Seed/golden : **aucun changement** de ressource (aucun fichier tracké modifié), donc rien d'autre à stager. CLAUDE.md et `.claude/` inchangés.
+- Staged uniquement : `GroupPIT.java` + `reports/e2e-P.md`.
+- Commit `df42b31` — message exact `test: e2e scenarios group P`. **Pas de push.**
+
+Les autres fichiers non suivis (logs de campagne, scripts, autres classes de test, PDF) ont été laissés intacts.
+Tout est vert. Campagne du groupe P terminée et committée.
+
+## Résultat de la campagne
+`mvn -q verify … -Dit.test=GroupPIT` → **Tests run 8, Failures 0, Errors 0, Skipped 1** (BUILD SUCCESS). Les stack-traces `Error validating offer:` / `Error building appliers from factory:` vues en console sont les rejets 500 **attendus** des poisons P1/P3 (assertés sur `valuation_traces.error_message`), pas des échecs.
+
+## Scénarios couverts et étage de chacun
+
+| Id | Scénario | Étage |
+|----|----------|-------|
+| P1 | Idempotence observable (10× même panier) + division-par-zéro du score prouvée INATTEIGNABLE | RestAssured |
+| P2 | Panier de référence maximal — toutes les familles d'offres + 5 invariants structurels G6 | RestAssured |
+| P3 | Deux chemins d'échec de spec : JSON illisible au PERSIST ; non-conforme au schéma à la VALUATION | RestAssured |
+| P4 | Index récursif `Offer.eans` (targetEans / contents[].ean / substituteEans) + `@PreUpdate` | RestAssured (filtre UI) |
+| P5 | Volumétrie 80 000 produits + soak quadratique | **@Disabled** (résidu justifié) |
+| P6 | `availableToUpcell` vide + aucune suggestion sur panier entièrement consommé | RestAssured |
+| P7 | Checksum prix scale-sensible (`1.20` réimporté en `1.2000` → un update) | RestAssured |
+| P8 | Hygiène : `DateTimeProvider.clear()` + teardown GraphQL en ordre inverse | RestAssured + GraphQL |
+
+Aucun scénario `[W]` ni `[P]` dans cette lettre → pas de Playwright ni de profil prod-like.
+
+## Résidu justifié
+- **P5** en `@Disabled` : `MassProductImporterClient` n'existe que comme `main()` standalone sur le port fixe `8090` (pas la porte aléatoire `@QuarkusTest`), sans assertion ni budget temps ; l'import 80 000 produits + soak quadratique n'a pas de harnais automatisé et polluerait le catalogue partagé. Rien à observer déterministe en CI. Unique résidu.
+
+## Staging / commit
+- Seed/golden : **aucun changement** de ressource (aucun fichier tracké modifié), donc rien d'autre à stager. CLAUDE.md et `.claude/` inchangés.
+- Staged uniquement : `GroupPIT.java` + `reports/e2e-P.md`.
+- Commit `df42b31` — message exact `test: e2e scenarios group P`. **Pas de push.**
+
+Les autres fichiers non suivis (logs de campagne, scripts, autres classes de test, PDF) ont été laissés intacts.
+OK: Group P — expected commit landed as HEAD.
+==================== E2E CAMPAIGN SUMMARY ====================
+All requested groups green.
+Campaign done.
