@@ -12,7 +12,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -216,9 +215,7 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
                 DiscountType type = DiscountType.valueOf(typeStr);
                 tiers.add(new DiscountTier(threshold, value, type));
             }
-            // Sort tiers in descending order to easily find the best applicable offer
-            tiers.sort(Comparator.comparing(DiscountTier::getThreshold).reversed());
-            // Pass the code and the list of tiers to the Applier
+            // Ordering is delegated to the shared TierTable built by the applier.
             appliers.add(new FreeDeliveryThresholdApplier(offer.code, tiers));
         });
     }
@@ -230,17 +227,23 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
 
         private static final double AFTER_ALL_STANDARD_DISCOUNTS = -1.0;
         private final String code;
-        private final List<DiscountTier> tiers;
+
+        /**
+         * The tiers, held by the shared {@link TierTable} ("highest reached" semantics).
+         */
+        private final TierTable<DiscountTier> table;
 
         /**
          * Constructs a new FreeDeliveryThresholdApplier.
          *
          * @param code  The offer code.
-         * @param tiers The list of configured discount tiers, sorted descending.
+         * @param tiers The list of configured discount tiers, in any order.
          */
         public FreeDeliveryThresholdApplier(String code, List<DiscountTier> tiers) {
             this.code = code;
-            this.tiers = tiers;
+            this.table = TierTable.of(tiers.stream()
+                    .map(tier -> new TierTable.Tier<>(tier.getThreshold(), tier))
+                    .toList());
         }
 
         /**
@@ -340,19 +343,16 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
 
         /**
          * Finds the best matching discount tier for the given merchandise total.
+         * <p>
+         * Delegates to the shared {@link TierTable}: the highest reached tier wins.
          *
          * @param merchandiseTotal The total merchandise amount.
          * @return The best matching {@link DiscountTier}, or null if none match.
          */
         private DiscountTier getBestDiscountTier(BigDecimal merchandiseTotal) {
-            DiscountTier bestTier = null;
-            for (DiscountTier tier : tiers) {
-                if (merchandiseTotal.compareTo(tier.getThreshold()) >= 0) {
-                    bestTier = tier;
-                    break; // Since sorted descending, the first match is the best one
-                }
-            }
-            return bestTier;
+            return table.resolveHighest(merchandiseTotal)
+                    .map(TierTable.Tier::award)
+                    .orElse(null);
         }
 
         /**

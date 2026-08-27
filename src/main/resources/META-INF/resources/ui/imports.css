@@ -1,0 +1,19 @@
+/*
+ * Imports screen — the CSV deposit zone.
+ *
+ * Every other class on the screen (.card, .field-grid, .input-control, .alert, .btn …) is
+ * shared with the rest of the admin and lives in base.css; only the dashed drop target and
+ * its drag-over state are specific to this screen.
+ */
+.import-drop {
+    padding: 22px;
+    border: 1px dashed var(--im-line);
+    border-radius: var(--radius);
+    background: #fafbfc;
+}
+
+.import-drop.is-dragover {
+    border-style: solid;
+    border-color: var(--im-red);
+    background: #fdf3f4;
+}

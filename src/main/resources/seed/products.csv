@@ -32,3 +32,8 @@ ean|name|description|brand|referenceWeight|referenceVolume|productType|unitName|
 3300000000031|Poêle Antiadhésive 28cm|Poêle fonte alum|Tefal|0.800|0.000|UNIT|pcs|true
 3300000000032|Casserole Inox 20cm|Casserole acier inox|Staub|1.200|0.000|UNIT|pcs|true
 3300000000033|Set de Couteaux Chef|Couteaux acier inox|Sabatier|0.500|0.000|UNIT|pcs|true
+3400025000001|Carte Cadeau 25|Carte cadeau Intermarché|Intermarché|0.010|0.010|UNIT|u|true
+3400050000001|Carte Cadeau 50|Carte cadeau Intermarché|Intermarché|0.010|0.010|UNIT|u|true
+3400018000001|Vin Rouge Bordeaux 75cl|AOC Bordeaux|Château Test|0.750|1.200|UNIT|L|true
+3400409900001|Champignon sauvage non contrôlé|Produit test interdit à la vente|Brand E1|0.300|0.750|UNIT|pc|true
+3660000099999|Lot rappelé (retrait conso)|Produit test interdit à la vente|Brand F1|0.500|1.250|UNIT|pc|true

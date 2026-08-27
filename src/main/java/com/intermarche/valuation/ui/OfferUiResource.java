@@ -5,7 +5,6 @@ import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
 import com.intermarche.valuation.engine.EngineTrait;
-import com.intermarche.valuation.imports.OfferCsvResource;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
 import io.quarkus.qute.CheckedTemplate;
@@ -29,11 +28,8 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
 import jakarta.ws.rs.core.UriBuilder;
-import org.jboss.resteasy.annotations.providers.multipart.MultipartForm;
-import org.jboss.resteasy.annotations.providers.multipart.PartType;
 import org.jboss.logging.Logger;
 
-import java.io.InputStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -101,12 +97,6 @@ public class OfferUiResource implements EngineTrait {
      */
     @Inject
     OfferSchemaRegistry schemaRegistry;
-
-    /**
-     * Bulk CSV importer reused by the upload form of the list screen.
-     */
-    @Inject
-    OfferCsvResource csvResource;
 
     /**
      * Type-safe declarations of the Qute templates used by this resource.
@@ -256,78 +246,6 @@ public class OfferUiResource implements EngineTrait {
             return "";
         }
         return value.replace("\r", " ").replace("\n", " ").replace("|", "/");
-    }
-
-    /**
-     * Imports offers from a CSV file uploaded through the list screen.
-     * <p>
-     * The parsing, chunking and staged transaction handling are delegated to
-     * {@link OfferCsvResource}, so the screen and the {@code /offers/import} endpoint
-     * share one implementation and can never diverge.
-     * <p>
-     * The user is redirected back to the list with a short outcome message rather than
-     * being shown the raw JSON summary returned by the importer.
-     *
-     * @param upload The uploaded CSV content.
-     * @return A redirection to the list screen carrying the import outcome.
-     */
-    @RolesAllowed(AppUser.ROLE_ADMIN)
-    @POST
-    @jakarta.ws.rs.Path("/import")
-    @Consumes(MediaType.MULTIPART_FORM_DATA)
-    @Produces(MediaType.TEXT_HTML)
-    public Response importCsv(@MultipartForm OfferCsvUpload upload) {
-        LOGGER.debug("Entering method importCsv");
-        if (upload == null || upload.file == null) {
-            return redirectWithNotice("No file was selected.", false);
-        }
-        try {
-            Response result = csvResource.importOffers(upload.file);
-            String notice = result.getEntity() == null
-                    ? "Import completed."
-                    : "Import completed: " + result.getEntity();
-            LOGGER.debug("Exiting method importCsv");
-            return redirectWithNotice(notice, true);
-        } catch (Exception e) {
-            LOGGER.error("CSV import failed", e);
-            return redirectWithNotice("Import failed: " + e.getMessage(), false);
-        }
-    }
-
-    /**
-     * Redirects to the list screen carrying a message to display.
-     *
-     * @param notice  The message shown once on the list screen.
-     * @param success Whether the message reports a success.
-     * @return A 303 See Other response.
-     */
-    private Response redirectWithNotice(String notice, boolean success) {
-        URI target = UriBuilder.fromPath("/ui/offers")
-                .queryParam("notice", notice)
-                .queryParam("noticeOk", success)
-                .build();
-        return Response.seeOther(target).build();
-    }
-
-    /**
-     * Multipart payload of the CSV import form.
-     * <p>
-     * The field is public because RESTEasy populates it directly.
-     */
-    public static class OfferCsvUpload {
-
-        /**
-         * The uploaded CSV content.
-         */
-        @FormParam("file")
-        @PartType(MediaType.APPLICATION_OCTET_STREAM)
-        public InputStream file;
-
-        /**
-         * Default constructor required by RESTEasy.
-         */
-        public OfferCsvUpload() {
-        }
     }
 
     /**

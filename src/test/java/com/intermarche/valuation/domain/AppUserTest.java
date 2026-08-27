@@ -345,9 +345,10 @@ class AppUserTest {
         user.password = "hash";
         user.roles = "ADMIN";
         user.displayName = "Alice";
+        user.email = "alice@example.com";
         user.active = true;
         user.mustChangePassword = false;
-        int expected = Objects.hash("alice", "hash", "ADMIN", "Alice", true, false);
+        int expected = Objects.hash("alice", "hash", "ADMIN", "Alice", "alice@example.com", true, false);
         assertEquals(expected, user.getChecksum());
     }
 }

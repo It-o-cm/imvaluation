@@ -1,4 +1,4 @@
-package com.intermarche.valuation.e2e;
+package com.intermarche.e2e;
 
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Product;

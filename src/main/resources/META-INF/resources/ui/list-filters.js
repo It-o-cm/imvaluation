@@ -167,39 +167,3 @@
         init();
     }
 })();
-
-/*
- * CSV import trigger.
- *
- * The file input is kept hidden so the toolbar shows a button consistent with the other
- * actions; picking a file submits the form straight away, since a separate confirmation
- * step would add nothing.
- */
-(function () {
-    'use strict';
-
-    /**
-     * Wires the import button to the hidden file input.
-     */
-    function initImport() {
-        var trigger = document.getElementById('import-trigger');
-        var input = document.getElementById('import-file');
-        var form = document.getElementById('import-form');
-        if (!trigger || !input || !form) { return; }
-
-        trigger.addEventListener('click', function () {
-            input.click();
-        });
-        input.addEventListener('change', function () {
-            if (input.files && input.files.length) {
-                form.submit();
-            }
-        });
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initImport);
-    } else {
-        initImport();
-    }
-})();

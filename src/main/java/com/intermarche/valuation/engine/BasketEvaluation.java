@@ -94,6 +94,9 @@ public class BasketEvaluation {
      * {@code storeCode} present in the basket.
      *
      * @param basket The basket to evaluate.
+     * @throws IllegalStateException if the basket carries a store code that resolves to no
+     *                               store — a configuration error, mirroring the
+     *                               unknown-product contract.
      */
     public BasketEvaluation(Basket basket) {
         this.basket = basket;
@@ -256,6 +259,10 @@ public class BasketEvaluation {
      * caller that owns one particular line: a manual gesture belongs to the line that
      * carries it, and consuming a neighbouring line of the same product would apply the
      * gesture to the wrong quantity and report the wrong line identifier.
+     * <p>
+     * A {@code null} EAN is a valid key here: generic lines (no EAN, price carried by the
+     * line) are pooled under the {@code null} bucket by {@link #feedFrom(Basket)} and are
+     * consumed through this method by their price profile.
      *
      * @param quantityToPick The quantity to consume.
      * @param source         The line whose price profile identifies the entry to draw on.
@@ -263,7 +270,7 @@ public class BasketEvaluation {
      */
     public List<Basket.Item> pickMatching(Double quantityToPick, Basket.Item source) {
         List<Basket.Item> picked = new ArrayList<>();
-        if (quantityToPick == null || source == null || source.produceEan == null) {
+        if (quantityToPick == null || source == null) {
             return picked;
         }
         List<Basket.Item> bucket = toEvaluate.get(source.produceEan);

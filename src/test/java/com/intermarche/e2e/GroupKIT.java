@@ -1,4 +1,4 @@
-package com.intermarche.valuation.e2e;
+package com.intermarche.e2e;
 
 import com.intermarche.valuation.domain.ValuationTrace;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -12,7 +12,6 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;

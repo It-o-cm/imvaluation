@@ -120,7 +120,11 @@ public class Basket {
           "x-item-label": "line",
           "items": {
             "type": "object",
-            "required": ["produceEan", "quantity"],
+            "required": ["quantity"],
+            "anyOf": [
+              { "required": ["produceEan"] },
+              { "required": ["pricePerUnitExclTax", "pricePerUnitInclTax", "vatRate"] }
+            ],
             "properties": {
               "lineId": {
                 "type": "string",
@@ -129,7 +133,7 @@ public class Basket {
               },
               "produceEan": {
                 "type": "string",
-                "description": "EAN of the scanned product.",
+                "description": "EAN of the scanned product. May be omitted for an unknown article, in which case the three price fields are required and the amount is the given price times the quantity.",
                 "minLength": 1,
                 "x-widget": "ean",
                 "x-label": "Product"

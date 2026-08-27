@@ -15,7 +15,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 
-import java.io.ByteArrayInputStream;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -41,8 +40,8 @@ import static org.mockito.Mockito.when;
 /**
  * Unit tests for {@link OfferUiResource}.
  * <p>
- * The resource is a plain JAX-RS bean; its two collaborators ({@link OfferSchemaRegistry} and
- * {@link OfferCsvResource}) are Mockito mocks injected on the package-private fields, and every
+ * The resource is a plain JAX-RS bean; its {@link OfferSchemaRegistry} collaborator is a Mockito
+ * mock injected on the package-private field, and every
  * Panache access resolves to a static of {@link PanacheEntityBase} under plain unit tests, so it
  * is intercepted with {@link org.mockito.Mockito#mockStatic}. The {@code save} path constructs a
  * fresh {@link Offer} and calls {@code persist()}, so it is neutralised with
@@ -65,8 +64,6 @@ import static org.mockito.Mockito.when;
  *   <li>{@code queryOffers}: every {@code isSet} filter (present, blank, null), the {@code append}
  *       first/subsequent condition, the {@code where.length() > 0} guard, and every
  *       {@code buildOrderBy} arm (asc/desc, eans/other, code/non-code tie-breaker).</li>
- *   <li>{@code importCsv}: the {@code upload == null || file == null} guard (all three forms), the
- *       {@code getEntity() == null} ternary and the exception catch.</li>
  *   <li>{@code edit}/{@code update}: the {@code offer == null} 404 guard, both arms.</li>
  *   <li>{@code applyForm}: the code guard, the type guard, the {@code isNew && count > 0} check, the
  *       target-presence conjunction, the {@code schema != null} branch, and the resolve
@@ -171,7 +168,6 @@ class OfferUiResourceTest {
     private OfferUiResource resource(OfferSchemaRegistry registry, OfferCsvResource csv) {
         OfferUiResource resource = new OfferUiResource();
         resource.schemaRegistry = registry;
-        resource.csvResource = csv;
         return resource;
     }
 
@@ -345,82 +341,6 @@ class OfferUiResourceTest {
             mocked.verify(() -> PanacheEntityBase.find(jpql.capture(), any(Object[].class)));
             assertTrue(jpql.getValue().endsWith("order by o.type asc, o.code asc"));
         }
-    }
-
-    // --------------------------------------------------
-    // importCsv
-    // --------------------------------------------------
-
-    /**
-     * A null upload redirects with a failure notice, exercising the true left arm of the file guard.
-     */
-    @Test
-    void importCsvWithNullUploadRedirectsWithFailure() {
-        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
-        Response response = resource.importCsv(null);
-        assertEquals(303, response.getStatus());
-        assertEquals("/ui/offers", response.getLocation().getPath());
-        assertTrue(response.getLocation().getQuery().contains("noticeOk=false"));
-    }
-
-    /**
-     * An upload without a file redirects with a failure notice, exercising the true right arm of the
-     * file guard.
-     */
-    @Test
-    void importCsvWithoutFileRedirectsWithFailure() {
-        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
-        OfferUiResource.OfferCsvUpload upload = new OfferUiResource.OfferCsvUpload();
-        Response response = resource.importCsv(upload);
-        assertEquals(303, response.getStatus());
-        assertTrue(response.getLocation().getQuery().contains("noticeOk=false"));
-    }
-
-    /**
-     * A successful import with an empty importer entity redirects with the plain success notice,
-     * exercising the false file guard and the null-entity ternary arm.
-     */
-    @Test
-    void importCsvWithEmptyEntityRedirectsWithSuccess() {
-        OfferCsvResource csv = mock(OfferCsvResource.class);
-        when(csv.importOffers(any())).thenReturn(Response.ok().build());
-        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), csv);
-        OfferUiResource.OfferCsvUpload upload = new OfferUiResource.OfferCsvUpload();
-        upload.file = new ByteArrayInputStream(new byte[0]);
-        Response response = resource.importCsv(upload);
-        assertEquals(303, response.getStatus());
-        assertTrue(response.getLocation().getQuery().contains("noticeOk=true"));
-    }
-
-    /**
-     * A successful import carrying a summary entity redirects with the detailed success notice,
-     * exercising the non-null entity ternary arm.
-     */
-    @Test
-    void importCsvWithEntityRedirectsWithSuccess() {
-        OfferCsvResource csv = mock(OfferCsvResource.class);
-        when(csv.importOffers(any())).thenReturn(Response.ok("Rows: 5").build());
-        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), csv);
-        OfferUiResource.OfferCsvUpload upload = new OfferUiResource.OfferCsvUpload();
-        upload.file = new ByteArrayInputStream(new byte[0]);
-        Response response = resource.importCsv(upload);
-        assertEquals(303, response.getStatus());
-        assertTrue(response.getLocation().getQuery().contains("noticeOk=true"));
-    }
-
-    /**
-     * An importer failure is caught and reported as a failure notice, exercising the catch branch.
-     */
-    @Test
-    void importCsvOnExceptionRedirectsWithFailure() {
-        OfferCsvResource csv = mock(OfferCsvResource.class);
-        when(csv.importOffers(any())).thenThrow(new RuntimeException("boom"));
-        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), csv);
-        OfferUiResource.OfferCsvUpload upload = new OfferUiResource.OfferCsvUpload();
-        upload.file = new ByteArrayInputStream(new byte[0]);
-        Response response = resource.importCsv(upload);
-        assertEquals(303, response.getStatus());
-        assertTrue(response.getLocation().getQuery().contains("noticeOk=false"));
     }
 
     // --------------------------------------------------

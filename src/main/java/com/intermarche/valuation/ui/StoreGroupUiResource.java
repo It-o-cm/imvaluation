@@ -139,13 +139,18 @@ public class StoreGroupUiResource {
                 return "A group is missing its code.";
             }
             String code = declared.code.trim();
+            String name = declared.name == null || declared.name.isBlank() ? code : declared.name.trim();
             StoreGroup group = StoreGroup.findByCode(code);
             if (group == null) {
                 group = new StoreGroup();
                 group.code = code;
+                // Set the name before persisting: with identity generation persist() inserts
+                // immediately, and a null name would violate the not-null column constraint.
+                group.name = name;
                 group.persist();
+            } else {
+                group.name = name;
             }
-            group.name = declared.name == null || declared.name.isBlank() ? code : declared.name.trim();
             byCode.put(code, group);
         }
 

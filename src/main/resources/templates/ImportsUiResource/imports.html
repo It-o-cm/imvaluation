@@ -1,0 +1,52 @@
+{#include ui/layout}
+
+{#title}Imports{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>Imports</h1>
+        <p class="page-sub">Bulk CSV import, staged fallback 1000→100→10→1, checksum no-op on unchanged rows.</p>
+    </div>
+</div>
+
+{#if notice}
+<div class="alert {#if noticeOk}alert-ok{#else}alert-error{/if}" role="status">{notice}</div>
+{/if}
+
+<div class="card">
+    <div class="card-title-row"><h2 class="card-title">Drop a CSV file</h2></div>
+    <p class="card-sub">Recommended order — each domain references the ones declared before it:
+        Stores → Store groups → Products → Product families → Categories → Prices → Offers.</p>
+    {#if canWrite}
+    <form class="import-drop" method="post" action="/ui/imports/run" enctype="multipart/form-data">
+        <div class="field-grid">
+            <label class="field">
+                <span class="field-label">Domain</span>
+                <select class="input-control" name="domain">
+                    <option value="STORES">1. STORES (referential stores)</option>
+                    <option value="STORE_GROUPS">2. STORE_GROUPS (store hierarchy)</option>
+                    <option value="PRODUCTS">3. PRODUCTS (referential products)</option>
+                    <option value="PRODUCT_FAMILIES">4. PRODUCT_FAMILIES</option>
+                    <option value="CATEGORIES">5. CATEGORIES (product category storages)</option>
+                    <option value="PRICES">6. PRICES</option>
+                    <option value="OFFERS">7. OFFERS</option>
+                </select>
+            </label>
+            <label class="field">
+                <span class="field-label">File (pipe-delimited)</span>
+                <input class="input-control" type="file" name="file" accept=".csv,text/csv,text/plain" required>
+            </label>
+        </div>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">Import</button></div>
+        <p class="field-hint">Drag &amp; drop the file anywhere onto this frame — the domain is preselected from its
+            name (stores.csv → STORES, offers.csv → OFFERS, etc.).</p>
+    </form>
+    {#else}
+    <p class="placeholder-note">Admin rights are required to run an import.</p>
+    {/if}
+</div>
+
+<script src="/ui/imports.js"></script>
+{/body}
+{/include}
