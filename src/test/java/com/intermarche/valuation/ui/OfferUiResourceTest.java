@@ -264,7 +264,7 @@ class OfferUiResourceTest {
             when(query.list()).thenReturn(List.of());
             Response response = resource.export(null, null, null, null, "code", "asc");
             assertEquals(200, response.getStatus());
-            assertEquals("offer_code|offer_type|specification|store_code|store_group_code\n", response.getEntity());
+            assertEquals("CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n", response.getEntity());
             assertEquals("attachment; filename=\"offers.csv\"", response.getHeaderString("Content-Disposition"));
             ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
             mocked.verify(() -> PanacheEntityBase.find(jpql.capture(), any(Object[].class)));

@@ -418,6 +418,14 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
 
         /**
          * Helper to create a split item and add it to a bundle list.
+         * <p>
+         * The split CARRIES ITS SHARE of the source slice's source lines:
+         * a picked slice may aggregate several request lines of the same
+         * EAN (two scans of the same product), and dropping that breakdown
+         * would pin every bundle portion on a single lineId — the register
+         * then reconciles one line and reverts the other to its catalog
+         * price. The source's list is consumed in order, exactly like the
+         * evaluation's own pick.
          *
          * @param bundleList The list to add the item to.
          * @param source     The original item.
@@ -428,7 +436,42 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
             split.produceEan = source.produceEan;
             split.lineId = source.lineId;
             split.quantity = quantity;
+            split.sourceLines = takeSourceLines(source, quantity);
+            if (split.sourceLines != null && !split.sourceLines.isEmpty()) {
+                split.lineId = split.sourceLines.get(0).lineId;
+            }
             bundleList.add(split);
+        }
+
+        /**
+         * Consumes up to the given quantity from the source item's source
+         * lines, in order, returning the taken breakdown (mirrors the
+         * evaluation's pick-time consumption).
+         *
+         * @param source   The item whose source-line list is consumed.
+         * @param quantity The quantity to take.
+         * @return the taken source lines, or null when the source carries none
+         */
+        private List<Basket.Item.SourceLine> takeSourceLines(Basket.Item source, double quantity) {
+            if (source.sourceLines == null || source.sourceLines.isEmpty()) {
+                return null;
+            }
+            List<Basket.Item.SourceLine> taken = new ArrayList<>();
+            double remaining = quantity;
+            java.util.Iterator<Basket.Item.SourceLine> it = source.sourceLines.iterator();
+            while (it.hasNext() && remaining > 1e-9) {
+                Basket.Item.SourceLine line = it.next();
+                double slice = Math.min(line.quantity, remaining);
+                taken.add(new Basket.Item.SourceLine(line.lineId, slice));
+                remaining -= slice;
+                if (slice >= line.quantity - 1e-9) {
+                    it.remove();
+                } else {
+                    line.quantity = java.math.BigDecimal.valueOf(line.quantity - slice)
+                            .setScale(6, java.math.RoundingMode.HALF_UP).doubleValue();
+                }
+            }
+            return taken;
         }
 
         /**

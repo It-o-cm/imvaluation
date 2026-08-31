@@ -56,7 +56,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * priority, E7 over-long specification) only the deterministic {@code Line N (<code>):} prefix and
  * the zero-row DB outcome are pinned, never the wrapped constraint text.
  * <p>
- * CALIBRATION — E6 usage message. The bulk chunk throws {@code PriceUsage is mandatory at column 5}
+ * CALIBRATION — E6 usage message. The bulk chunk throws {@code PriceUsage is mandatory in column PRICE_USAGE}
  * (from {@code feedPrice}) but the definitive {@code errors[]} entry is produced by the 1-by-1
  * fallback, whose {@code retrievePrices} throws the shorter {@code PriceUsage is mandatory}. The
  * catalog lists both spellings; the assertion pins the common substring {@code PriceUsage is
@@ -89,7 +89,7 @@ class GroupEIT {
      */
     private void seedStore(String code, String name) {
         String body = importCsv("/stores/import",
-                "code|name|s1|s2|pc|city|country|lat|lon\n"
+                "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n"
                         + code + "|" + name + "|1 rue||59000|Lille|FR|50.6|3.0\n");
         assertTrue(body.contains("\"createdCount\":1"), "Store seed must create exactly one row: " + body);
     }
@@ -102,7 +102,7 @@ class GroupEIT {
      */
     private void seedProduct(String ean, String name) {
         String body = importCsv("/products/import",
-                "ean|name|desc|brand|refW|refV|type|unit|active\n"
+                "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n"
                         + ean + "|" + name + "|desc|BRAND|||UNIT|piece|true\n");
         assertTrue(body.contains("\"createdCount\":1"), "Product seed must create exactly one row: " + body);
     }
@@ -120,7 +120,7 @@ class GroupEIT {
     @Test
     void e1_upsertByCodeCoordinatesSilentlyOptional() {
         String created = importCsv("/stores/import",
-                "code|name|s1|s2|pc|city|country|lat|lon\n"
+                "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n"
                         + "E1S1|E1 Store|1 rue||59000|Lille|FR|not-a-number|also-bad\n");
         assertTrue(created.contains("{\"createdCount\":1, \"updatedCount\":0}"),
                 "Unparseable coordinates must not block the creation: " + created);
@@ -131,7 +131,7 @@ class GroupEIT {
             assertNull(store.address.longitude, "An unparseable longitude must be stored as null");
         });
         String updated = importCsv("/stores/import",
-                "code|name|s1|s2|pc|city|country|lat|lon\n"
+                "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n"
                         + "E1S1|E1 Store|1 rue||59000|Lille|FR|50.6|3.06\n");
         assertTrue(updated.contains("{\"createdCount\":0, \"updatedCount\":1}"),
                 "Re-importing the same code with new coordinates must be one update: " + updated);
@@ -151,7 +151,7 @@ class GroupEIT {
     @Test
     void e1_emptyNameRejected() {
         String body = importCsv("/stores/import",
-                "code|name|s1|s2|pc|city|country|lat|lon\n"
+                "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n"
                         + "E1NONAME||1 rue||59000|Lille|FR|50.6|3.0\n");
         assertTrue(body.contains("\"createdCount\":0"), "An empty-name row must create nothing: " + body);
         assertTrue(body.contains("Line 2 (E1NONAME):"), "The faulty row must be isolated by its line: " + body);
@@ -175,11 +175,11 @@ class GroupEIT {
         seedStore("E2SA", "E2 Store A");
         seedStore("E2SB", "E2 Store B");
         String created = importCsv("/store-groups/import",
-                "group_code|group_name|store_codes|store_group_codes\n"
+                "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E2GRP|Group One|E2SA;E2SB|\n");
         assertTrue(created.contains("\"createdCount\":1"), "The group must be created: " + created);
         String updated = importCsv("/store-groups/import",
-                "group_code|group_name|store_codes|store_group_codes\n"
+                "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E2GRP|Group Renamed|E2SA|\n");
         assertTrue(updated.contains("\"updatedCount\":1"), "The rename must be counted as one update: " + updated);
         QuarkusTransaction.requiringNew().run(() -> {
@@ -200,7 +200,7 @@ class GroupEIT {
     @Test
     void e2_unknownStoreRejected() {
         String body = importCsv("/store-groups/import",
-                "group_code|group_name|store_codes|store_group_codes\n"
+                "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E2BADSTORE|Grp|E2NOSUCH|\n");
         assertTrue(body.contains("\"createdCount\":0"), "The group must be rolled back: " + body);
         assertTrue(body.contains("Store 'E2NOSUCH' not found."), "The literal store-not-found text must appear: " + body);
@@ -216,7 +216,7 @@ class GroupEIT {
     @Test
     void e2_unknownSubGroupOrderingGuard() {
         String body = importCsv("/store-groups/import",
-                "group_code|group_name|store_codes|store_group_codes\n"
+                "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E2BADSUB|Grp||E2NOSUCHGRP\n");
         assertTrue(body.contains("\"createdCount\":0"), "The group must be rolled back: " + body);
         assertTrue(body.contains(
@@ -233,11 +233,11 @@ class GroupEIT {
     @Test
     void e2_selfContainmentAccepted() {
         String created = importCsv("/store-groups/import",
-                "group_code|group_name|store_codes|store_group_codes\n"
+                "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E2SELF|Self Group||\n");
         assertTrue(created.contains("\"createdCount\":1"), "The group must be created first: " + created);
         String looped = importCsv("/store-groups/import",
-                "group_code|group_name|store_codes|store_group_codes\n"
+                "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E2SELF|Self Group||E2SELF\n");
         assertTrue(looped.contains("\"createdCount\":0"), "No new group is created by the self-loop: " + looped);
         assertFalse(looped.contains("not found"), "Self-containment must not raise a not-found error: " + looped);
@@ -264,7 +264,7 @@ class GroupEIT {
     @Test
     void e3_activeEmptyDefaultsToFalse() {
         String body = importCsv("/products/import",
-                "ean|name|desc|brand|refW|refV|type|unit|active\n"
+                "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n"
                         + "E3ACTIVE|E3 Product|desc|BRAND|||UNIT|piece|\n");
         assertTrue(body.contains("\"createdCount\":1"), "The product must be created: " + body);
         QuarkusTransaction.requiringNew().run(() -> {
@@ -283,7 +283,7 @@ class GroupEIT {
     @Test
     void e3_unknownProductTypeRejected() {
         String body = importCsv("/products/import",
-                "ean|name|desc|brand|refW|refV|type|unit|active\n"
+                "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n"
                         + "E3BADTYPE|E3 Product|desc|BRAND|||BOGUS|piece|true\n");
         assertTrue(body.contains("\"createdCount\":0"), "An unknown type must create nothing: " + body);
         assertTrue(body.contains("Line 2 (E3BADTYPE):"), "The faulty row must be isolated by its line: " + body);
@@ -307,11 +307,11 @@ class GroupEIT {
     @Test
     void e4_existingFamilyUpdateCountedAndPersistedHere() {
         String created = importCsv("/product-families/import",
-                "code|description|flags|product_eans|family_codes\n"
+                "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n"
                         + "E4FAM|First Description|||\n");
         assertTrue(created.contains("\"createdCount\":1"), "The family must be created: " + created);
         String updated = importCsv("/product-families/import",
-                "code|description|flags|product_eans|family_codes\n"
+                "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n"
                         + "E4FAM|Second Description|||\n");
         assertTrue(updated.contains("\"updatedCount\":1"), "The description change must be counted as one update: " + updated);
         QuarkusTransaction.requiringNew().run(() -> {
@@ -330,7 +330,7 @@ class GroupEIT {
     @Test
     void e4_unknownProductEanRejected() {
         String body = importCsv("/product-families/import",
-                "code|description|flags|product_eans|family_codes\n"
+                "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n"
                         + "E4BADPROD|Desc||E4NOSUCHEAN|\n");
         assertTrue(body.contains("\"createdCount\":0"), "The family must be rolled back: " + body);
         assertTrue(body.contains("Product EAN 'E4NOSUCHEAN' not found."),
@@ -346,7 +346,7 @@ class GroupEIT {
     @Test
     void e4_unknownSubFamilyRejected() {
         String body = importCsv("/product-families/import",
-                "code|description|flags|product_eans|family_codes\n"
+                "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n"
                         + "E4BADSUB|Desc|||E4NOSUCHFAM\n");
         assertTrue(body.contains("\"createdCount\":0"), "The family must be rolled back: " + body);
         assertTrue(body.contains("SubFamily code 'E4NOSUCHFAM' not found."),
@@ -361,11 +361,11 @@ class GroupEIT {
     @Test
     void e4_selfReferenceRejected() {
         String created = importCsv("/product-families/import",
-                "code|description|flags|product_eans|family_codes\n"
+                "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n"
                         + "E4SELF|Desc|||\n");
         assertTrue(created.contains("\"createdCount\":1"), "The family must be created first: " + created);
         String looped = importCsv("/product-families/import",
-                "code|description|flags|product_eans|family_codes\n"
+                "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n"
                         + "E4SELF|Desc|||E4SELF\n");
         assertTrue(looped.contains("Family 'E4SELF' cannot contain itself."),
                 "The self-reference guard text must appear verbatim: " + looped);
@@ -386,11 +386,11 @@ class GroupEIT {
     void e5_midLevelChangeDetectedAsUpdate() {
         seedProduct("E5PROD", "E5 Product");
         String created = importCsv("/product-category-storages/import",
-                "productEan|level1|level2|level3|level4|level5\n"
+                "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n"
                         + "E5PROD|L1|L2a|L3|L4|L5\n");
         assertTrue(created.contains("\"createdCount\":1"), "The storage must be created: " + created);
         String updated = importCsv("/product-category-storages/import",
-                "productEan|level1|level2|level3|level4|level5\n"
+                "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n"
                         + "E5PROD|L1|L2b|L3|L4|L5\n");
         assertTrue(updated.contains("\"updatedCount\":1"),
                 "A change confined to level2 must still be one update: " + updated);
@@ -410,7 +410,7 @@ class GroupEIT {
     @Test
     void e5_unknownEanQuoted() {
         String body = importCsv("/product-category-storages/import",
-                "productEan|level1|level2|level3|level4|level5\n"
+                "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n"
                         + "E5NOSUCH|L1|L2|L3|L4|L5\n");
         assertTrue(body.contains("\"createdCount\":0"), "The storage must be rolled back: " + body);
         assertTrue(body.contains("Product with EAN 'E5NOSUCH' not found."),
@@ -431,11 +431,11 @@ class GroupEIT {
         seedProduct("E6PEND", "E6 Product End");
         seedStore("E6SEND", "E6 Store End");
         String created = importCsv("/prices/import",
-                "ean|store|excl|incl|vat|usage|priority|start|end\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "E6PEND|E6SEND|10.00|12.00|0.20|DEFAULT|1|2025-01-01T00:00:00|2025-06-30T00:00:00\n");
         assertTrue(created.contains("\"createdCount\":1"), "The price must be created: " + created);
         String updated = importCsv("/prices/import",
-                "ean|store|excl|incl|vat|usage|priority|start|end\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "E6PEND|E6SEND|10.00|12.00|0.20|DEFAULT|1|2025-01-01T00:00:00|2025-12-31T00:00:00\n");
         assertTrue(updated.contains("\"updatedCount\":1"), "The end-date change must be one update: " + updated);
         long[] count = new long[1];
@@ -458,10 +458,10 @@ class GroupEIT {
         seedProduct("E6PPRIO", "E6 Product Prio");
         seedStore("E6SPRIO", "E6 Store Prio");
         importCsv("/prices/import",
-                "ean|store|excl|incl|vat|usage|priority|start|end\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "E6PPRIO|E6SPRIO|10.00|12.00|0.20|DEFAULT|1|2025-01-01T00:00:00|2025-12-31T00:00:00\n");
         String second = importCsv("/prices/import",
-                "ean|store|excl|incl|vat|usage|priority|start|end\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "E6PPRIO|E6SPRIO|10.00|12.00|0.20|DEFAULT|2|2025-01-01T00:00:00|2025-12-31T00:00:00\n");
         assertTrue(second.contains("\"createdCount\":1"),
                 "A different priority must create, not update: " + second);
@@ -482,7 +482,7 @@ class GroupEIT {
         seedProduct("E6PUSAGE", "E6 Product Usage");
         seedStore("E6SUSAGE", "E6 Store Usage");
         String body = importCsv("/prices/import",
-                "ean|store|excl|incl|vat|usage|priority|start|end\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "E6PUSAGE|E6SUSAGE|10.00|12.00|0.20|BOGUS|1|2025-01-01T00:00:00|2025-12-31T00:00:00\n");
         assertTrue(body.contains("\"createdCount\":0"), "An invalid usage must create nothing: " + body);
         assertTrue(body.contains("PriceUsage is mandatory"), "The mandatory-usage text must appear: " + body);
@@ -499,7 +499,7 @@ class GroupEIT {
     void e6_unknownEanUnquoted() {
         seedStore("E6SNOEAN", "E6 Store No Ean");
         String body = importCsv("/prices/import",
-                "ean|store|excl|incl|vat|usage|priority|start|end\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "E6NOSUCH|E6SNOEAN|10.00|12.00|0.20|DEFAULT|1|2025-01-01T00:00:00|2025-12-31T00:00:00\n");
         assertTrue(body.contains("\"createdCount\":0"), "The price must be rolled back: " + body);
         assertTrue(body.contains("Product with EAN E6NOSUCH not found."),
@@ -516,7 +516,7 @@ class GroupEIT {
         seedProduct("E6PNOPRIO", "E6 Product No Prio");
         seedStore("E6SNOPRIO", "E6 Store No Prio");
         String body = importCsv("/prices/import",
-                "ean|store|excl|incl|vat|usage|priority|start|end\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "E6PNOPRIO|E6SNOPRIO|10.00|12.00|0.20|DEFAULT||2025-01-01T00:00:00|2025-12-31T00:00:00\n");
         assertTrue(body.contains("\"createdCount\":0"), "An empty priority must create nothing: " + body);
         assertTrue(body.contains("Line 2 (E6PNOPRIO):"), "The faulty row must be isolated by its line: " + body);
@@ -534,7 +534,7 @@ class GroupEIT {
         seedProduct("E6PDATE", "E6 Product Date");
         seedStore("E6SDATE", "E6 Store Date");
         String body = importCsv("/prices/import",
-                "ean|store|excl|incl|vat|usage|priority|start|end\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "E6PDATE|E6SDATE|10.00|12.00|0.20|DEFAULT|1|31/12/2025|2025-12-31T00:00:00\n");
         assertTrue(body.contains("\"createdCount\":1"),
                 "A non-ISO start date must not block the creation: " + body);
@@ -557,7 +557,7 @@ class GroupEIT {
     @Test
     void e7_noTargetRejected() {
         String body = importCsv("/offers/import",
-                "offer_code|offer_type|specification|store_code|store_group_code\n"
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E7NOTGT|MEAL_VOUCHER|{}||\n");
         assertTrue(body.contains("\"createdCount\":0"), "The offer must be rolled back: " + body);
         assertTrue(body.contains("Line 2: Must define at least one store_code or store_group_code."),
@@ -574,7 +574,7 @@ class GroupEIT {
     @Test
     void e7_unknownStoreTargetRejected() {
         String body = importCsv("/offers/import",
-                "offer_code|offer_type|specification|store_code|store_group_code\n"
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E7BADSTORE|MEAL_VOUCHER|{}|E7NOSUCH|\n");
         assertTrue(body.contains("\"createdCount\":0"), "The offer must be rolled back: " + body);
         assertTrue(body.contains("Store code 'E7NOSUCH' not found."),
@@ -588,7 +588,7 @@ class GroupEIT {
     @Test
     void e7_unknownGroupTargetRejected() {
         String body = importCsv("/offers/import",
-                "offer_code|offer_type|specification|store_code|store_group_code\n"
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E7BADGRP|MEAL_VOUCHER|{}||E7NOSUCHGRP\n");
         assertTrue(body.contains("\"createdCount\":0"), "The offer must be rolled back: " + body);
         assertTrue(body.contains("StoreGroup code 'E7NOSUCHGRP' not found."),
@@ -605,7 +605,7 @@ class GroupEIT {
     void e7_unknownTypeAcceptedAndStored() {
         seedStore("E7STYPE", "E7 Store Type");
         String body = importCsv("/offers/import",
-                "offer_code|offer_type|specification|store_code|store_group_code\n"
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E7BOGUS|TOTALLY_UNKNOWN_TYPE|{}|E7STYPE|\n");
         assertTrue(body.contains("\"createdCount\":1"), "An unknown type must still be accepted: " + body);
         QuarkusTransaction.requiringNew().run(() -> {
@@ -625,7 +625,7 @@ class GroupEIT {
     void e7_invalidSpecificationJsonRejected() {
         seedStore("E7SSPEC", "E7 Store Spec");
         String body = importCsv("/offers/import",
-                "offer_code|offer_type|specification|store_code|store_group_code\n"
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E7SPEC|MEAL_VOUCHER|{not valid json|E7SSPEC|\n");
         assertTrue(body.contains("\"createdCount\":0"), "A bad spec must create nothing: " + body);
         assertTrue(body.contains("Failed to parse specification for Offer E7SPEC:"),
@@ -648,7 +648,7 @@ class GroupEIT {
             pad.append('a');
         }
         String body = importCsv("/offers/import",
-                "offer_code|offer_type|specification|store_code|store_group_code\n"
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E7LONG|MEAL_VOUCHER|{\"pad\":\"" + pad + "\"}|E7SLONG|\n");
         assertTrue(body.contains("\"createdCount\":0"), "An over-long spec must create nothing: " + body);
         assertTrue(body.contains("Line 2 (E7LONG):"), "The faulty row must be isolated by its line: " + body);
@@ -668,11 +668,11 @@ class GroupEIT {
         seedStore("E7RA", "E7 Store RA");
         seedStore("E7RB", "E7 Store RB");
         String created = importCsv("/offers/import",
-                "offer_code|offer_type|specification|store_code|store_group_code\n"
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E7REPL|MEAL_VOUCHER|{}|E7RA,E7RB|\n");
         assertTrue(created.contains("\"createdCount\":1"), "The offer must be created with two stores: " + created);
         String updated = importCsv("/offers/import",
-                "offer_code|offer_type|specification|store_code|store_group_code\n"
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"
                         + "E7REPL|MEAL_VOUCHER|{}|E7RA|\n");
         assertTrue(updated.contains("\"updatedCount\":1"), "Replacing the targets must be one update: " + updated);
         QuarkusTransaction.requiringNew().run(() -> {

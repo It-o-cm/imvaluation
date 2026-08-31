@@ -23,10 +23,11 @@ import java.util.*;
  * This class extends {@link ImporterCsvResource} to handle specific logic for {@link ProductFamily} entities.
  * It manages the linking of Products and Sub-Families, and leverages the base class for the staged transaction management (1000 -> 100 -> 10 -> 1).
  * <p>
- * CSV Format (5 columns):
- * code|description|flags|product_eans|family_codes
+ * Consumed columns (resolved by header name; unknown columns of the
+ * shared feed are ignored): CODE (key), DESCRIPTION, FLAGS, PRODUCT_EANS,
+ * SUBFAMILY_CODES.
  * <p>
- * Note: product_eans and family_codes can contain multiple values separated by commas.
+ * Note: PRODUCT_EANS and SUBFAMILY_CODES can contain multiple values separated by commas.
  */
 @Path("/product-families/import")
 @ApplicationScoped
@@ -38,6 +39,21 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
     // Keys used to store auxiliary maps in the generic context map
     private static final String CTX_PRODUCTS = "__CTX_PRODUCTS__";
     private static final String CTX_SUB_FAMILIES = "__CTX_SUB_FAMILIES__";
+
+    /** Header name of the natural key: the family code. */
+    static final String COL_CODE = "CODE";
+    /** Header name of the family description. */
+    static final String COL_DESCRIPTION = "DESCRIPTION";
+    /** Header name of the family flags. */
+    static final String COL_FLAGS = "FLAGS";
+    /** Header name of the comma-separated member product EANs. */
+    static final String COL_PRODUCT_EANS = "PRODUCT_EANS";
+    /** Header name of the comma-separated sub-family codes. */
+    static final String COL_SUBFAMILY_CODES = "SUBFAMILY_CODES";
+
+    /** The columns this importer cannot work without. */
+    static final List<String> REQUIRED_COLUMNS = List.of(
+            COL_DESCRIPTION, COL_FLAGS, COL_PRODUCT_EANS, COL_SUBFAMILY_CODES);
 
     /**
      * Imports or updates product families from a CSV stream.
@@ -51,8 +67,7 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
     @Produces(MediaType.APPLICATION_JSON)
     @RolesAllowed("ADMIN")
     public Response importProductFamilies(InputStream inputStream) {
-        // 5 columns expected: code, description, flags, products, sub-families
-        return this.importCsvStream(inputStream, 5);
+        return this.importCsvStream(inputStream, COL_CODE, REQUIRED_COLUMNS);
     }
 
     /**
@@ -115,7 +130,7 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
     private Set<String> getProductSubFamilyCodes(List<LineData> parsedLines) {
         Set<String> targetSubFamilyCodes = new HashSet<>();
         for (LineData data : parsedLines) {
-            targetSubFamilyCodes.addAll(parseCodes(data.parts[4]));
+            targetSubFamilyCodes.addAll(parseCodes(data.get(COL_SUBFAMILY_CODES)));
         }
         return targetSubFamilyCodes;
     }
@@ -146,7 +161,7 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
         // 1. Extract sets of related codes for bulk fetching
         Set<String> targetProductEans = new HashSet<>();
         for (LineData data : parsedLines) {
-            targetProductEans.addAll(parseCodes(data.parts[3]));
+            targetProductEans.addAll(parseCodes(data.get(COL_PRODUCT_EANS)));
         }
         return targetProductEans;
     }
@@ -188,9 +203,9 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
         // 1. Retrieve Family
         ProductFamily family = (ProductFamily) entityMap.get(data.code);
         // 2. Retrieve Auxiliary Maps
-        List<String> requestedEans = parseCodes(data.parts[3]);
+        List<String> requestedEans = parseCodes(data.get(COL_PRODUCT_EANS));
         Map<String, Product> productMap = retrieveProducts(entityMap, requestedEans);
-        List<String> requestedSubCodes = parseCodes(data.parts[4]);
+        List<String> requestedSubCodes = parseCodes(data.get(COL_SUBFAMILY_CODES));
         Map<String, ProductFamily> subFamilyMap = retrieveSubProductFamilies(entityMap, requestedSubCodes);
         // 4. Business Logic (Create/Update)
         boolean isNew = (family == null);
@@ -252,8 +267,8 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
      */
     private void prepareProductFamily(LineData data, ProductFamily family, List<String> requestedEans, Map<String, Product> productMap) {
         // Update Fields
-        family.description = safeGet(data.parts, 1);
-        family.flags = safeGet(data.parts, 2);
+        family.description = safeGet(data, COL_DESCRIPTION);
+        family.flags = safeGet(data, COL_FLAGS);
         // Handle Product Linking
         family.products.clear();
         for (String ean : requestedEans) {
@@ -333,8 +348,8 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
     private int computeIncomingChecksum(LineData data) {
         return Objects.hash(
                 data.code,
-                safeGet(data.parts, 1), // description
-                safeGet(data.parts, 2)  // flags
+                safeGet(data, COL_DESCRIPTION), // description
+                safeGet(data, COL_FLAGS)        // flags
         );
     }
 }

@@ -23,14 +23,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
  * Unit tests for {@link ImporterCsvResource}.
  * <p>
- * This class tests the generic CSV parsing, transaction management, and fallback logic
- * provided by the abstract base class.
+ * This class tests the generic CSV parsing (header-driven, columns resolved
+ * BY NAME), transaction management, and fallback logic provided by the
+ * abstract base class.
  */
 @QuarkusTest
 public class ImporterCsvResourceTest {
@@ -50,6 +50,9 @@ public class ImporterCsvResourceTest {
      * Mocked static Panache context.
      */
     private MockedStatic<Panache> panacheMock;
+
+    /** Header names of the test rows, in cell order. */
+    private static final String[] TEST_HEADER = {"code", "name"};
 
     /**
      * Sets up the test environment.
@@ -74,6 +77,22 @@ public class ImporterCsvResourceTest {
     @AfterEach
     void tearDown() {
         panacheMock.close();
+    }
+
+    /**
+     * Builds a header-bound row for the test importer: the header maps the
+     * TEST_HEADER names onto the cell positions and "code" is the key column.
+     *
+     * @param lineNumber The 1-based line number.
+     * @param cells The raw cells of the row.
+     * @return The header-bound line.
+     */
+    private static ImporterCsvResource.LineData line(int lineNumber, String... cells) {
+        Map<String, Integer> header = new LinkedHashMap<>();
+        for (int i = 0; i < TEST_HEADER.length; i++) {
+            header.put(TEST_HEADER[i], i);
+        }
+        return new ImporterCsvResource.LineData(lineNumber, header, cells, TEST_HEADER[0]);
     }
 
     // --------------------------------------------------
@@ -109,7 +128,7 @@ public class ImporterCsvResourceTest {
                 "CODE1|Item 1\n" +
                 "CODE2|Item 2";
         ByteArrayInputStream stream = new ByteArrayInputStream(csvContent.getBytes(StandardCharsets.UTF_8));
-        Response response = resource.importCsvStream(stream, 2);
+        Response response = resource.importCsvStream(stream, "code", List.of("name"));
         assertEquals(200, response.getStatus());
         // Verify the abstract method was called to process lines
         assertEquals(2, resource.capturedLines.size());
@@ -136,7 +155,7 @@ public class ImporterCsvResourceTest {
                 "CODE1|Item 1";
         ByteArrayInputStream stream = new ByteArrayInputStream(csvContent.getBytes(StandardCharsets.UTF_8));
 
-        Response response = resource.importCsvStream(stream, 2);
+        Response response = resource.importCsvStream(stream, "code", List.of("name"));
 
         // Verify that the catch (Throwable e) block was triggered
         assertEquals(500, response.getStatus());
@@ -147,21 +166,71 @@ public class ImporterCsvResourceTest {
     }
 
     /**
-     * Tests CSV import handling of lines with insufficient columns.
-     * Verifies that bad lines are skipped and added to the error list.
+     * Tests CSV import handling of lines with fewer cells than the header.
+     * Verifies that truncated lines are skipped and added to the error list.
      */
     @Test
     void testImportCsvStream_WrongColumnCount() throws Exception {
         String csvContent = "code|name|extra\n" +
                 "CODE1|Item|1\n" +
-                "CODE2|Item"; // Missing 3rd column
+                "CODE2|Item"; // Missing 3rd cell
         ByteArrayInputStream stream = new ByteArrayInputStream(csvContent.getBytes(StandardCharsets.UTF_8));
-        Response response = resource.importCsvStream(stream, 3);
+        Response response = resource.importCsvStream(stream, "code", List.of("name", "extra"));
         assertEquals(200, response.getStatus()); // Returns 200 with errors list, not 500
         String entity = response.getEntity().toString();
         assertTrue(entity.contains("\"createdCount\":1")); // Only CODE1 processed
         assertTrue(entity.contains("errors"));
-        assertTrue(entity.contains("not enough columns"));
+        assertTrue(entity.contains("fewer cells than the header"));
+    }
+
+    /**
+     * Tests that a header missing the key column or a required column rejects
+     * the file with a 400 naming the missing columns, before any processing.
+     */
+    @Test
+    void testImportCsvStream_MissingRequiredColumns() {
+        String csvContent = "other|name\n" +
+                "CODE1|Item 1\n";
+        ByteArrayInputStream stream = new ByteArrayInputStream(csvContent.getBytes(StandardCharsets.UTF_8));
+        Response response = resource.importCsvStream(stream, "code", List.of("name", "extra"));
+        assertEquals(400, response.getStatus());
+        assertEquals("{\"error\":\"Missing required columns: code, extra\"}", response.getEntity().toString());
+        assertTrue(resource.capturedLines.isEmpty());
+    }
+
+    /**
+     * Tests that a duplicate header name keeps its FIRST index (first
+     * occurrence wins): the key is read from the first "code" column.
+     */
+    @Test
+    void testImportCsvStream_DuplicateHeaderFirstWins() {
+        String csvContent = "code|code\n" +
+                "FIRST|SECOND\n";
+        ByteArrayInputStream stream = new ByteArrayInputStream(csvContent.getBytes(StandardCharsets.UTF_8));
+        Response response = resource.importCsvStream(stream, "code", List.of());
+        assertEquals(200, response.getStatus());
+        assertEquals(1, resource.capturedLines.size());
+        assertEquals("FIRST", resource.capturedLines.get(0).code);
+        assertTrue(response.getEntity().toString().contains("\"createdCount\":1"));
+    }
+
+    /**
+     * Tests that a data line whose key cell is empty is reported and skipped
+     * (empty-key arm) without stopping the import of the other lines.
+     */
+    @Test
+    void testImportCsvStream_EmptyKeyLine() {
+        String csvContent = "code|name\n" +
+                "|orphan\n" +
+                "CODE1|Item 1\n";
+        ByteArrayInputStream stream = new ByteArrayInputStream(csvContent.getBytes(StandardCharsets.UTF_8));
+        Response response = resource.importCsvStream(stream, "code", List.of("name"));
+        assertEquals(200, response.getStatus());
+        assertEquals(1, resource.capturedLines.size());
+        assertEquals("CODE1", resource.capturedLines.get(0).code);
+        String entity = response.getEntity().toString();
+        assertTrue(entity.contains("\"createdCount\":1"));
+        assertTrue(entity.contains("Line 2 ignored (empty key 'code')"));
     }
 
     /**
@@ -174,7 +243,7 @@ public class ImporterCsvResourceTest {
                 "CODE1|Item 1\n" +
                 "   \n";
         ByteArrayInputStream stream = new ByteArrayInputStream(csvContent.getBytes(StandardCharsets.UTF_8));
-        Response response = resource.importCsvStream(stream, 2);
+        Response response = resource.importCsvStream(stream, "code", List.of("name"));
         assertEquals(200, response.getStatus());
         assertEquals(1, resource.capturedLines.size());
     }
@@ -189,7 +258,7 @@ public class ImporterCsvResourceTest {
             sb.append("CODE").append(i).append("|Name").append(i).append("\n");
         }
         ByteArrayInputStream stream = new ByteArrayInputStream(sb.toString().getBytes(StandardCharsets.UTF_8));
-        Response response = resource.importCsvStream(stream, 2);
+        Response response = resource.importCsvStream(stream, "code", List.of("name"));
         assertEquals(200, response.getStatus());
         assertEquals(5, resource.capturedLines.size());
     }
@@ -208,7 +277,7 @@ public class ImporterCsvResourceTest {
         // One extra line that will remain in the final buffer
         sb.append("CODE_LAST|Last Item\n");
         ByteArrayInputStream stream = new ByteArrayInputStream(sb.toString().getBytes(StandardCharsets.UTF_8));
-        Response response = resource.importCsvStream(stream, 2);
+        Response response = resource.importCsvStream(stream, "code", List.of("name"));
         assertEquals(200, response.getStatus());
         String entity = response.getEntity().toString();
         // The simple fact that the test finishes without error validates the truncation logic
@@ -222,7 +291,7 @@ public class ImporterCsvResourceTest {
     void testImportCsvStream_OnlyHeader() throws Exception {
         String csvContent = "code|name\n"; // No data
         ByteArrayInputStream stream = new ByteArrayInputStream(csvContent.getBytes(StandardCharsets.UTF_8));
-        Response response = resource.importCsvStream(stream, 2);
+        Response response = resource.importCsvStream(stream, "code", List.of("name"));
         assertEquals(200, response.getStatus());
         assertTrue(response.getEntity().toString().contains("\"createdCount\":0"));
     }
@@ -234,12 +303,18 @@ public class ImporterCsvResourceTest {
     @Test
     void testImportCsvStream_IOException() {
         InputStream brokenStream = new InputStream() {
+            /**
+             * Always fails to simulate an unreadable stream.
+             *
+             * @return Never returns normally.
+             * @throws IOException Always.
+             */
             @Override
             public int read() throws IOException {
                 throw new IOException("Simulated Read Error");
             }
         };
-        Response response = resource.importCsvStream(brokenStream, 2);
+        Response response = resource.importCsvStream(brokenStream, "code", List.of("name"));
         assertEquals(500, response.getStatus());
         assertTrue(response.getEntity().toString().contains("Error reading file"));
         assertTrue(response.getEntity().toString().contains("Simulated Read Error"));
@@ -401,15 +476,16 @@ public class ImporterCsvResourceTest {
     // --------------------------------------------------
 
     /**
-     * Tests the utility method {@code safeGet} with valid indices and out-of-bounds indices.
+     * Tests the utility method {@code safeGet} with a known column, an
+     * unknown column, and a column beyond the line's cells.
      */
     @Test
     void testSafeGet() {
-        String[] parts = {"A", "B", "C"};
-        assertEquals("A", resource.safeGet(parts, 0));
-        assertEquals("C", resource.safeGet(parts, 2));
-        assertNull(resource.safeGet(parts, 3));
-        assertNull(resource.safeGet(parts, -1));
+        ImporterCsvResource.LineData full = line(1, "A", "B");
+        assertEquals("A", resource.safeGet(full, "code"));
+        assertEquals("B", resource.safeGet(full, "name"));
+        // Unknown column (absent from the header)
+        assertNull(resource.safeGet(full, "unknown"));
     }
 
     /**
@@ -417,12 +493,9 @@ public class ImporterCsvResourceTest {
      */
     @Test
     void testSafeParseInt() {
-        String[] valid = {"123"};
-        assertEquals(123, resource.safeParseInt(valid, 0));
-        String[] invalid = {"abc"};
-        assertNull(resource.safeParseInt(invalid, 0));
-        String[] empty = {""};
-        assertNull(resource.safeParseInt(empty, 0));
+        assertEquals(123, resource.safeParseInt(line(1, "123"), "code"));
+        assertNull(resource.safeParseInt(line(1, "abc"), "code"));
+        assertNull(resource.safeParseInt(line(1, ""), "code"));
     }
 
     /**
@@ -430,10 +503,8 @@ public class ImporterCsvResourceTest {
      */
     @Test
     void testSafeParseBigDecimal() {
-        String[] valid = {"10.50"};
-        assertEquals(new BigDecimal("10.50"), resource.safeParseBigDecimal(valid, 0));
-        String[] invalid = {"not_a_number"};
-        assertNull(resource.safeParseBigDecimal(invalid, 0));
+        assertEquals(new BigDecimal("10.50"), resource.safeParseBigDecimal(line(1, "10.50"), "code"));
+        assertNull(resource.safeParseBigDecimal(line(1, "not_a_number"), "code"));
     }
 
     /**
@@ -442,11 +513,9 @@ public class ImporterCsvResourceTest {
     @Test
     void testSafeParseDateTime() {
         String isoDate = "2023-10-27T10:00:00";
-        String[] valid = {isoDate};
         LocalDateTime expected = LocalDateTime.parse(isoDate, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-        assertEquals(expected, resource.safeParseDateTime(valid, 0));
-        String[] invalid = {"27/10/2023"};
-        assertNull(resource.safeParseDateTime(invalid, 0));
+        assertEquals(expected, resource.safeParseDateTime(line(1, isoDate), "code"));
+        assertNull(resource.safeParseDateTime(line(1, "27/10/2023"), "code"));
     }
 
     /**
@@ -463,56 +532,52 @@ public class ImporterCsvResourceTest {
     }
 
     /**
-     * Tests {@code safeGet} specifically for boundary conditions (index == length, index > length).
+     * Tests {@code safeGet} specifically for the short-line boundary: the
+     * column exists in the header but the line has no cell at its index.
      */
     @Test
     void testSafeGet_Bounds() {
-        String[] parts = {"A"};
-        assertNull(resource.safeGet(parts, 1)); // Index == length
-        assertNull(resource.safeGet(parts, 5)); // Index > length
+        ImporterCsvResource.LineData shortLine = line(1, "A");
+        assertEquals("A", resource.safeGet(shortLine, "code"));
+        // "name" is declared at index 1 but the line only has one cell
+        assertNull(resource.safeGet(shortLine, "name"));
     }
 
     /**
-     * Tests {@code safeParseInt} for index out of bounds and empty string values.
+     * Tests {@code safeParseInt} for a missing cell and empty string values.
      */
     @Test
     void testSafeParseInt_BoundsAndEmpty() {
-        String[] parts = {"123"};
-        assertEquals(123, resource.safeParseInt(parts, 0));
-        // Case index >= parts.length (true)
-        assertNull(resource.safeParseInt(parts, 5));
+        assertEquals(123, resource.safeParseInt(line(1, "123"), "code"));
+        // Case cell beyond the line's cells (resolved to null)
+        assertNull(resource.safeParseInt(line(1, "123"), "name"));
         // Case val.isEmpty() (true)
-        String[] emptyVal = {""};
-        assertNull(resource.safeParseInt(emptyVal, 0));
+        assertNull(resource.safeParseInt(line(1, ""), "code"));
     }
 
     /**
-     * Tests {@code safeParseBigDecimal} for index out of bounds and empty string values.
+     * Tests {@code safeParseBigDecimal} for a missing cell and empty string values.
      */
     @Test
     void testSafeParseBigDecimal_BoundsAndEmpty() {
-        String[] valid = {"10.50"};
-        assertEquals(new BigDecimal("10.50"), resource.safeParseBigDecimal(valid, 0));
-        // Case index >= parts.length (true)
-        assertNull(resource.safeParseBigDecimal(valid, 1));
+        assertEquals(new BigDecimal("10.50"), resource.safeParseBigDecimal(line(1, "10.50"), "code"));
+        // Case cell beyond the line's cells (resolved to null)
+        assertNull(resource.safeParseBigDecimal(line(1, "10.50"), "name"));
         // Case val.isEmpty() (true)
-        String[] emptyVal = {""};
-        assertNull(resource.safeParseBigDecimal(emptyVal, 0));
+        assertNull(resource.safeParseBigDecimal(line(1, ""), "code"));
     }
 
     /**
-     * Tests {@code safeParseDateTime} for index out of bounds and empty string values.
+     * Tests {@code safeParseDateTime} for a missing cell and empty string values.
      */
     @Test
     void testSafeParseDateTime_BoundsAndEmpty() {
         String isoDate = "2023-10-27T10:00:00";
-        String[] valid = {isoDate};
-        assertNotNull(resource.safeParseDateTime(valid, 0));
-        // Case index >= parts.length (true)
-        assertNull(resource.safeParseDateTime(valid, 1));
+        assertNotNull(resource.safeParseDateTime(line(1, isoDate), "code"));
+        // Case cell beyond the line's cells (resolved to null)
+        assertNull(resource.safeParseDateTime(line(1, isoDate), "name"));
         // Case val.isEmpty() (true)
-        String[] emptyVal = {""};
-        assertNull(resource.safeParseDateTime(emptyVal, 0));
+        assertNull(resource.safeParseDateTime(line(1, ""), "code"));
     }
 
     /**
@@ -539,59 +604,53 @@ public class ImporterCsvResourceTest {
     }
 
     /**
-     * Tests {@code safeParseBoolean} including the case where the index is out of bounds.
+     * Tests {@code safeParseBoolean} including the case where the cell is missing.
      */
     @Test
     void testSafeParseBoolean() {
-        String[] t = {"true"};
-        assertTrue(resource.safeParseBoolean(t, 0));
-        String[] f = {"false"};
-        assertFalse(resource.safeParseBoolean(f, 0));
-        String[] empty = {""};
-        assertFalse(resource.safeParseBoolean(empty, 0));
-        // Case index >= parts.length (true)
-        String[] shortArray = {"true"};
-        assertFalse(resource.safeParseBoolean(shortArray, 5));
+        assertTrue(resource.safeParseBoolean(line(1, "true"), "code"));
+        assertFalse(resource.safeParseBoolean(line(1, "false"), "code"));
+        assertFalse(resource.safeParseBoolean(line(1, ""), "code"));
+        // Case cell beyond the line's cells (resolved to null)
+        assertFalse(resource.safeParseBoolean(line(1, "true"), "name"));
+        // Case unknown column
+        assertFalse(resource.safeParseBoolean(line(1, "true"), "unknown"));
     }
 
     /**
-     * Tests {@code safeParseDouble} with valid values, index out of bounds, empty values, and invalid formats.
+     * Tests {@code safeParseDouble} with valid values, a missing cell, empty values, and invalid formats.
      */
     @Test
     void testSafeParseDouble() {
         // Valid case
-        String[] valid = {"12.5"};
-        assertEquals(12.5, resource.safeParseDouble(valid, 0));
-        // Case index >= parts.length (true)
-        assertNull(resource.safeParseDouble(valid, 1));
+        assertEquals(12.5, resource.safeParseDouble(line(1, "12.5"), "code"));
+        // Case cell beyond the line's cells (resolved to null)
+        assertNull(resource.safeParseDouble(line(1, "12.5"), "name"));
         // Case val.isEmpty() (true)
-        String[] empty = {""};
-        assertNull(resource.safeParseDouble(empty, 0));
+        assertNull(resource.safeParseDouble(line(1, ""), "code"));
         // Case NumberFormatException
-        String[] invalid = {"not_a_double"};
-        assertNull(resource.safeParseDouble(invalid, 0));
+        assertNull(resource.safeParseDouble(line(1, "not_a_double"), "code"));
     }
 
     /**
      * Tests {@code safeGet} specifically with null elements and trimming.
-     * Complements the basic test by checking null handling inside the array and whitespace.
+     * Complements the basic test by checking null handling inside the cells and whitespace.
      */
     @Test
     void testSafeGet_AdvancedCases() {
         // 1. Test Trim behavior
-        String[] partsWithSpaces = {"  Data  ", " Middle "};
-        assertEquals("Data", resource.safeGet(partsWithSpaces, 0), "Should return trimmed value");
-        assertEquals("Middle", resource.safeGet(partsWithSpaces, 1), "Should return trimmed value");
+        ImporterCsvResource.LineData withSpaces = line(1, "  Data  ", " Middle ");
+        assertEquals("Data", resource.safeGet(withSpaces, "code"), "Should return trimmed value");
+        assertEquals("Middle", resource.safeGet(withSpaces, "name"), "Should return trimmed value");
 
-        // 2. Test Null element inside the array (Edge Case)
+        // 2. Test Null element inside the cells (Edge Case)
         // Depending on CSV parsing logic, an array can technically contain nulls
-        String[] partsWithNull = {"A", null, "C"};
-        assertEquals("A", resource.safeGet(partsWithNull, 0));
-        assertNull(resource.safeGet(partsWithNull, 1), "Should handle null element gracefully by returning null");
-        assertEquals("C", resource.safeGet(partsWithNull, 2));
+        ImporterCsvResource.LineData withNull = line(1, "A", null);
+        assertEquals("A", resource.safeGet(withNull, "code"));
+        assertNull(resource.safeGet(withNull, "name"), "Should handle null element gracefully by returning null");
 
-        // 3. Test Negative Index (Safety check)
-        assertNull(resource.safeGet(new String[]{"A"}, -1), "Negative index should return null");
+        // 3. Test unknown column (Safety check)
+        assertNull(resource.safeGet(withNull, "unknown"), "Unknown column should return null");
     }
 
     // --------------------------------------------------
@@ -618,6 +677,16 @@ public class ImporterCsvResourceTest {
         /** If true, simulates a generic RuntimeException in processChunkWithFallback. */
         public boolean throwGenericException = false;
 
+        /**
+         * Captures the parsed lines of the chunk, or throws when configured to
+         * simulate a generic failure.
+         *
+         * @param parsedLines The list of data for the current chunk.
+         * @param targetCodes The set of unique codes in this chunk.
+         * @param counters    The global counters [created, updated].
+         * @param errors      The error accumulator.
+         * @return An empty context map.
+         */
         @Override
         protected Map<String, Object> processChunkWithFallback(List<LineData> parsedLines, Set<String> targetCodes, int[] counters, List<String> errors) {
             // NEW LOGIC: Simulate a generic error to test the catch (Throwable e) block
@@ -629,6 +698,14 @@ public class ImporterCsvResourceTest {
             return new HashMap<>();
         }
 
+        /**
+         * Counts the invocation, throws for the configured poison code, and
+         * otherwise records a creation.
+         *
+         * @param data      The parsed line.
+         * @param entityMap The pre-fetched or fresh entity map.
+         * @param counters  The local counters [created, updated].
+         */
         @Override
         protected void processLineLogic(LineData data, Map<String, Object> entityMap, int[] counters) {
             processLineLogicCallCount++;
@@ -638,6 +715,13 @@ public class ImporterCsvResourceTest {
             counters[0]++;
         }
 
+        /**
+         * Returns a synthetic entity for the line, or null when configured to
+         * simulate a missing entity.
+         *
+         * @param data The parsed line.
+         * @return The synthetic entity or null.
+         */
         @Override
         protected Object findEntityForLine(LineData data) {
             // Simulation of the null case
@@ -649,7 +733,8 @@ public class ImporterCsvResourceTest {
     }
 
     /**
-     * Helper method to generate a list of LineData objects for testing purposes.
+     * Helper method to generate a list of header-bound LineData objects for
+     * testing purposes.
      *
      * @param count The number of lines to generate.
      * @return A list of LineData objects.
@@ -658,7 +743,7 @@ public class ImporterCsvResourceTest {
         List<ImporterCsvResource.LineData> list = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             String code = "CODE" + i;
-            list.add(new ImporterCsvResource.LineData(i + 2, code, new String[]{code, "Name" + i}));
+            list.add(line(i + 2, code, "Name" + i));
         }
         return list;
     }

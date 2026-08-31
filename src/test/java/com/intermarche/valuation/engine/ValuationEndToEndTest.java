@@ -92,13 +92,13 @@ public class ValuationEndToEndTest {
             return;
         }
         importCsv("/stores/import", """
-                code|name|streetLine1|streetLine2|postalCode|city|country|latitude|longitude
+                CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE
                 0101|Intermarche Test 1|1 Rue du Test|ZI Nord|59000|Lille|France|50.63|3.06
                 0102|Intermarche Test 2|12 Avenue des Fleurs||33000|Bordeaux|France|44.83|-0.57
                 """);
 
         importCsv("/products/import", """
-                ean|name|description|brand|referenceWeight|referenceVolume|productType|unitName|active
+                EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE
                 3300000000001|Pommes Golden|Pommes fraiches bio|Brand A|1.000|2.500|WEIGHT|kg|true
                 3300000000002|Lait UHT 1L|Lait demi-ecreme|Brand B|1.000|1.000|UNIT|L|true
                 3300000000004|Cafe Grains 500g|Cafe moulu arabica|Brand D|0.500|1.250|UNIT|kg|true
@@ -113,14 +113,14 @@ public class ValuationEndToEndTest {
                 """);
 
         importCsv("/product-families/import", """
-                code|description|flags|product_eans|family_codes
+                CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES
                 POMMES|Pommes a croquer|TRADITIONAL,RESTAURANT_VOUCHER_ELIGIBLE|3300000000001,3300000000004|
                 EAU_MINERALE|Eaux Minerales|RESTAURANT_VOUCHER_ELIGIBLE|3300000000007|
                 CUISSON|Instruments de Cuisine||3300000000031,3300000000032|
                 """);
 
         importCsv("/prices/import", ("""
-                ean|storeCode|priceExcludingTax|priceIncludingTax|vatRate|priceUsage|priority|startDateTime|endDateTime
+                EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE
                 3300000000001|0101|1.00|1.20|0.2000|DEFAULT|0|<<D>>|
                 3300000000001|0101|1.10|1.32|0.2000|BASE_FOR_DISCOUNT|0|<<D>>|
                 3300000000002|0101|2.50|3.00|0.2000|DEFAULT|0|<<D>>|
@@ -146,7 +146,7 @@ public class ValuationEndToEndTest {
                 """).replace("<<D>>", PRICE_START));
 
         importCsv("/offers/import", """
-                offer_code|offer_type|specification|store_code|store_group_code
+                CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES
                 PROMO_STORE_101|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer"], "targetEans": ["3300000000001"], "discountType": "PERCENTAGE", "value": 15.0}|0101|
                 PROMO_2FOR1_3300|N+M|{"targetEans": ["3300000000001"], "quantityToPay": 2, "discountedQuantity": 1, "selectionStrategy": "CHEAPEST", "discountType": "PERCENTAGE", "discountValue": 100.0}|0101|
                 PROMO_COFFEE_PACK|MIXED_BUNDLE|{"bundlePrice": 4.50, "vatRate": 0.20, "contents": [{"ean": "3300000000004", "quantity": 1.0}, {"ean": "3300000000013", "quantity": 1.0, "substituteEans": ["3300000000014"]}]}|0101|

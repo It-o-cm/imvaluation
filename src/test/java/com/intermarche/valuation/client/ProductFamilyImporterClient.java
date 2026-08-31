@@ -13,7 +13,7 @@ import java.util.Base64;
  * This class sends a CSV payload containing a list of product families to the
  * {@code /product-families/import} endpoint using Java 11+ HttpClient.
  * <p>
- * CSV Format: code|description|flags|product_eans|family_codes
+ * CSV Format: CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES
  */
 public class ProductFamilyImporterClient {
 
@@ -35,7 +35,7 @@ public class ProductFamilyImporterClient {
     public static void main(String[] args) {
         // Structure: {code, description, flags, product_eans, family_codes}
         String csvData = """
-                code|description|flags|product_eans|family_codes
+                CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES
                 POMMES|Pommes à croquer|TRADITIONAL,RESTAURANT_VOUCHER_ELIGIBLE|3300000000001,3300000000004|
                 RACINES|Légumes racines||3300000000017,3300000000018||
                 FRUITS|Rayon Fruits||||POMMES

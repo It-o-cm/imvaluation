@@ -56,6 +56,27 @@ public class StoreCsvResourceTest {
     @Inject
     StoreCsvResource storeCsvResource;
 
+    /** Header names of the test rows, in cell order (the canonical store feed). */
+    private static final String[] TEST_HEADER = {
+            "CODE", "NAME", "STREET_LINE1", "STREET_LINE2", "POSTAL_CODE",
+            "CITY", "COUNTRY", "LATITUDE", "LONGITUDE"};
+
+    /**
+     * Builds a header-bound row for the importer: the header maps the
+     * TEST_HEADER names onto the cell positions and CODE is the key column.
+     *
+     * @param lineNumber The 1-based line number.
+     * @param cells The raw cells of the row.
+     * @return The header-bound line.
+     */
+    private static ImporterCsvResource.LineData line(int lineNumber, String[] cells) {
+        Map<String, Integer> header = new LinkedHashMap<>();
+        for (int i = 0; i < TEST_HEADER.length; i++) {
+            header.put(TEST_HEADER[i], i);
+        }
+        return new ImporterCsvResource.LineData(lineNumber, header, cells, TEST_HEADER[0]);
+    }
+
     /**
      * The TransactionManager for manual transaction control in tests.
      */
@@ -93,7 +114,7 @@ public class StoreCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportNewStoresSuccess() {
-        String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n" +
+        String csvContent = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n" +
                 "S001|Store Paris|1 Rue de Paris|Bat 5|75001|Paris|France|48.8566|2.3522\n" +
                 "S002|Store Lyon|1 Rue de Lyon||69001|Lyon|France||";
 
@@ -144,7 +165,7 @@ public class StoreCsvResourceTest {
         });
 
         // 2. Act: Import CSV with different name and city
-        String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n" +
+        String csvContent = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n" +
                 "S001|New Name|New Street||Zip|New City|Country||";
 
         authenticated()
@@ -193,10 +214,10 @@ public class StoreCsvResourceTest {
             return s.id;
         });
 
-        // 2. Act: Import CSV with SAME data (Address complète)
-        // Note: On inclut les colonnes lat/long même si le paramètre importCsvStream est à 7,
-        // car safeGet gère les index hors limite.
-        String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n" +
+        // 2. Act: Import CSV with SAME data (complete address)
+        // LATITUDE/LONGITUDE are optional columns of the feed; here they are
+        // present and resolved by name like every other column.
+        String csvContent = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n" +
                 "S001|Store Identique|10 Avenue des Champs-Elysees|Appt 5B|75008|Paris|France|48.8698|2.3075";
 
         authenticated()
@@ -229,7 +250,7 @@ public class StoreCsvResourceTest {
             s.persist();
             return s.id;
         });
-        String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n" +
+        String csvContent = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n" +
                 "S003|Store NoAddr|||||||";
         authenticated()
                 .body(csvContent)
@@ -251,7 +272,7 @@ public class StoreCsvResourceTest {
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportStore_EmptyInput() {
         // CSV with only header, no data lines
-        String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n";
+        String csvContent = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n";
 
         authenticated()
                 .body(csvContent)
@@ -278,7 +299,7 @@ public class StoreCsvResourceTest {
         // 1. Valid
         // 2. Valid
         // 3. Invalid (Empty Name -> Rollback -> Fallback)
-        String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n" +
+        String csvContent = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n" +
                 "S001|Store 1|Str1||Zip|City|France||\n" + // Valid
                 "S002|Store 2|Str1||Zip|City|France||\n" + // Valid
                 "S003| |Str1||Zip|City|France||"; // Invalid (Empty Name)
@@ -327,11 +348,8 @@ public class StoreCsvResourceTest {
     @Test
     void testProcessChunkWithFallback_EmptyTargetCodes() {
         // Create a dummy line so parsedLines is NOT empty
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "CODE",
-                new String[]{"CODE", "Name", "Str", "", "Zip", "City", "France", "", ""}
-        );
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"CODE", "Name", "Str", "", "Zip", "City", "France", "", ""});
         List<ImporterCsvResource.LineData> parsedLines = List.of(line);
 
         // Explicitly pass an EMPTY set of codes
@@ -349,24 +367,21 @@ public class StoreCsvResourceTest {
     /**
      * Tests the inherited {@code safeParseDouble} method used for GPS coordinates.
      * <p>
-     * Covers valid values, index out of bounds, empty values, and invalid formats.
+     * Covers valid values, missing cells, empty values, and invalid formats.
      */
     @Test
     void testSafeParseDouble() {
         // Valid case
-        String[] valid = {"12.5"};
-        assertEquals(12.5, storeCsvResource.safeParseDouble(valid, 0));
+        assertEquals(12.5, storeCsvResource.safeParseDouble(line(1, new String[]{"12.5"}), "CODE"));
 
-        // Case index >= parts.length (true)
-        assertNull(storeCsvResource.safeParseDouble(valid, 1));
+        // Case cell beyond the line's cells (resolved to null)
+        assertNull(storeCsvResource.safeParseDouble(line(1, new String[]{"12.5"}), "NAME"));
 
         // Case val.isEmpty() (true)
-        String[] empty = {""};
-        assertNull(storeCsvResource.safeParseDouble(empty, 0));
+        assertNull(storeCsvResource.safeParseDouble(line(1, new String[]{""}), "CODE"));
 
         // Case NumberFormatException
-        String[] invalid = {"not_a_double"};
-        assertNull(storeCsvResource.safeParseDouble(invalid, 0));
+        assertNull(storeCsvResource.safeParseDouble(line(1, new String[]{"not_a_double"}), "CODE"));
     }
 
     /**
@@ -374,7 +389,7 @@ public class StoreCsvResourceTest {
      */
     @Test
     void testSecurity_AccessDeniedForNonAdmin() {
-        String csvContent = "code|name|street1|street2|zip|city|country|lat|long\n" +
+        String csvContent = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n" +
                 "S001|Store|Str1||Zip|City|France||";
 
         given()

@@ -217,7 +217,7 @@ public class OfferUiResource implements EngineTrait {
         String sortKey = SORTABLE.contains(sort) ? sort : SORT_CODE;
         boolean descending = "desc".equalsIgnoreCase(dir);
         List<Offer> offers = queryOffers(search, type, target, ean, sortKey, descending).list();
-        StringBuilder csv = new StringBuilder("offer_code|offer_type|specification|store_code|store_group_code\n");
+        StringBuilder csv = new StringBuilder("CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n");
         for (Offer offer : offers) {
             csv.append(sanitize(offer.code)).append('|')
                     .append(sanitize(offer.type)).append('|')

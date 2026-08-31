@@ -53,6 +53,26 @@ public class StoreGroupCsvResourceTest {
     @Inject
     StoreGroupCsvResource resource;
 
+    /** Header names of the test rows, in cell order (the canonical store-group feed). */
+    private static final String[] TEST_HEADER = {
+            "CODE", "NAME", "STORE_CODES", "STORE_GROUP_CODES"};
+
+    /**
+     * Builds a header-bound row for the importer: the header maps the
+     * TEST_HEADER names onto the cell positions and CODE is the key column.
+     *
+     * @param lineNumber The 1-based line number.
+     * @param cells The raw cells of the row.
+     * @return The header-bound line.
+     */
+    private static ImporterCsvResource.LineData line(int lineNumber, String[] cells) {
+        Map<String, Integer> header = new LinkedHashMap<>();
+        for (int i = 0; i < TEST_HEADER.length; i++) {
+            header.put(TEST_HEADER[i], i);
+        }
+        return new ImporterCsvResource.LineData(lineNumber, header, cells, TEST_HEADER[0]);
+    }
+
     /**
      * The TransactionManager for manual transaction control in tests.
      */
@@ -98,7 +118,7 @@ public class StoreGroupCsvResourceTest {
         });
 
         // 2. Act
-        String csvContent = "code|name|stores|groups\n" +
+        String csvContent = "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n" +
                 "G_UPDATE|New Name||";
 
         authenticated()
@@ -133,7 +153,7 @@ public class StoreGroupCsvResourceTest {
         });
 
         // 2. Act
-        String csvContent = "code|name|stores|groups\n" +
+        String csvContent = "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n" +
                 "G_SAME|Same Name||";
 
         authenticated()
@@ -157,7 +177,7 @@ public class StoreGroupCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportGroup_SubGroupNotFound_Rollback() {
-        String csvContent = "code|name|stores|groups\n" +
+        String csvContent = "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n" +
                 "G_BAD_SUB|Bad||NON_EXISTENT_SUB";
 
         authenticated()
@@ -185,7 +205,7 @@ public class StoreGroupCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportGroups_EmptyStoresAndGroupsLists() {
-        String csvContent = "code|name|stores|groups\n" +
+        String csvContent = "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n" +
                 "G01|Empty Lists|||\n" + // Empty stores (col 3) and groups (col 4)
                 "G02|Also Empty|||";
 
@@ -227,7 +247,7 @@ public class StoreGroupCsvResourceTest {
             return true;
         });
 
-        String csvContent = "code|name|stores|groups\n" +
+        String csvContent = "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n" +
                 "G_OK|Good Group|S001|\n" +
                 "G_BAD|Bad Group|BAD_STORE|";
 
@@ -275,7 +295,7 @@ public class StoreGroupCsvResourceTest {
      */
     @Test
     void testSecurity_AccessDeniedForNonAdmin() {
-        String csvContent = "code|name|stores|groups\n" +
+        String csvContent = "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n" +
                 "G01|Name||";
 
         given()
@@ -304,7 +324,7 @@ public class StoreGroupCsvResourceTest {
     }
 
     /**
-     * Tests {@link StoreGroupCsvResource#getCodesFromColumn(List, int)} with valid data.
+     * Tests {@link StoreGroupCsvResource#getCodesFromColumn(List, String)} with valid data.
      * <p>
      * Verifies that codes from multiple lines are correctly extracted, split by semicolon,
      * and aggregated into a single Set (handling duplicates automatically).
@@ -312,22 +332,15 @@ public class StoreGroupCsvResourceTest {
     @Test
     void testGetCodesFromColumn_PartsNotNull_AggregatesCorrectly() {
         // Arrange
-        // Line 1 contains "CODE_A" and "CODE_B" in column index 2
-        ImporterCsvResource.LineData line1 = new ImporterCsvResource.LineData(
-                1,
-                "PARENT_1",
-                new String[]{"ignore", "ignore", "CODE_A;CODE_B", "ignore"}
-        );
-        // Line 2 contains "CODE_B" (duplicate) and "CODE_C" in column index 2
-        ImporterCsvResource.LineData line2 = new ImporterCsvResource.LineData(
-                2,
-                "PARENT_2",
-                new String[]{"ignore", "ignore", "CODE_B;CODE_C", "ignore"}
-        );
+        // Line 1 contains "CODE_A" and "CODE_B" in the STORE_CODES column
+        ImporterCsvResource.LineData line1 = line(1,
+                new String[]{"PARENT_1", "ignore", "CODE_A;CODE_B", "ignore"});
+        // Line 2 contains "CODE_B" (duplicate) and "CODE_C" in the STORE_CODES column
+        ImporterCsvResource.LineData line2 = line(2,
+                new String[]{"PARENT_2", "ignore", "CODE_B;CODE_C", "ignore"});
         List<ImporterCsvResource.LineData> lines = List.of(line1, line2);
-        int columnIndex = 2;
         // Act
-        Set<String> result = resource.getCodesFromColumn(lines, columnIndex);
+        Set<String> result = resource.getCodesFromColumn(lines, "STORE_CODES");
         // Assert
         assertNotNull(result);
         assertEquals(3, result.size(), "Should contain 3 unique codes: A, B, and C");
@@ -363,7 +376,7 @@ public class StoreGroupCsvResourceTest {
         // 2. Construction du CSV "Piégé"
         // Ligne 1 : VALIDE. Met à jour 'EXISTING_GROUP'.
         // Ligne 2 : INVALIDE. Référence un store qui n'existe pas -> va faire planter le Bulk.
-        String csvContent = "code|name|stores|groups\n" +
+        String csvContent = "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n" +
                 existingGroupCode + "|Nouveau Nom|" + validStoreCode + "|\n" + // Ligne 1
                 "ERROR_GROUP|Nom Error|STORE_INCONNU|";                       // Ligne 2 (Provoque l'erreur)
 
@@ -413,7 +426,7 @@ public class StoreGroupCsvResourceTest {
         // 2. Construction du CSV
         // Ligne 1 (Cible) : Crée un PARENT qui lie le CHILD_GRP_01.
         // Ligne 2 (Bombe) : Provoque une erreur (Store manquant) pour forcer le fallback.
-        String csvContent = "code|name|stores|groups\n" +
+        String csvContent = "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n" +
                 "PARENT_01|Parent Name||" + childGroupCode + "\n" + // On lie ici
                 "ERROR_GROUP|Error Name|MISSING_STORE|";           // Erreur ici
 

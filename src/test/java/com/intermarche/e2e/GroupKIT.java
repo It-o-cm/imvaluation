@@ -104,7 +104,7 @@ class GroupKIT {
      * The price header shared by every extra price row.
      */
     private static final String PRICE_HEADER =
-            "ean|storeCode|priceExcludingTax|priceIncludingTax|vatRate|priceUsage|priority|startDateTime|endDateTime\n";
+            "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n";
 
     /**
      * Extra prices: five EANs mirrored onto the clean K4 store {@code 0103} and the water probe
@@ -129,7 +129,7 @@ class GroupKIT {
      * The offer header shared by every extra offer row.
      */
     private static final String OFFER_HEADER =
-            "offer_code|offer_type|specification|store_code|store_group_code\n";
+            "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n";
 
     /**
      * Extra offers, all additive to the mirror catalog:
@@ -209,7 +209,7 @@ class GroupKIT {
      * Posts a CSV body to an import endpoint as {@code admin/admin} and asserts a 200.
      *
      * @param endpoint The import endpoint path.
-     * @param csv      The CSV body, header line included (the importer skips line 1).
+     * @param csv      The CSV body, header line included (the importer reads it as the header).
      */
     private void importCsv(String endpoint, String csv) {
         given().auth().preemptive().basic("admin", "admin")

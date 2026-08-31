@@ -42,6 +42,26 @@ public class OfferCsvResourceTest {
     @Inject
     OfferCsvResource offerCsvResource;
 
+    /** Header names of the test rows, in cell order (the canonical offer feed). */
+    private static final String[] TEST_HEADER = {
+            "CODE", "TYPE", "SPECIFICATION", "STORE_CODES", "STORE_GROUP_CODES"};
+
+    /**
+     * Builds a header-bound row for the importer: the header maps the
+     * TEST_HEADER names onto the cell positions and CODE is the key column.
+     *
+     * @param lineNumber The 1-based line number.
+     * @param cells The raw cells of the row.
+     * @return The header-bound line.
+     */
+    private static ImporterCsvResource.LineData line(int lineNumber, String[] cells) {
+        Map<String, Integer> header = new LinkedHashMap<>();
+        for (int i = 0; i < TEST_HEADER.length; i++) {
+            header.put(TEST_HEADER[i], i);
+        }
+        return new ImporterCsvResource.LineData(lineNumber, header, cells, TEST_HEADER[0]);
+    }
+
     /**
      * The TransactionManager for manual transaction control in tests.
      */
@@ -107,7 +127,7 @@ public class OfferCsvResourceTest {
             return true;
         });
 
-        String csvContent = "code|type|specification|store_codes|group_codes\n" +
+        String csvContent = "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n" +
                 "OFFER01|PROMO|{\"ean\":\"123\"}|S001|G001\n" +
                 "OFFER02|DISCOUNT|{\"ean\":\"456\"}|S001|"; // Only store
 
@@ -168,7 +188,7 @@ public class OfferCsvResourceTest {
         });
 
         // 2. Act: Import CSV with different type and spec
-        String csvContent = "code|type|specification|store_codes|group_codes\n" +
+        String csvContent = "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n" +
                 "OFFER_UPDATE|NEW_TYPE|{\"new\":\"data\"}|S001|";
 
         authenticated()
@@ -219,7 +239,7 @@ public class OfferCsvResourceTest {
         });
 
         // 2. Act: Import CSV with SAME data
-        String csvContent = "code|type|specification|store_codes|group_codes\n" +
+        String csvContent = "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n" +
                 "OFFER_SAME|TYPE|{}|S001|";
 
         authenticated()
@@ -241,7 +261,7 @@ public class OfferCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportOffer_NoTargetDefined() {
-        String csvContent = "code|type|specification|store_codes|group_codes\n" +
+        String csvContent = "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n" +
                 "OFFER_BAD|PROMO|Spec||"; // Both empty
 
         authenticated()
@@ -262,7 +282,7 @@ public class OfferCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportOffer_StoreNotFound() {
-        String csvContent = "code|type|specification|store_codes|group_codes\n" +
+        String csvContent = "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n" +
                 "OFFER_NO_STORE|PROMO|Spec|NON_EXISTENT_STORE|";
 
         authenticated()
@@ -283,7 +303,7 @@ public class OfferCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportOffer_GroupNotFound() {
-        String csvContent = "code|type|specification|store_codes|group_codes\n" +
+        String csvContent = "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n" +
                 "OFFER_NO_GROUP|PROMO|Spec||NON_EXISTENT_GROUP";
 
         authenticated()
@@ -325,7 +345,7 @@ public class OfferCsvResourceTest {
         // 1. Valid
         // 2. Valid
         // 3. Invalid (No target -> Rollback -> Fallback)
-        String csvContent = "code|type|specification|store_codes|group_codes\n" +
+        String csvContent = "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n" +
                 "OFFER01|PROMO|{}|S001|\n" +
                 "OFFER02|PROMO|{}|S001|\n" +
                 "OFFER03|PROMO|{}||"; // Invalid
@@ -368,7 +388,7 @@ public class OfferCsvResourceTest {
         // 2. Act: Send CSV with a valid line (using the Group) and an invalid line.
         // The invalid line (no target) causes a transaction rollback.
         // The parent class then retries in 1-by-1 mode, triggering retrieveStoreGroups.
-        String csvContent = "code|type|specification|store_codes|group_codes\n" +
+        String csvContent = "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n" +
                 "OFFER_FALLBACK|PROMO|{}||G_FALLBACK\n" + // Valid
                 "OFFER_ERROR|PROMO|{}||"; // Invalid (No target, triggers rollback)
 
@@ -419,11 +439,8 @@ public class OfferCsvResourceTest {
     @Test
     void testProcessChunkWithFallback_EmptyTargetCodes() {
         // Create a dummy line so parsedLines is NOT empty
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "CODE",
-                new String[]{"CODE", "PROMO", "Spec", "", ""}
-        );
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"CODE", "PROMO", "Spec", "", ""});
         List<ImporterCsvResource.LineData> parsedLines = List.of(line);
 
         // Explicitly pass an EMPTY set of codes
@@ -446,7 +463,7 @@ public class OfferCsvResourceTest {
      */
     @Test
     void testSecurity_AccessDeniedForAnonymousCaller() {
-        String csvContent = "code|type|specification|store_codes|group_codes\n" +
+        String csvContent = "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n" +
                 "OFFER01|PROMO|Spec|S001|";
 
         given()

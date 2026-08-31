@@ -250,7 +250,7 @@ class GroupAIT {
      * address-less store exercising the symmetric address checksum.
      */
     private static final String STORES_CSV = """
-            code|name|streetLine1|streetLine2|postalCode|city|country|latitude|longitude
+            CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE
             0101|Intermarché Test 1|1 Rue du Test|ZI Nord|59000|Lille|France|50.63|3.06
             0102|Intermarché Test 2|12 Avenue des Fleurs||33000|Bordeaux|France|44.83|-0.57
             0103|Intermarché Test 3|99 Boulevard de la Liberte|Etage 2|69000|Lyon|France|45.75|4.85
@@ -263,7 +263,7 @@ class GroupAIT {
      * Store groups seed, referencing the addressed stores.
      */
     private static final String STORE_GROUPS_CSV = """
-            group_code|group_name|store_codes|store_group_codes
+            CODE|NAME|STORE_CODES|STORE_GROUP_CODES
             DEPT_59|Département du Nord|0104|
             DEPT_75|Département Paris||
             REGION_NORTH|Région Nord|0101;0102;0103|DEPT_59
@@ -274,7 +274,7 @@ class GroupAIT {
      * Products seed.
      */
     private static final String PRODUCTS_CSV = """
-            ean|name|description|brand|referenceWeight|referenceVolume|productType|unitName|active
+            EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE
             3300000000001|Pommes Golden|Pommes fraîches bio|Brand A|1.000|2.500|WEIGHT|kg|true
             3300000000002|Lait UHT 1L|Lait demi-écrémé|Brand B|1.000|1.000|UNIT|L|true
             3300000000003|Baguette Tradition|Pain de tradition|Brand C|0.250|0.600|UNIT|kg|true
@@ -314,7 +314,7 @@ class GroupAIT {
      * Product families seed, referencing products and sub-families.
      */
     private static final String PRODUCT_FAMILIES_CSV = """
-            code|description|flags|product_eans|family_codes
+            CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES
             POMMES|Pommes à croquer|TRADITIONAL,RESTAURANT_VOUCHER_ELIGIBLE|3300000000001,3300000000004|
             RACINES|Légumes racines||3300000000017,3300000000018||
             FRUITS|Rayon Fruits||||POMMES
@@ -330,7 +330,7 @@ class GroupAIT {
      * Product category storage seed (one storage path per product).
      */
     private static final String CATEGORIES_CSV = """
-            productEan|level1|level2|level3|level4|level5
+            EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5
             3300000000001|Food|Fresh|Fruits & Vegetables|Local|Organic
             3300000000002|Food|Fresh|Fruits & Vegetables|Local|Organic
             3300000000003|Food|Fresh|Bakery|Traditional|Baguettes
@@ -367,7 +367,7 @@ class GroupAIT {
      * Prices seed (DEFAULT and BASE_FOR_DISCOUNT usages, priorities, fixed start date).
      */
     private static final String PRICES_CSV = """
-            ean|storeCode|priceExcludingTax|priceIncludingTax|vatRate|priceUsage|priority|startDateTime|endDateTime
+            EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE
             3300000000001|0101|1.00|1.20|0.2000|DEFAULT|0|2026-01-12T00:00:00|
             3300000000001|0101|1.10|1.32|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|
             3300000000001|0101|0.90|1.08|0.2000|DEFAULT|1|2026-01-12T00:00:00|
@@ -468,7 +468,7 @@ class GroupAIT {
      * Offers seed (one offer per supported type).
      */
     private static final String OFFERS_CSV = """
-            offer_code|offer_type|specification|store_code|store_group_code
+            CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES
             PROMO_STORE_101|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer"], "targetEans": ["3300000000001"], "discountType": "PERCENTAGE", "value": 15.0}|0101|
             PROMO_STORE_102|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer"], "targetEans": ["3300000000004"], "discountType": "FIXED_AMOUNT", "value": 1.99}|0102|
             PROMO_GROUP_NORD|FREE_DELIVERY_THRESHOLD|{"tiers": [{"threshold": 30.0, "value": 100.0, "type": "PERCENTAGE"}]}||REGION_NORTH

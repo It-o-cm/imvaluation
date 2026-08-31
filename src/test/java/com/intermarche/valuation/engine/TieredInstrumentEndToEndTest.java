@@ -77,18 +77,18 @@ public class TieredInstrumentEndToEndTest {
             return;
         }
         importCsv("/stores/import", """
-                code|name|streetLine1|streetLine2|postalCode|city|country|latitude|longitude
+                CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE
                 0109|Intermarche Tier|9 Rue du Palier||59000|Lille|France|50.63|3.06
                 """);
 
         importCsv("/products/import", """
-                ean|name|description|brand|referenceWeight|referenceVolume|productType|unitName|active
+                EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE
                 3300000000201|Produit A|Article standard|Brand A|1.000|1.000|UNIT|pcs|true
                 3300000000202|Produit B|Article standard|Brand B|1.000|1.000|UNIT|pcs|true
                 """);
 
         importCsv("/prices/import", ("""
-                ean|storeCode|priceExcludingTax|priceIncludingTax|vatRate|priceUsage|priority|startDateTime|endDateTime
+                EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE
                 3300000000201|0109|25.00|30.00|0.2000|DEFAULT|0|<<D>>|
                 3300000000201|0109|25.00|30.00|0.2000|BASE_FOR_DISCOUNT|0|<<D>>|
                 3300000000202|0109|40.00|48.00|0.2000|DEFAULT|0|<<D>>|
@@ -96,7 +96,7 @@ public class TieredInstrumentEndToEndTest {
                 """).replace("<<D>>", PRICE_START));
 
         importCsv("/offers/import", """
-                offer_code|offer_type|specification|store_code|store_group_code
+                CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES
                 TIERED_RICE_0109|TIERED_DISCOUNT|{"scope": "TICKET", "trigger": "AMOUNT", "mode": "HIGHEST_REACHED", "tiers": [{"threshold": 50.0, "award": {"type": "PERCENTAGE", "value": 5.0}}]}|0109|
                 VOUCHER_TICKET_0109|VOUCHER_GRANT|{"scope": "TICKET", "trigger": "AMOUNT", "mode": "HIGHEST_REACHED", "usage": {"validityDays": 30}, "tiers": [{"threshold": 50.0, "award": {"type": "AMOUNT", "value": 5.0}}]}|0109|
                 COUPON_POINTS_0109|COUPON_GRANT|{"scope": "TICKET", "trigger": "AMOUNT", "mode": "HIGHEST_REACHED", "unit": "POINTS", "tiers": [{"threshold": 50.0, "award": {"type": "AMOUNT", "value": 10.0}}]}|0109|

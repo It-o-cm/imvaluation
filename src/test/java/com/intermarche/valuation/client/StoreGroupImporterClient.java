@@ -29,7 +29,7 @@ public class StoreGroupImporterClient {
         // Column 3: store_codes (List separated by semicolon)
         // Column 4: store_group_codes (List separated by semicolon)
         String csvData = """
-                group_code|group_name|store_codes|store_group_codes
+                CODE|NAME|STORE_CODES|STORE_GROUP_CODES
                 DEPT_59|Département du Nord|0104|
                 DEPT_75|Département Paris||
                 REGION_NORTH|Région Nord|0101;0102;0103|DEPT_59

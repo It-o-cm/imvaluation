@@ -35,6 +35,26 @@ public class ProductCategoryStorageCsvResourceTest {
     @Inject
     ProductCategoryStorageCsvResource resource;
 
+    /** Header names of the test rows, in cell order (the canonical category-storage feed). */
+    private static final String[] TEST_HEADER = {
+            "EAN", "LEVEL1", "LEVEL2", "LEVEL3", "LEVEL4", "LEVEL5"};
+
+    /**
+     * Builds a header-bound row for the importer: the header maps the
+     * TEST_HEADER names onto the cell positions and EAN is the key column.
+     *
+     * @param lineNumber The 1-based line number.
+     * @param cells The raw cells of the row.
+     * @return The header-bound line.
+     */
+    private static ImporterCsvResource.LineData line(int lineNumber, String[] cells) {
+        Map<String, Integer> header = new LinkedHashMap<>();
+        for (int i = 0; i < TEST_HEADER.length; i++) {
+            header.put(TEST_HEADER[i], i);
+        }
+        return new ImporterCsvResource.LineData(lineNumber, header, cells, TEST_HEADER[0]);
+    }
+
     @Inject
     TransactionManager tm;
 
@@ -93,7 +113,7 @@ public class ProductCategoryStorageCsvResourceTest {
         });
 
         // CSV uses EAN instead of ID
-        String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
+        String csvContent = "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n" +
                 productEan + "|Food|Fresh|Dairy|Yogurts|Bio\n" +
                 productEan + "|Food|Fresh|Dairy|Yogurts|Classic";
 
@@ -136,7 +156,7 @@ public class ProductCategoryStorageCsvResourceTest {
         });
 
         // CSV with different levels
-        String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
+        String csvContent = "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n" +
                 productEan + "|Old L1|New L2|New L3|New L4|Old L5";
 
         authenticated()
@@ -180,7 +200,7 @@ public class ProductCategoryStorageCsvResourceTest {
             return p.id;
         });
 
-        String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
+        String csvContent = "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n" +
                 productEan + "|L1|L2|L3|L4|L5";
 
         authenticated()
@@ -201,7 +221,7 @@ public class ProductCategoryStorageCsvResourceTest {
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportStorage_ProductNotFound() {
         String nonExistentEan = "0000000000000";
-        String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
+        String csvContent = "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n" +
                 nonExistentEan + "|Food|Fresh|Dairy|Yogurts|Bio";
 
         authenticated()
@@ -223,7 +243,7 @@ public class ProductCategoryStorageCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportStorage_InvalidProductEan() {
-        String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
+        String csvContent = "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n" +
                 "|Food|Fresh|Dairy|Yogurts|Bio"; // Empty EAN
 
         authenticated()
@@ -256,7 +276,7 @@ public class ProductCategoryStorageCsvResourceTest {
 
         String invalidEan = "BAD_EAN";
 
-        String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
+        String csvContent = "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n" +
                 validEan + "|F1|F2|F3|F4|F5\n" +
                 validEan + "|G1|G2|G3|G4|G5\n" +
                 invalidEan + "|H1|H2|H3|H4|H5"; // Non-existent EAN triggers error
@@ -298,9 +318,8 @@ public class ProductCategoryStorageCsvResourceTest {
     @Test
     void testProcessChunkWithFallback_EmptyTargetCodes() {
         // Even if lines exist, if targetCodes (EANs) is empty, map should be empty
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1, "", new String[]{"", "L1", "L2", "L3", "L4", "L5"}
-        );
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"", "L1", "L2", "L3", "L4", "L5"});
         List<ImporterCsvResource.LineData> parsedLines = List.of(line);
         Set<String> targetCodes = Collections.emptySet();
         int[] counters = {0, 0};
@@ -319,7 +338,7 @@ public class ProductCategoryStorageCsvResourceTest {
      */
     @Test
     void testSecurity_AccessDeniedForNonAdmin() {
-        String csvContent = "productEan|level1|level2|level3|level4|level5\n" +
+        String csvContent = "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n" +
                 "123|Food|Fresh|Dairy|Yogurts|Bio";
 
         given()
@@ -358,9 +377,8 @@ public class ProductCategoryStorageCsvResourceTest {
             return null;
         });
         // 2. Prepare Input Data (LineData) matching the existing entity
-        // Array structure: [ean, level1, level2, level3, level4, level5]
-        String[] parts = {ean, l1, "L2", "L3", "L4", l5};
-        ImporterCsvResource.LineData data = new ImporterCsvResource.LineData(1, ean, parts);
+        // Cell order: EAN, LEVEL1, LEVEL2, LEVEL3, LEVEL4, LEVEL5
+        ImporterCsvResource.LineData data = line(1, new String[]{ean, l1, "L2", "L3", "L4", l5});
         // 3. Execute the method under test
         Map<String, Object> contextMap = resource.prepareContextForLine(data);
         // 4. Verify the Context Map
@@ -410,9 +428,8 @@ public class ProductCategoryStorageCsvResourceTest {
         });
 
         // 2. Prepare CSV Data that matches the DB record exactly
-        // Order: EAN, L1, L2, L3, L4, L5
-        String[] parts = {ean, l1, "IrrelevantL2", "IrrelevantL3", "IrrelevantL4", l5};
-        ImporterCsvResource.LineData data = new ImporterCsvResource.LineData(1, ean, parts);
+        // Cell order: EAN, LEVEL1, LEVEL2, LEVEL3, LEVEL4, LEVEL5
+        ImporterCsvResource.LineData data = line(1, new String[]{ean, l1, "IrrelevantL2", "IrrelevantL3", "IrrelevantL4", l5});
 
         // 3. Execute
         ProductCategoryStorage result = (ProductCategoryStorage) resource.findEntityForLine(data);

@@ -36,7 +36,7 @@ public class ProductImporterClient {
     public static void main(String[] args) {
         // Structure: {ean, name, description, brand, referenceWeight, referenceVolume, productType, unitName, active}
         String csvData = """
-                ean|name|description|brand|referenceWeight|referenceVolume|productType|unitName|active
+                EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE
                 3300000000001|Pommes Golden|Pommes fraîches bio|Brand A|1.000|2.500|WEIGHT|kg|true
                 3300000000002|Lait UHT 1L|Lait demi-écrémé|Brand B|1.000|1.000|UNIT|L|true
                 3300000000003|Baguette Tradition|Pain de tradition|Brand C|0.250|0.600|UNIT|kg|true

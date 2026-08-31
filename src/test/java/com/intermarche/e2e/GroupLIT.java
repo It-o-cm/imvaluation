@@ -97,7 +97,7 @@ class GroupLIT {
      * The store header shared by the extra store row.
      */
     private static final String STORE_HEADER =
-            "code|name|streetLine1|streetLine2|postalCode|city|country|latitude|longitude\n";
+            "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n";
 
     /**
      * The extra store {@code 0199} with EMPTY coordinates (trailing empty {@code latitude}/
@@ -110,7 +110,7 @@ class GroupLIT {
      * The price header shared by every extra price row.
      */
     private static final String PRICE_HEADER =
-            "ean|storeCode|priceExcludingTax|priceIncludingTax|vatRate|priceUsage|priority|startDateTime|endDateTime\n";
+            "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n";
 
     /**
      * Extra prices: the pâtes {@code …005} mirrored onto the L5 poison store {@code 0104} and the
@@ -127,7 +127,7 @@ class GroupLIT {
      * The offer header shared by every extra offer row.
      */
     private static final String OFFER_HEADER =
-            "offer_code|offer_type|specification|store_code|store_group_code\n";
+            "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n";
 
     /**
      * Extra offers, all additive to the mirror catalog and quarantined on {@code 0104}: a second
@@ -206,7 +206,7 @@ class GroupLIT {
      * Posts a CSV body to an import endpoint as {@code admin/admin} and asserts a 200.
      *
      * @param endpoint The import endpoint path.
-     * @param csv      The CSV body, header line included (the importer skips line 1).
+     * @param csv      The CSV body, header line included (the importer reads it as the header).
      */
     private void importCsv(String endpoint, String csv) {
         given().auth().preemptive().basic("admin", "admin")

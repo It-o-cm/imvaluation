@@ -23,8 +23,9 @@ import java.util.*;
  * This class extends {@link ImporterCsvResource} to handle specific logic for {@link Store} entities.
  * It manages the embedded {@link Adresse} object and leverages the base class for the staged transaction management (1000 -> 100 -> 10 -> 1).
  * <p>
- * Expected CSV format (7+ columns, last 2 optional):
- * Code|Name|StreetLine1|StreetLine2|PostalCode|City|Country|Latitude|Longitude
+ * Consumed columns (resolved by header name; unknown columns of the
+ * shared feed are ignored): CODE (key), NAME, STREET_LINE1, STREET_LINE2,
+ * POSTAL_CODE, CITY, COUNTRY, LATITUDE, LONGITUDE — the last two optional.
  */
 @Path("/stores/import")
 @ApplicationScoped
@@ -32,6 +33,30 @@ import java.util.*;
 public class StoreCsvResource extends ImporterCsvResource {
 
     private static final Logger LOGGER = Logger.getLogger(StoreCsvResource.class);
+
+    /** Header name of the natural key: the store code. */
+    static final String COL_CODE = "CODE";
+    /** Header name of the store label. */
+    static final String COL_NAME = "NAME";
+    /** Header name of the first street line. */
+    static final String COL_STREET_LINE1 = "STREET_LINE1";
+    /** Header name of the second street line. */
+    static final String COL_STREET_LINE2 = "STREET_LINE2";
+    /** Header name of the postal code. */
+    static final String COL_POSTAL_CODE = "POSTAL_CODE";
+    /** Header name of the city. */
+    static final String COL_CITY = "CITY";
+    /** Header name of the country. */
+    static final String COL_COUNTRY = "COUNTRY";
+    /** Header name of the GPS latitude (optional column). */
+    static final String COL_LATITUDE = "LATITUDE";
+    /** Header name of the GPS longitude (optional column). */
+    static final String COL_LONGITUDE = "LONGITUDE";
+
+    /** The columns this importer cannot work without (latitude/longitude stay optional). */
+    static final List<String> REQUIRED_COLUMNS = List.of(
+            COL_NAME, COL_STREET_LINE1, COL_STREET_LINE2,
+            COL_POSTAL_CODE, COL_CITY, COL_COUNTRY);
 
     /**
      * Imports or updates stores from a CSV stream.
@@ -45,8 +70,8 @@ public class StoreCsvResource extends ImporterCsvResource {
     @Produces(MediaType.APPLICATION_JSON)
     @RolesAllowed("ADMIN")
     public Response importStores(InputStream inputStream) {
-        // 7 mandatory columns expected (Code, Name, Address 1-5). Lat/Long are optional.
-        return this.importCsvStream(inputStream, 7);
+        // CODE, NAME and the five address columns are mandatory; LATITUDE/LONGITUDE are optional.
+        return this.importCsvStream(inputStream, COL_CODE, REQUIRED_COLUMNS);
     }
 
     /**
@@ -129,19 +154,18 @@ public class StoreCsvResource extends ImporterCsvResource {
      * @param store The Store entity to populate.
      */
     private void feedStore(LineData data, Store store) {
-        String[] parts = data.parts;
-        store.name = safeGet(parts, 1);
+        store.name = safeGet(data, COL_NAME);
         // Ensure Address object exists
         if (store.address == null) {
             store.address = new Adresse();
         }
-        store.address.streetLine1 = safeGet(parts, 2);
-        store.address.streetLine2 = safeGet(parts, 3);
-        store.address.postalCode = safeGet(parts, 4);
-        store.address.city = safeGet(parts, 5);
-        store.address.country = safeGet(parts, 6);
-        store.address.latitude = safeParseDouble(parts, 7);
-        store.address.longitude = safeParseDouble(parts, 8);
+        store.address.streetLine1 = safeGet(data, COL_STREET_LINE1);
+        store.address.streetLine2 = safeGet(data, COL_STREET_LINE2);
+        store.address.postalCode = safeGet(data, COL_POSTAL_CODE);
+        store.address.city = safeGet(data, COL_CITY);
+        store.address.country = safeGet(data, COL_COUNTRY);
+        store.address.latitude = safeParseDouble(data, COL_LATITUDE);
+        store.address.longitude = safeParseDouble(data, COL_LONGITUDE);
     }
 
     /**
@@ -153,21 +177,20 @@ public class StoreCsvResource extends ImporterCsvResource {
      * @return The integer hash of the incoming data.
      */
     private int computeIncomingChecksum(LineData data) {
-        String[] parts = data.parts;
         // 1. Calculate Address Hash
         int addressHash = Objects.hash(
-                safeGet(parts, 2),             // streetLine1
-                safeGet(parts, 3),             // streetLine2
-                safeGet(parts, 4),             // postalCode
-                safeGet(parts, 5),             // city
-                safeGet(parts, 6),             // country
-                safeParseDouble(parts, 7),     // latitude
-                safeParseDouble(parts, 8)      // longitude
+                safeGet(data, COL_STREET_LINE1),
+                safeGet(data, COL_STREET_LINE2),
+                safeGet(data, COL_POSTAL_CODE),
+                safeGet(data, COL_CITY),
+                safeGet(data, COL_COUNTRY),
+                safeParseDouble(data, COL_LATITUDE),
+                safeParseDouble(data, COL_LONGITUDE)
         );
         // 2. Calculate Store Hash
         int storeChecksum = Objects.hash(
                 data.code,                    // code
-                safeGet(parts, 1),     // name
+                safeGet(data, COL_NAME),      // name
                 addressHash                   // address checksum
         );
         return storeChecksum;

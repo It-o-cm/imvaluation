@@ -36,11 +36,11 @@ public class ProductCategoryStorageImporterClient {
      * @param args Command line arguments (not used).
      */
     public static void main(String[] args) {
-        // Structure: {productEan|level1|level2|level3|level4|level5}
+        // Structure: {EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5}
         // Note: Using Product EANs (13-digit codes) instead of IDs.
         // We use dummy EANs here for the test. Ensure these Products exist in your DB.
         String csvData = """
-                productEan|level1|level2|level3|level4|level5
+                EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5
                 3300000000001|Food|Fresh|Fruits & Vegetables|Local|Organic
                 3300000000002|Food|Fresh|Fruits & Vegetables|Local|Organic
                 3300000000003|Food|Fresh|Bakery|Traditional|Baguettes

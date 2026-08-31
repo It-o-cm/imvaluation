@@ -55,6 +55,26 @@ public class ProductFamilyCsvResourceTest {
     @Inject
     ProductFamilyCsvResource resource;
 
+    /** Header names of the test rows, in cell order (the canonical family feed). */
+    private static final String[] TEST_HEADER = {
+            "CODE", "DESCRIPTION", "FLAGS", "PRODUCT_EANS", "SUBFAMILY_CODES"};
+
+    /**
+     * Builds a header-bound row for the importer: the header maps the
+     * TEST_HEADER names onto the cell positions and CODE is the key column.
+     *
+     * @param lineNumber The 1-based line number.
+     * @param cells The raw cells of the row.
+     * @return The header-bound line.
+     */
+    private static ImporterCsvResource.LineData line(int lineNumber, String[] cells) {
+        Map<String, Integer> header = new LinkedHashMap<>();
+        for (int i = 0; i < TEST_HEADER.length; i++) {
+            header.put(TEST_HEADER[i], i);
+        }
+        return new ImporterCsvResource.LineData(lineNumber, header, cells, TEST_HEADER[0]);
+    }
+
     /**
      * The TransactionManager for manual transaction control in tests.
      */
@@ -107,7 +127,7 @@ public class ProductFamilyCsvResourceTest {
             return true;
         });
 
-        String csvContent = "code|description|flags|product_eans|family_codes\n" +
+        String csvContent = "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n" +
                 "FAM01|Family 1|FLAG_A|1234567890123|SUB01\n" +
                 "FAM02|Family 2|FLAG_B||"; // No links
 
@@ -156,7 +176,7 @@ public class ProductFamilyCsvResourceTest {
         });
 
         // 2. Act: Import CSV with different description
-        String csvContent = "code|description|flags|product_eans|family_codes\n" +
+        String csvContent = "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n" +
                 "FAM_UPDATE|New Desc|NEW||";
 
         authenticated()
@@ -195,7 +215,7 @@ public class ProductFamilyCsvResourceTest {
         });
 
         // 2. Act: Import CSV with SAME data
-        String csvContent = "code|description|flags|product_eans|family_codes\n" +
+        String csvContent = "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n" +
                 "FAM_SAME|Desc|FLAG||";
 
         authenticated()
@@ -215,7 +235,7 @@ public class ProductFamilyCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportFamily_ProductNotFound() {
-        String csvContent = "code|description|flags|product_eans|family_codes\n" +
+        String csvContent = "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n" +
                 "FAM_BAD|Bad||9999999999999|";
 
         authenticated()
@@ -236,7 +256,7 @@ public class ProductFamilyCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportFamily_SubFamilyNotFound() {
-        String csvContent = "code|description|flags|product_eans|family_codes\n" +
+        String csvContent = "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n" +
                 "FAM_BAD_SUB|Bad Sub|||NO_EXIST";
 
         authenticated()
@@ -273,7 +293,7 @@ public class ProductFamilyCsvResourceTest {
         // 1. Valid
         // 2. Valid
         // 3. Invalid (Bad Product EAN -> Rollback -> Fallback)
-        String csvContent = "code|description|flags|product_eans|family_codes\n" +
+        String csvContent = "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n" +
                 "FAM01|F1||1111111111111|\n" +
                 "FAM02|F2||1111111111111|\n" +
                 "FAM03|F3||9999999999999|"; // Invalid Product
@@ -314,7 +334,7 @@ public class ProductFamilyCsvResourceTest {
 
         // 2. Act: Send CSV with a valid line (using the SubFamily) and an invalid line.
         // The invalid line triggers rollback and fallback.
-        String csvContent = "code|description|flags|product_eans|family_codes\n" +
+        String csvContent = "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n" +
                 "FAM_MAIN|Main|||SUB_FALLBACK\n" + // Valid
                 "FAM_ERR|Err|||NO_EXIST"; // Invalid
 
@@ -362,11 +382,8 @@ public class ProductFamilyCsvResourceTest {
      */
     @Test
     void testProcessChunkWithFallback_EmptyTargetCodes() {
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "CODE",
-                new String[]{"CODE", "Desc", "Flag", "", ""}
-        );
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"CODE", "Desc", "Flag", "", ""});
         List<ImporterCsvResource.LineData> parsedLines = List.of(line);
         Set<String> targetCodes = Collections.emptySet();
         int[] counters = {0, 0};
@@ -383,7 +400,7 @@ public class ProductFamilyCsvResourceTest {
      */
     @Test
     void testSecurity_AccessDeniedForNonAdmin() {
-        String csvContent = "code|description|flags|product_eans|family_codes\n" +
+        String csvContent = "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n" +
                 "FAM01|Desc|||";
 
         given()
@@ -419,7 +436,7 @@ public class ProductFamilyCsvResourceTest {
         });
 
         // 2. Act: Try to update it to link to itself
-        String csvContent = "code|description|flags|product_eans|family_codes\n" +
+        String csvContent = "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n" +
                 "FAM_SELF|Updated Desc|||FAM_SELF"; // Attempting self-reference
 
         authenticated()

@@ -30,7 +30,7 @@ public class OfferImporterClient {
         // Column 4: store_code (Target Store)
         // Column 5: store_group_code (Target StoreGroup)
         String csvData = """
-            offer_code|offer_type|specification|store_code|store_group_code
+            CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES
             PROMO_STORE_101|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer"], "targetEans": ["3300000000001"], "discountType": "PERCENTAGE", "value": 15.0}|0101|
             PROMO_STORE_102|IMMEDIATE_VOUCHER|{"targetOfferClass": ["BasicOffer"], "targetEans": ["3300000000004"], "discountType": "FIXED_AMOUNT", "value": 1.99}|0102|
             PROMO_GROUP_NORD|FREE_DELIVERY_THRESHOLD|{"tiers": [{"threshold": 30.0, "value": 100.0, "type": "PERCENTAGE"}]}||REGION_NORTH

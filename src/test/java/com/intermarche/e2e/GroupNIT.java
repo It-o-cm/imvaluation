@@ -160,7 +160,7 @@ class GroupNIT {
      * Posts a CSV body to an import endpoint as {@code admin/admin} and asserts a 200.
      *
      * @param endpoint The import endpoint path.
-     * @param csv      The CSV body, header line included (the importer skips line 1).
+     * @param csv      The CSV body, header line included (the importer reads it as the header).
      */
     private void importCsv(String endpoint, String csv) {
         given().auth().preemptive().basic("admin", "admin")

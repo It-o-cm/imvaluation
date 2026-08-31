@@ -32,8 +32,9 @@ import java.util.Set;
  * It manages the composite key matching (Product + Store + Usage + Dates) and leverages
  * the base class for the staged transaction management (1000 -> 100 -> 10 -> 1).
  * <p>
- * Expected CSV format (9 columns):
- * EAN|StoreCode|PriceExcludingTax|PriceIncludingTax|VatRate|PriceUsage|Priority|StartDateTime|EndDateTime
+ * Consumed columns (resolved by header name; unknown columns of the
+ * shared feed are ignored): EAN (key), STORE_CODE, PRICE_EXCL_TAX,
+ * PRICE_INCL_TAX, VAT_RATE, PRICE_USAGE, PRIORITY, START_DATE, END_DATE.
  */
 @Path("/prices/import")
 @ApplicationScoped
@@ -47,6 +48,30 @@ public class PriceCsvResource extends ImporterCsvResource {
     private static final String CTX_STORES = "__CTX_STORES__";
     private static final String CTX_PRICES = "__CTX_PRICES__";
 
+    /** Header name of the natural key: the product EAN. */
+    static final String COL_EAN = "EAN";
+    /** Header name of the store code (composite-key part). */
+    static final String COL_STORE_CODE = "STORE_CODE";
+    /** Header name of the tax-exclusive price. */
+    static final String COL_PRICE_EXCL_TAX = "PRICE_EXCL_TAX";
+    /** Header name of the tax-inclusive price. */
+    static final String COL_PRICE_INCL_TAX = "PRICE_INCL_TAX";
+    /** Header name of the VAT rate. */
+    static final String COL_VAT_RATE = "VAT_RATE";
+    /** Header name of the price usage enum (composite-key part). */
+    static final String COL_PRICE_USAGE = "PRICE_USAGE";
+    /** Header name of the price priority (composite-key part). */
+    static final String COL_PRIORITY = "PRIORITY";
+    /** Header name of the validity start (composite-key part). */
+    static final String COL_START_DATE = "START_DATE";
+    /** Header name of the validity end. */
+    static final String COL_END_DATE = "END_DATE";
+
+    /** The columns this importer cannot work without. */
+    static final List<String> REQUIRED_COLUMNS = List.of(
+            COL_STORE_CODE, COL_PRICE_EXCL_TAX, COL_PRICE_INCL_TAX, COL_VAT_RATE,
+            COL_PRICE_USAGE, COL_PRIORITY, COL_START_DATE, COL_END_DATE);
+
     /**
      * Imports or updates prices from a CSV stream.
      * Delegates stream reading and chunking to the the abstract base class.
@@ -59,8 +84,7 @@ public class PriceCsvResource extends ImporterCsvResource {
     @Produces(MediaType.APPLICATION_JSON)
     @RolesAllowed("ADMIN")
     public Response importPrices(InputStream inputStream) {
-        // 9 columns expected
-        return this.importCsvStream(inputStream, 9);
+        return this.importCsvStream(inputStream, COL_EAN, REQUIRED_COLUMNS);
     }
 
     /**
@@ -74,7 +98,7 @@ public class PriceCsvResource extends ImporterCsvResource {
      * Delegates to {@link ImporterCsvResource#processWithStages}.
      *
      * @param parsedLines The list of data for the current chunk.
-     * @param targetCodes The set of unique EAN codes in this chunk (Column 0).
+     * @param targetCodes The set of unique EAN codes in this chunk (key column EAN).
      * @param counters    An array of size 2 to hold [createdCount, updatedCount].
      * @param errors      List to collect definitive error messages.
      * @return A Map containing all entities (Products, Stores, Prices) needed for processing.
@@ -147,12 +171,12 @@ public class PriceCsvResource extends ImporterCsvResource {
      * Extracts unique Store codes from the parsed lines.
      *
      * @param parsedLines The list of data for the current chunk.
-     * @return A set of unique store codes found in Column 1.
+     * @return A set of unique store codes found in the STORE_CODE column.
      */
     private Set<String> getTargetStoreCodes(List<LineData> parsedLines) {
         Set<String> targetStoreCodes = new HashSet<>();
         for (LineData data : parsedLines) {
-            String storeCode = safeGet(data.parts, 1);
+            String storeCode = safeGet(data, COL_STORE_CODE);
             if (storeCode != null) {
                 targetStoreCodes.add(storeCode);
             }
@@ -198,7 +222,7 @@ public class PriceCsvResource extends ImporterCsvResource {
         Map<String, Store> storeMap = (Map<String, Store>) entityMap.get(CTX_STORES);
 
         Product product = getProduct(data, productMap);
-        String storeCode = safeGet(data.parts, 1);
+        String storeCode = safeGet(data, COL_STORE_CODE);
         Store store = getStore(storeMap, storeCode);
         Map<String, Price> priceMap = retrievePrices(data, entityMap, storeCode);
 
@@ -220,9 +244,9 @@ public class PriceCsvResource extends ImporterCsvResource {
      * @param store        The Store entity associated with this price.
      */
     private void processPriceLogic(LineData data, int[] counters, String storeCode, Map<String, Price> priceMap, Product product, Store store) {
-        PriceUsage usage = safeParsePriceUsage(data.parts, 5);
-        LocalDateTime start = safeParseDateTime(data.parts, 7);
-        Integer priority = safeParseInt(data.parts, 6);
+        PriceUsage usage = safeParsePriceUsage(data, COL_PRICE_USAGE);
+        LocalDateTime start = safeParseDateTime(data, COL_START_DATE);
+        Integer priority = safeParseInt(data, COL_PRIORITY);
         String key = buildPriceKey(data.code, storeCode, usage, start, priority);
         Price price = priceMap.get(key);
 
@@ -313,9 +337,9 @@ public class PriceCsvResource extends ImporterCsvResource {
         Map<String, Price> priceMap = (Map<String, Price>) entityMap.get(CTX_PRICES);
         if (priceMap == null) {
             // 1-by-1 fallback: look for the specific price in DB
-            PriceUsage usage = safeParsePriceUsage(data.parts, 5);
-            LocalDateTime start = safeParseDateTime(data.parts, 7);
-            Integer priority = safeParseInt(data.parts, 6);
+            PriceUsage usage = safeParsePriceUsage(data, COL_PRICE_USAGE);
+            LocalDateTime start = safeParseDateTime(data, COL_START_DATE);
+            Integer priority = safeParseInt(data, COL_PRIORITY);
 
             if (usage == null) {
                 throw new IllegalArgumentException("PriceUsage is mandatory");
@@ -345,10 +369,10 @@ public class PriceCsvResource extends ImporterCsvResource {
      */
     @Override
     protected Object findEntityForLine(LineData data) {
-        String storeCode = safeGet(data.parts, 1);
-        PriceUsage usage = safeParsePriceUsage(data.parts, 5);
-        LocalDateTime start = safeParseDateTime(data.parts, 7);
-        Integer priority = safeParseInt(data.parts, 6);
+        String storeCode = safeGet(data, COL_STORE_CODE);
+        PriceUsage usage = safeParsePriceUsage(data, COL_PRICE_USAGE);
+        LocalDateTime start = safeParseDateTime(data, COL_START_DATE);
+        Integer priority = safeParseInt(data, COL_PRIORITY);
 
         if (usage == null || storeCode == null) return null;
 
@@ -385,17 +409,16 @@ public class PriceCsvResource extends ImporterCsvResource {
      * @param price The Price entity to populate.
      */
     private void feedPrice(LineData data, Price price) {
-        String[] parts = data.parts;
-        price.priceExcludingTax = safeParseBigDecimal(parts, 2);
-        price.priceIncludingTax = safeParseBigDecimal(parts, 3);
-        price.vatRate = safeParseBigDecimal(parts, 4);
-        price.priceUsage = safeParsePriceUsage(parts, 5);
+        price.priceExcludingTax = safeParseBigDecimal(data, COL_PRICE_EXCL_TAX);
+        price.priceIncludingTax = safeParseBigDecimal(data, COL_PRICE_INCL_TAX);
+        price.vatRate = safeParseBigDecimal(data, COL_VAT_RATE);
+        price.priceUsage = safeParsePriceUsage(data, COL_PRICE_USAGE);
         if (price.priceUsage == null) {
-            throw new IllegalArgumentException("PriceUsage is mandatory at column 5");
+            throw new IllegalArgumentException("PriceUsage is mandatory in column " + COL_PRICE_USAGE);
         }
-        price.priority = safeParseInt(parts, 6);
-        price.startDateTime = safeParseDateTime(parts, 7);
-        price.endDateTime = safeParseDateTime(parts, 8);
+        price.priority = safeParseInt(data, COL_PRIORITY);
+        price.startDateTime = safeParseDateTime(data, COL_START_DATE);
+        price.endDateTime = safeParseDateTime(data, COL_END_DATE);
     }
 
     /**
@@ -409,17 +432,16 @@ public class PriceCsvResource extends ImporterCsvResource {
      * @return The integer hash of incoming data.
      */
     private int computeIncomingChecksum(LineData data, Product product, Store store) {
-        String[] parts = data.parts;
         return Objects.hash(
                 product.ean,
                 store.code,
-                safeParsePriceUsage(parts, 5),
-                safeParseBigDecimal(parts, 2),
-                safeParseBigDecimal(parts, 3),
-                safeParseBigDecimal(parts, 4),
-                safeParseInt(parts, 6),
-                safeParseDateTime(parts, 7),
-                safeParseDateTime(parts, 8)
+                safeParsePriceUsage(data, COL_PRICE_USAGE),
+                safeParseBigDecimal(data, COL_PRICE_EXCL_TAX),
+                safeParseBigDecimal(data, COL_PRICE_INCL_TAX),
+                safeParseBigDecimal(data, COL_VAT_RATE),
+                safeParseInt(data, COL_PRIORITY),
+                safeParseDateTime(data, COL_START_DATE),
+                safeParseDateTime(data, COL_END_DATE)
         );
     }
 
@@ -428,20 +450,19 @@ public class PriceCsvResource extends ImporterCsvResource {
     // --------------------------------------------------
 
     /**
-     * Safely parses a PriceUsage enum from an array by index.
+     * Safely parses a PriceUsage enum from a column resolved by name.
      *
-     * @param parts The string array.
-     * @param index The index to parse.
-     * @return The PriceUsage value or null if parsing fails or index is out of bounds.
+     * @param data The parsed CSV line.
+     * @param column The header name of the column.
+     * @return The PriceUsage value, or null on any missing/invalid input.
      */
-    PriceUsage safeParsePriceUsage(String[] parts, int index) {
-        if (index >= parts.length) return null;
-        String val = parts[index].trim();
-        if (val.isEmpty()) return null;
+    PriceUsage safeParsePriceUsage(LineData data, String column) {
+        String val = data.get(column);
+        if (val == null || val.isEmpty()) return null;
         try {
             return PriceUsage.valueOf(val);
         } catch (IllegalArgumentException e) {
-            LOGGER.warn("Invalid PriceUsage at index " + index + ": " + val);
+            LOGGER.warn("Invalid PriceUsage in column '" + column + "': " + val);
             return null;
         }
     }

@@ -23,16 +23,17 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  * Every scenario is exercised over real HTTP against the in-JVM {@code @QuarkusTest}
  * application, authenticating with HTTP Basic as {@code admin/admin} (or a purpose-built
  * MANAGER for the role guard D9). The scenarios target the generic import framework shared by
- * the seven CSV import endpoints ({@code ImporterCsvResource}): header skipping, empty
- * line handling, column validation, the malformed-JSON response contract, the staged
+ * the seven CSV import endpoints ({@code ImporterCsvResource}): header-driven column
+ * resolution (the first non-empty line names the columns), empty
+ * line handling, truncated-row validation, the malformed-JSON response contract, the staged
  * transactional fallback (1000&nbsp;&rarr;&nbsp;100&nbsp;&rarr;&nbsp;10&nbsp;&rarr;&nbsp;1),
  * checksum idempotence and in-file duplicate keys.
  * <p>
  * The group needs no referential seed: every scenario imports its own throwaway rows. Most
  * scenarios drive the dependency-free {@code /stores/import} endpoint (a Store has a unique
  * {@code code}, a mandatory {@code name}, and no foreign keys); D4 drives {@code /prices/import}
- * because feeding a header row as data there yields a clean business error
- * ({@code Product with EAN EAN not found.}), which is the trap the scenario documents.
+ * to prove that a leading blank line no longer shifts the header into the data: the header is
+ * the first NON-EMPTY line, so the old trap the scenario used to document is gone.
  * <p>
  * Unique code prefixes per scenario keep the class isolated from itself even though the H2
  * database lives for the whole JVM.
@@ -78,7 +79,7 @@ class GroupDIT {
      * Posts a raw CSV body to an import endpoint as {@code admin/admin} over HTTP Basic.
      *
      * @param path The import endpoint path.
-     * @param csv  The raw CSV payload (pipe-separated, first line is the header).
+     * @param csv  The raw CSV payload (pipe-separated, first non-empty line is the header).
      * @return The response body as a string, for textual assertions.
      */
     private String importCsv(String path, String csv) {
@@ -117,15 +118,15 @@ class GroupDIT {
     // --------------------------------------------------
 
     /**
-     * D1 — nominal. Posting a raw pipe-separated CSV ({@code Content-Type: text/plain}, first
-     * line always skipped as the header) answers 200 with the exact body
+     * D1 — nominal. Posting a raw pipe-separated CSV ({@code Content-Type: text/plain}, the
+     * first non-empty line read as the header) answers 200 with the exact body
      * {@code {"createdCount":2, "updatedCount":0}}; a blank line between the two data rows is
      * ignored silently (it consumes a {@code lineNumber} but produces neither a row nor an
      * error).
      */
     @Test
     void d1_nominalImportEmptyLinesIgnored() {
-        String csv = "code|name|s1|s2|pc|city|country|lat|lon\n"
+        String csv = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n"
                 + "D1S1|D1 Store One|1 rue||59000|Lille|FR|50.6|3.0\n"
                 + "\n"
                 + "D1S2|D1 Store Two|2 rue||59000|Lille|FR|50.7|3.1\n";
@@ -139,18 +140,18 @@ class GroupDIT {
     }
 
     // --------------------------------------------------
-    // D2 — not enough columns collected as an error, extra columns accepted
+    // D2 — fewer cells than the header collected as an error, extra columns accepted
     // --------------------------------------------------
 
     /**
-     * D2 — column count. A line with fewer than the required columns is collected into
-     * {@code errors} as {@code Line N ignored (not enough columns): <line>} while the import
-     * still answers 200; a line carrying extra columns is accepted without any noise and is
-     * counted as created.
+     * D2 — cell count. A line with fewer cells than the header is collected into
+     * {@code errors} as {@code Line N ignored (fewer cells than the header): <line>} while the
+     * import still answers 200; a line carrying extra columns is accepted without any noise and
+     * is counted as created.
      */
     @Test
     void d2_notEnoughColumnsCollectedExtraAccepted() {
-        String csv = "code|name|s1|s2|pc|city|country\n"
+        String csv = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY\n"
                 + "D2S1|D2 Store|1 rue||59000|Lille|FR|50.6|3.0|EXTRA\n"
                 + "D2SHORT|only three\n";
         given().auth().preemptive().basic("admin", "admin")
@@ -159,7 +160,7 @@ class GroupDIT {
                 .when().post("/stores/import")
                 .then().statusCode(200)
                 .body(containsString("\"createdCount\":1"))
-                .body(containsString("Line 3 ignored (not enough columns): D2SHORT|only three"));
+                .body(containsString("Line 3 ignored (fewer cells than the header): D2SHORT|only three"));
     }
 
     // --------------------------------------------------
@@ -175,7 +176,7 @@ class GroupDIT {
      */
     @Test
     void d3_malformedErrorJsonContract() {
-        String csv = "code|name|s1|s2|pc|city|country\n"
+        String csv = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY\n"
                 + "firstbad\n"
                 + "secondbad|x\n";
         given().auth().preemptive().basic("admin", "admin")
@@ -183,35 +184,34 @@ class GroupDIT {
                 .body(csv)
                 .when().post("/stores/import")
                 .then().statusCode(200)
-                .body(containsString("\"errors\":[Line 2 ignored (not enough columns): firstbad"))
-                .body(containsString("firstbad\",\"Line 3 ignored (not enough columns): secondbad|x"))
+                .body(containsString("\"errors\":[Line 2 ignored (fewer cells than the header): firstbad"))
+                .body(containsString("firstbad\",\"Line 3 ignored (fewer cells than the header): secondbad|x"))
                 .body(containsString("secondbad|x\"]}"))
                 .body(not(containsString("\"errors\":[\"")));
     }
 
     // --------------------------------------------------
-    // D4 — a leading empty line shifts the header into the data
+    // D4 — a leading empty line no longer shifts the header into the data
     // --------------------------------------------------
 
     /**
-     * D4 — first line empty. A file beginning with a blank line consumes {@code lineNumber 1}
-     * on the empty line, so the real header lands on {@code lineNumber 2} and is processed as
-     * data instead of being skipped. On {@code /prices/import} the header row is read as a
-     * price whose EAN is the literal {@code EAN}: it fails the business lookup and is isolated
-     * as {@code Line 2 (EAN): Product with EAN EAN not found.} with zero rows created. The
-     * documented trap.
+     * D4 — first line empty. The header is the first NON-EMPTY line, so a file beginning with a
+     * blank line is harmless: the blank line consumes {@code lineNumber 1}, the header lands on
+     * {@code lineNumber 2} and is still read as the header. On {@code /prices/import} the file
+     * imports cleanly with zero rows and no error — the historical header-shift trap of the
+     * positional reader is gone with the header-driven resolution.
      */
     @Test
-    void d4_leadingEmptyLineShiftsHeaderIntoData() {
+    void d4_leadingEmptyLineDoesNotShiftHeaderIntoData() {
         String csv = "\n"
-                + "EAN|StoreCode|PriceExcludingTax|PriceIncludingTax|VatRate|PriceUsage|Priority|StartDateTime|EndDateTime\n";
+                + "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n";
         given().auth().preemptive().basic("admin", "admin")
                 .contentType(ContentType.TEXT)
                 .body(csv)
                 .when().post("/prices/import")
                 .then().statusCode(200)
-                .body(containsString("\"createdCount\":0"))
-                .body(containsString("Line 2 (EAN): Product with EAN EAN not found."));
+                .body(containsString("{\"createdCount\":0, \"updatedCount\":0}"))
+                .body(not(containsString("errors")));
     }
 
     // --------------------------------------------------
@@ -229,11 +229,11 @@ class GroupDIT {
      */
     @Test
     void d5_stagedTransactionalFallbackIsolatesFaultyLine() {
-        StringBuilder csv = new StringBuilder("code|name|s1|s2|pc|city|country|lat|lon\n");
+        StringBuilder csv = new StringBuilder("CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n");
         for (int i = 1; i <= 25; i++) {
             if (i == 13) {
-                // 7+ columns (passes the column check) but an empty mandatory name.
-                csv.append("D5BAD||1 rue||59000|Lille|FR\n");
+                // A full 9-cell row (passes the header cell check) but an empty mandatory name.
+                csv.append("D5BAD||1 rue||59000|Lille|FR||\n");
             } else {
                 csv.append(String.format("D5S%02d|D5 Store %02d|1 rue||59000|Lille|FR|50.6|3.0%n", i, i));
             }
@@ -264,7 +264,7 @@ class GroupDIT {
      */
     @Test
     void d6_idempotenceByChecksum() {
-        String initial = "code|name|s1|s2|pc|city|country|lat|lon\n"
+        String initial = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n"
                 + "D6S1|D6 Store|1 rue||59000|Lille|FR|50.6|3.0\n";
         String created = importCsv("/stores/import", initial);
         assertNotNull(created);
@@ -283,7 +283,7 @@ class GroupDIT {
             assertEquals(firstStamp[0], store.updatedAt,
                     "An idempotent re-import must leave updated_at untouched");
         });
-        String changed = "code|name|s1|s2|pc|city|country|lat|lon\n"
+        String changed = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n"
                 + "D6S1|D6 Store Renamed|1 rue||59000|Lille|FR|50.6|3.0\n";
         String updated = importCsv("/stores/import", changed);
         assertEquals(true, updated.contains("{\"createdCount\":0, \"updatedCount\":1}"),
@@ -306,7 +306,7 @@ class GroupDIT {
      */
     @Test
     void d7_duplicateKeyLastLineWins() {
-        String csv = "code|name|s1|s2|pc|city|country|lat|lon\n"
+        String csv = "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n"
                 + "D7DUP|First Name|1 rue||59000|Lille|FR|50.6|3.0\n"
                 + "D7DUP|Second Name|2 rue||59000|Lille|FR|50.7|3.1\n";
         given().auth().preemptive().basic("admin", "admin")

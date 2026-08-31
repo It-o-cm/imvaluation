@@ -101,7 +101,7 @@ class GroupMIT {
      * The offer header shared by the additive offer row.
      */
     private static final String OFFER_HEADER =
-            "offer_code|offer_type|specification|store_code|store_group_code\n";
+            "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n";
 
     /**
      * The additive case-sensitivity probe: a {@code MEAL_VOUCHER} on {@code 0102} whose flag is the
@@ -163,7 +163,7 @@ class GroupMIT {
      * Posts a CSV body to an import endpoint as {@code admin/admin} and asserts a 200.
      *
      * @param endpoint The import endpoint path.
-     * @param csv      The CSV body, header line included (the importer skips line 1).
+     * @param csv      The CSV body, header line included (the importer reads it as the header).
      */
     private void importCsv(String endpoint, String csv) {
         given().auth().preemptive().basic("admin", "admin")

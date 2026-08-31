@@ -36,7 +36,7 @@ public class MassProductImporterClient {
 
         // 1. Header (Updated to include referenceVolume)
         // Structure: {ean, name, description, brand, referenceWeight, referenceVolume, productType, unitName, active}
-        csvBuilder.append("ean|name|description|brand|referenceWeight|referenceVolume|productType|unitName|active\n");
+        csvBuilder.append("EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n");
 
         // 2. Generate 80000 lines of generic products
         for (int i = 1; i <= NB_PRODUCTS; i++) {

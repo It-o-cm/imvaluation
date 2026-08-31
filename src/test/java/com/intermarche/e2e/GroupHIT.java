@@ -121,7 +121,7 @@ class GroupHIT {
      * synthetic products).
      *
      * @param endpoint The import endpoint path.
-     * @param csv      The CSV body, header line included (the importer skips line 1).
+     * @param csv      The CSV body, header line included (the importer reads it as the header).
      */
     private void importCsv(String endpoint, String csv) {
         given().auth().preemptive().basic("admin", "admin")
@@ -406,7 +406,7 @@ class GroupHIT {
         assertFalse(ttc.compareTo(new BigDecimal("3.00")) == 0,
                 "The priority-0 3.00 must not win the overlap");
         importCsv("/prices/import",
-                "ean|storeCode|priceExcludingTax|priceIncludingTax|vatRate|priceUsage|priority|startDateTime|endDateTime\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "3300000000033|0101|20.00|24.00|0.2000|DEFAULT|0|2026-01-13T00:00:00|\n");
         JsonPath tie = valuate(basket("H2-tie", "0101", plain("3300000000033", "1")), 200).jsonPath();
         List<Integer> tieStandards = standardOffers(tie, "3300000000033");
@@ -436,7 +436,7 @@ class GroupHIT {
     @Test
     void h3_validityWindow() {
         importCsv("/prices/import",
-                "ean|storeCode|priceExcludingTax|priceIncludingTax|vatRate|priceUsage|priority|startDateTime|endDateTime\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "3300000000002|0103|2.50|3.00|0.2000|DEFAULT|0|2026-01-12T00:00:00|2026-06-01T00:00:00\n"
                         + "3300000000002|0103|2.75|3.30|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|2026-06-01T00:00:00\n");
         JsonPath within = valuate(
@@ -597,12 +597,12 @@ class GroupHIT {
         assertMoney("12.00", offerTtc(ham, hamStd.get(0)), "0.5kg / 0.100 ref = 5 x 2.40 = 12.00 TTC");
         assertMoney("10.00", offerHt(ham, hamStd.get(0)), "5 x 2.00 = 10.00 HT");
         importCsv("/products/import",
-                "ean|name|description|brand|referenceWeight|referenceVolume|productType|unitName|active\n"
+                "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n"
                         + "3300000000901|Test Weight No Ref|Weight without reference|BrandZ|0.000|1.000|WEIGHT|kg|true\n"
                         + "3300000000902|Test Volume No Ref|Volume without reference|BrandZ|1.000|0.000|VOLUME|L|true\n"
                         + "3300000000903|Test Volume Ref|Volume with reference|BrandZ|1.000|2.000|VOLUME|L|true\n");
         importCsv("/prices/import",
-                "ean|storeCode|priceExcludingTax|priceIncludingTax|vatRate|priceUsage|priority|startDateTime|endDateTime\n"
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "3300000000901|0101|5.00|6.00|0.2000|DEFAULT|0|2026-01-12T00:00:00|\n"
                         + "3300000000901|0101|5.50|6.60|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|\n"
                         + "3300000000902|0101|5.00|6.00|0.2000|DEFAULT|0|2026-01-12T00:00:00|\n"

@@ -25,8 +25,9 @@ import java.util.stream.Collectors;
  * It manages the composite key matching (Product EAN + Level1 + Level5) and leverages
  * the base class for the staged transaction management (1000 -> 100 -> 10 -> 1).
  * <p>
- * Expected CSV format (6 columns):
- * ProductEAN|Level1|Level2|Level3|Level4|Level5
+ * Consumed columns (resolved by header name; unknown columns of the
+ * shared feed are ignored): EAN (key), LEVEL1, LEVEL2, LEVEL3, LEVEL4,
+ * LEVEL5.
  */
 @Path("/product-category-storages/import")
 @ApplicationScoped
@@ -38,6 +39,23 @@ public class ProductCategoryStorageCsvResource extends ImporterCsvResource {
     // Keys used to store auxiliary maps in the generic context map
     private static final String CTX_PRODUCTS = "__CTX_PRODUCTS__";
     static final String CTX_STORAGES = "__CTX_STORAGES__";
+
+    /** Header name of the natural key: the product EAN. */
+    static final String COL_EAN = "EAN";
+    /** Header name of the level-1 category (composite-key part). */
+    static final String COL_LEVEL1 = "LEVEL1";
+    /** Header name of the level-2 category. */
+    static final String COL_LEVEL2 = "LEVEL2";
+    /** Header name of the level-3 category. */
+    static final String COL_LEVEL3 = "LEVEL3";
+    /** Header name of the level-4 category. */
+    static final String COL_LEVEL4 = "LEVEL4";
+    /** Header name of the level-5 category (composite-key part). */
+    static final String COL_LEVEL5 = "LEVEL5";
+
+    /** The columns this importer cannot work without. */
+    static final List<String> REQUIRED_COLUMNS = List.of(
+            COL_LEVEL1, COL_LEVEL2, COL_LEVEL3, COL_LEVEL4, COL_LEVEL5);
 
     /**
      * Imports or updates product category storages from a CSV stream.
@@ -51,8 +69,7 @@ public class ProductCategoryStorageCsvResource extends ImporterCsvResource {
     @Produces(MediaType.APPLICATION_JSON)
     @RolesAllowed("ADMIN")
     public Response importCategoryStorages(InputStream inputStream) {
-        // 6 columns expected: EAN, L1, L2, L3, L4, L5
-        return this.importCsvStream(inputStream, 6);
+        return this.importCsvStream(inputStream, COL_EAN, REQUIRED_COLUMNS);
     }
 
     /**
@@ -63,7 +80,7 @@ public class ProductCategoryStorageCsvResource extends ImporterCsvResource {
      * Constructs a "Context Map" containing both maps to be passed to the generic algorithm.
      *
      * @param parsedLines The list of data for the current chunk.
-     * @param targetCodes The set of unique Product EANs in this chunk (Column 0).
+     * @param targetCodes The set of unique Product EANs in this chunk (key column EAN).
      * @param counters    An array of size 2 to hold [createdCount, updatedCount].
      * @param errors      List to collect definitive error messages.
      * @return A Map containing the Product map and Storage map needed for processing.
@@ -128,9 +145,9 @@ public class ProductCategoryStorageCsvResource extends ImporterCsvResource {
      */
     @Override
     protected void processLineLogic(LineData data, Map<String, Object> entityMap, int[] counters) {
-        String ean = data.code; // Column 0 is now EAN
-        String level1 = safeGet(data.parts, 1);
-        String level5 = safeGet(data.parts, 5);
+        String ean = data.code; // The key column is EAN
+        String level1 = safeGet(data, COL_LEVEL1);
+        String level5 = safeGet(data, COL_LEVEL5);
         // 1. Retrieve Product
         Map<String, Product> productMap = retrieveProducts(entityMap);
         Product product = productMap.get(ean);
@@ -173,7 +190,7 @@ public class ProductCategoryStorageCsvResource extends ImporterCsvResource {
         // 4. Build the Storage Map
         Map<String, ProductCategoryStorage> storageMap = new HashMap<>();
         if (storage != null) {
-            String key = buildStorageKey(data.code, safeGet(data.parts, 1), safeGet(data.parts, 5));
+            String key = buildStorageKey(data.code, safeGet(data, COL_LEVEL1), safeGet(data, COL_LEVEL5));
             storageMap.put(key, storage);
         }
         // 5. Assemble and return the full context expected by processLineLogic
@@ -234,8 +251,8 @@ public class ProductCategoryStorageCsvResource extends ImporterCsvResource {
         return ProductCategoryStorage.find(
                 "product.id = ?1 and level1 = ?2 and level5 = ?3",
                 product.id,
-                safeGet(data.parts, 1),
-                safeGet(data.parts, 5)
+                safeGet(data, COL_LEVEL1),
+                safeGet(data, COL_LEVEL5)
         ).firstResult();
     }
 
@@ -255,12 +272,11 @@ public class ProductCategoryStorageCsvResource extends ImporterCsvResource {
      * Populates a ProductCategoryStorage entity with data from the parsed CSV line.
      */
     private void feedCategoryStorage(LineData data, ProductCategoryStorage storage) {
-        String[] parts = data.parts;
-        storage.level1 = safeGet(parts, 1);
-        storage.level2 = safeGet(parts, 2);
-        storage.level3 = safeGet(parts, 3);
-        storage.level4 = safeGet(parts, 4);
-        storage.level5 = safeGet(parts, 5);
+        storage.level1 = safeGet(data, COL_LEVEL1);
+        storage.level2 = safeGet(data, COL_LEVEL2);
+        storage.level3 = safeGet(data, COL_LEVEL3);
+        storage.level4 = safeGet(data, COL_LEVEL4);
+        storage.level5 = safeGet(data, COL_LEVEL5);
     }
 
     /**
@@ -274,14 +290,13 @@ public class ProductCategoryStorageCsvResource extends ImporterCsvResource {
      * @return The integer hash of incoming data.
      */
     private int computeIncomingChecksum(LineData data, Long productId) {
-        String[] parts = data.parts;
         return Objects.hash(
                 productId,
-                safeGet(parts, 1),
-                safeGet(parts, 2),
-                safeGet(parts, 3),
-                safeGet(parts, 4),
-                safeGet(parts, 5)
+                safeGet(data, COL_LEVEL1),
+                safeGet(data, COL_LEVEL2),
+                safeGet(data, COL_LEVEL3),
+                safeGet(data, COL_LEVEL4),
+                safeGet(data, COL_LEVEL5)
         );
     }
 }

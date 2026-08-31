@@ -59,6 +59,27 @@ public class ProductCsvResourceTest {
     @Inject
     ProductCsvResource productCsvResource;
 
+    /** Header names of the test rows, in cell order (the canonical product feed). */
+    private static final String[] TEST_HEADER = {
+            "EAN", "NAME", "DESCRIPTION", "BRAND", "REFERENCE_WEIGHT",
+            "REFERENCE_VOLUME", "PRODUCT_TYPE", "UNIT_NAME", "ACTIVE"};
+
+    /**
+     * Builds a header-bound row for the importer: the header maps the
+     * TEST_HEADER names onto the cell positions and EAN is the key column.
+     *
+     * @param lineNumber The 1-based line number.
+     * @param cells The raw cells of the row.
+     * @return The header-bound line.
+     */
+    private static ImporterCsvResource.LineData line(int lineNumber, String[] cells) {
+        Map<String, Integer> header = new LinkedHashMap<>();
+        for (int i = 0; i < TEST_HEADER.length; i++) {
+            header.put(TEST_HEADER[i], i);
+        }
+        return new ImporterCsvResource.LineData(lineNumber, header, cells, TEST_HEADER[0]);
+    }
+
     /**
      * The TransactionManager for manual transaction control in tests.
      */
@@ -98,7 +119,7 @@ public class ProductCsvResourceTest {
     @TestTransaction
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportNewProductsSuccess() {
-        String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
+        String csvContent = "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n" +
                 "3270190123456|Yaourt Nature|Yaourt fermier|Brand A|0.5|null|WEIGHT|kg|true\n" +
                 "3270190123457|Miel Pot 500g|Miel de montagne|Brand B|null|0.5|UNIT|pcs|true";
         authenticated()
@@ -150,7 +171,7 @@ public class ProductCsvResourceTest {
             return existing.id;
         });
         // 2. Act: Import CSV with same EAN but different data
-        String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
+        String csvContent = "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n" +
                 "3270190123458|New Name|Updated Desc|Brand X|1.2|null|UNIT|pcs|true";
         authenticated()
                 .body(csvContent)
@@ -178,7 +199,7 @@ public class ProductCsvResourceTest {
     @TestTransaction
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportWithMalformedData_FallbackAndErrors() {
-        String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
+        String csvContent = "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n" +
                 "3270190111111|Valid Product|Desc|Brand|1.0||UNIT|pcs|true\n" + // Valid
                 "3270190222222|Bad Enum|Desc|Brand|1.0||INVALID_ENUM|pcs|true";  // Invalid Enum
         authenticated()
@@ -207,7 +228,7 @@ public class ProductCsvResourceTest {
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testProcessChunkWithFallback_EmptyInput() {
         // CSV with only header, no data lines
-        String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n";
+        String csvContent = "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n";
         authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
@@ -246,7 +267,7 @@ public class ProductCsvResourceTest {
         // 1. A valid line (update existing)
         // 2. A valid line (new)
         // 3. An invalid line (Empty Name -> @NotBlank violation -> Rollback -> Fallback)
-        String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
+        String csvContent = "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n" +
                 "3270190999999|Updated Name|Desc|Brand|1||UNIT|pcs|true\n" + // Update
                 "3270190888888|New Product|Desc|Brand|1||UNIT|pcs|true\n" +   // Create
                 "3270190777777| |Desc|Brand|1||UNIT|pcs|true";               // Invalid (Empty Name)
@@ -294,7 +315,7 @@ public class ProductCsvResourceTest {
         });
         // 2. ACTION: Send CSV with MODIFIED data
         // The checksum will be different -> Update expected
-        String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
+        String csvContent = "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n" +
                 "\n" +
                 "3270190123458|Nouveau Nom|Nouvelle description|Nouvelle Marque|2.0|null|UNIT|pcs|true";
         authenticated()
@@ -342,7 +363,7 @@ public class ProductCsvResourceTest {
         });
         // 2. ACTION: Send CSV with SAME data
         // The checksum will be identical -> NO update (Optimization)
-        String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
+        String csvContent = "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n" +
                 "3270190123459|Produit Identique|Desc|Brand|0.5|1.0|VOLUME|L|true";
         authenticated()
                 .auth().preemptive().basic("admin", "admin")
@@ -364,16 +385,16 @@ public class ProductCsvResourceTest {
     }
 
     /**
-     * Tests the import behavior when a line has fewer columns than expected.
+     * Tests the import behavior when a line has fewer cells than the header.
      * <p>
-     * Verifies that lines with insufficient columns are ignored and reported as errors.
+     * Verifies that truncated lines are ignored and reported as errors.
      */
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportNotEnoughColumns() {
-        // Case 1: A line with fewer than 9 columns (missing separators)
-        String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit\n" + // Incorrect Header (8 columns)
-                "3270190123456|Yaourt Nature|Yaourt fermier|Brand A|0.5|null|WEIGHT|kg"; // Incorrect Data
+        // A data line with fewer cells (8) than the header (9 columns)
+        String csvContent = "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n" +
+                "3270190123456|Yaourt Nature|Yaourt fermier|Brand A|0.5|null|WEIGHT|kg"; // Truncated Data
         authenticated()
                 .body(csvContent)
                 .contentType(ContentType.TEXT)
@@ -384,7 +405,7 @@ public class ProductCsvResourceTest {
                 .body(containsString("\"createdCount\":0"))
                 .body(containsString("\"updatedCount\":0"))
                 .body(containsString("\"errors\""))
-                .body(containsString("not enough columns")); // Verify specific error message
+                .body(containsString("fewer cells than the header")); // Verify specific error message
     }
 
     /**
@@ -420,11 +441,8 @@ public class ProductCsvResourceTest {
     @Test
     void testProcessChunkWithFallback_EmptyTargetEans() {
         // Create a dummy line so parsedLines is NOT empty (passes the first check)
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "CODE",
-                new String[]{"CODE", "Name", "Desc", "Brand", "1.0", "", "UNIT", "pcs", "true"}
-        );
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"CODE", "Name", "Desc", "Brand", "1.0", "", "UNIT", "pcs", "true"});
         List<ImporterCsvResource.LineData> parsedLines = List.of(line);
         // Explicitly pass an EMPTY set of EANs to trigger the specific condition
         Set<String> targetEans = Collections.emptySet();
@@ -440,7 +458,7 @@ public class ProductCsvResourceTest {
      */
     @Test
     void testSecurity_AccessDeniedForNonAdmin() {
-        String csvContent = "ean|name|description|brand|refWeight|refVolume|type|unit|active\n" +
+        String csvContent = "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n" +
                 "3270190444444|Test|Desc|Brand|1.0||UNIT|pcs|true";
         given()
                 .body(csvContent)
@@ -452,27 +470,29 @@ public class ProductCsvResourceTest {
     }
 
     /**
-     * Tests {@link ProductCsvResource#safeParseProductType} with an index out of bounds.
+     * Tests {@link ProductCsvResource#safeParseProductType} with a cell beyond
+     * the line's cells.
      * <p>
-     * Covers: {@code if (index >= parts.length) return null;}
+     * Covers: the column resolving to null (short line).
      */
     @Test
     void testSafeParseProductType_Bounds() {
-        // Array with 2 elements, trying to access index 6
-        String[] parts = {"Val1", "Val2"};
-        assertNull(productCsvResource.safeParseProductType(parts, 6));
+        // Row with 2 cells only: PRODUCT_TYPE (index 6) has no cell
+        assertNull(productCsvResource.safeParseProductType(
+                line(1, new String[]{"Val1", "Val2"}), "PRODUCT_TYPE"));
     }
 
     /**
      * Tests {@link ProductCsvResource#safeParseProductType} with an empty value.
      * <p>
-     * Covers: {@code if (val.isEmpty()) return null;}
+     * Covers: {@code if (val == null || val.isEmpty()) return null;}
      */
     @Test
     void testSafeParseProductType_EmptyValue() {
-        // Array with enough elements, but the value at index 6 is empty
-        String[] parts = {"Val1", "Val2", "Val3", "Val4", "Val5", "Val6", "", "Val8", "Val9"};
-        assertNull(productCsvResource.safeParseProductType(parts, 6));
+        // Row with enough cells, but the PRODUCT_TYPE cell is empty
+        assertNull(productCsvResource.safeParseProductType(
+                line(1, new String[]{"Val1", "Val2", "Val3", "Val4", "Val5", "Val6", "", "Val8", "Val9"}),
+                "PRODUCT_TYPE"));
     }
 
     /**
@@ -483,8 +503,9 @@ public class ProductCsvResourceTest {
     @Test
     void testSafeParseProductType_InvalidEnum() {
         // Valid string that does not match any ProductType enum constant
-        String[] parts = {"Val1", "Val2", "Val3", "Val4", "Val5", "Val6", "INVALID_ENUM_TYPE", "Val8", "Val9"};
-        assertNull(productCsvResource.safeParseProductType(parts, 6));
+        assertNull(productCsvResource.safeParseProductType(
+                line(1, new String[]{"Val1", "Val2", "Val3", "Val4", "Val5", "Val6", "INVALID_ENUM_TYPE", "Val8", "Val9"}),
+                "PRODUCT_TYPE"));
     }
 
     /**

@@ -26,10 +26,11 @@ import java.util.stream.Collectors;
  * It handles CSV parsing, bulk fetching of related entities (Stores, StoreGroups),
  * and leverages the parent class for the staged transaction management (1000 -> 100 -> 10 -> 1).
  * <p>
- * CSV Format (5 columns):
- * offer_code|offer_type|specification|store_code|store_group_code
+ * Consumed columns (resolved by header name; unknown columns of the
+ * shared feed are ignored): CODE (key), TYPE, SPECIFICATION, STORE_CODES,
+ * STORE_GROUP_CODES.
  * <p>
- * Note: store_code and store_group_code can contain multiple values separated by commas (e.g., "0101,0102").
+ * Note: STORE_CODES and STORE_GROUP_CODES can contain multiple values separated by commas (e.g., "0101,0102").
  */
 @Path("/offers/import")
 @ApplicationScoped
@@ -41,6 +42,21 @@ public class OfferCsvResource extends ImporterCsvResource {
     // Keys used to store auxiliary maps (Stores, Groups) in the generic context map
     private static final String CTX_STORES = "__CTX_STORES__";
     private static final String CTX_GROUPS = "__CTX_GROUPS__";
+
+    /** Header name of the natural key: the offer code. */
+    static final String COL_CODE = "CODE";
+    /** Header name of the offer type. */
+    static final String COL_TYPE = "TYPE";
+    /** Header name of the JSON specification. */
+    static final String COL_SPECIFICATION = "SPECIFICATION";
+    /** Header name of the comma-separated target store codes. */
+    static final String COL_STORE_CODES = "STORE_CODES";
+    /** Header name of the comma-separated target store group codes. */
+    static final String COL_STORE_GROUP_CODES = "STORE_GROUP_CODES";
+
+    /** The columns this importer cannot work without. */
+    static final List<String> REQUIRED_COLUMNS = List.of(
+            COL_TYPE, COL_SPECIFICATION, COL_STORE_CODES, COL_STORE_GROUP_CODES);
 
     /**
      * Imports or updates offers from a CSV stream.
@@ -54,8 +70,7 @@ public class OfferCsvResource extends ImporterCsvResource {
     @Produces(MediaType.APPLICATION_JSON)
     @RolesAllowed("ADMIN")
     public Response importOffers(InputStream inputStream) {
-        // 5 columns expected: code, type, spec, stores, groups
-        return this.importCsvStream(inputStream, 5);
+        return this.importCsvStream(inputStream, COL_CODE, REQUIRED_COLUMNS);
     }
 
     /**
@@ -70,7 +85,7 @@ public class OfferCsvResource extends ImporterCsvResource {
      * This triggers the 1000 -> 100 -> 10 -> 1 algorithm.
      *
      * @param parsedLines The list of data for the current chunk.
-     * @param targetCodes The set of unique Offer codes in this chunk (Column 0).
+     * @param targetCodes The set of unique Offer codes in this chunk (key column CODE).
      * @param counters    An array of size 2 to hold [createdCount, updatedCount].
      * @param errors      List to collect definitive error messages.
      * @return A Map containing all entities (Offers, Stores, Groups) needed for processing.
@@ -111,7 +126,7 @@ public class OfferCsvResource extends ImporterCsvResource {
     /**
      * Retrieves a map of Stores referenced in the provided lines.
      * <p>
-     * Extracts store codes from column 3 and performs a bulk fetch.
+     * Extracts store codes from the STORE_CODES column and performs a bulk fetch.
      *
      * @param parsedLines The list of parsed data containing store codes.
      * @return A map of store code to Store entity.
@@ -119,7 +134,7 @@ public class OfferCsvResource extends ImporterCsvResource {
     private Map<String, Store> getStoreMap(List<LineData> parsedLines) {
         Set<String> storeCodesToFetch = new HashSet<>();
         for (LineData data : parsedLines) {
-            storeCodesToFetch.addAll(parseCodes(data.parts[3]));
+            storeCodesToFetch.addAll(parseCodes(data.get(COL_STORE_CODES)));
         }
         Map<String, Store> storeMap = new HashMap<>();
         if (!storeCodesToFetch.isEmpty()) {
@@ -134,7 +149,7 @@ public class OfferCsvResource extends ImporterCsvResource {
     /**
      * Retrieves a map of StoreGroups referenced in the provided lines.
      * <p>
-     * Extracts group codes from column 4 and performs a bulk fetch.
+     * Extracts group codes from the STORE_GROUP_CODES column and performs a bulk fetch.
      *
      * @param parsedLines The list of parsed data containing group codes.
      * @return A map of group code to StoreGroup entity.
@@ -142,7 +157,7 @@ public class OfferCsvResource extends ImporterCsvResource {
     private Map<String, StoreGroup> getStoreGroupMap(List<LineData> parsedLines) {
         Set<String> groupCodesToFetch = new HashSet<>();
         for (LineData data : parsedLines) {
-            groupCodesToFetch.addAll(parseCodes(data.parts[4]));
+            groupCodesToFetch.addAll(parseCodes(data.get(COL_STORE_GROUP_CODES)));
         }
         Map<String, StoreGroup> groupMap = new HashMap<>();
         if (!groupCodesToFetch.isEmpty()) {
@@ -173,9 +188,9 @@ public class OfferCsvResource extends ImporterCsvResource {
         // Note: In 1-by-1 fallback, the parent class creates a minimal map with only the fresh Entity.
         // We must check if our specific keys exist. If not, we are in fallback mode and need manual fetches.
         // Handle Fallback Data Fetching (if maps are null)
-        List<String> requestedStoreCodes = parseCodes(data.parts[3]);
+        List<String> requestedStoreCodes = parseCodes(data.get(COL_STORE_CODES));
         Map<String, Store> storeMap = retrieveStores(entityMap, requestedStoreCodes);
-        List<String> requestedGroupCodes = parseCodes(data.parts[4]);
+        List<String> requestedGroupCodes = parseCodes(data.get(COL_STORE_GROUP_CODES));
         Map<String, StoreGroup> groupMap = retrieveStoreGroups(entityMap, requestedGroupCodes);
         // 3. Business Logic (Create/Update/Link)
         boolean isNew = (offer == null);
@@ -215,8 +230,8 @@ public class OfferCsvResource extends ImporterCsvResource {
     private void prepareOffer(LineData data, Offer offer, List<String> requestedStoreCodes, List<String> requestedGroupCodes,
                               Map<String, Store> storeMap, Map<String, StoreGroup> groupMap) {
         // Update Fields
-        offer.type = safeGet(data.parts, 1);
-        offer.specification = safeGet(data.parts, 2);
+        offer.type = safeGet(data, COL_TYPE);
+        offer.specification = safeGet(data, COL_SPECIFICATION);
         // Handle Target Linking
         // Validate: At least one target
         if (requestedStoreCodes.isEmpty() && requestedGroupCodes.isEmpty()) {
@@ -314,8 +329,8 @@ public class OfferCsvResource extends ImporterCsvResource {
      * @return The integer hash of incoming data.
      */
     private int computeIncomingChecksum(LineData data, List<String> storeCodeList, List<String> groupCodeList) {
-        String type = safeGet(data.parts, 1);
-        String spec = safeGet(data.parts, 2);
+        String type = safeGet(data, COL_TYPE);
+        String spec = safeGet(data, COL_SPECIFICATION);
         // Note: storeCodes and groupCodes are already sorted by parseCodes()
         String storeCodes = storeCodeList.stream()
                 .sorted()

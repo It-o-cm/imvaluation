@@ -98,10 +98,11 @@ public class DataInitializer {
      * transaction manager themselves and would refuse to start inside an enclosing
      * transaction.
      * <p>
-     * The seed calls {@link ImporterCsvResource#importCsvStream(InputStream, int)} directly
-     * rather than the endpoint methods: those carry {@code @RolesAllowed("ADMIN")}, and the
+     * The seed calls {@link ImporterCsvResource#importCsvStream(InputStream, String, java.util.List)}
+     * directly rather than the endpoint methods: those carry {@code @RolesAllowed("ADMIN")}, and the
      * startup thread has no authenticated identity, so going through them would fail with an
-     * {@code UnauthorizedException}. The column counts mirror the ones each endpoint passes.
+     * {@code UnauthorizedException}. The key and required columns mirror the ones each endpoint
+     * passes, so the seed enforces the same header contract as the HTTP imports.
      *
      * @param event The startup event that triggers the initialization.
      */
@@ -114,13 +115,20 @@ public class DataInitializer {
             return;
         }
         LOGGER.info("Empty database: seeding the reference data from the embedded CSV files.");
-        seed("stores.csv", stream -> storeCsvResource.importCsvStream(stream, 7));
-        seed("store-groups.csv", stream -> storeGroupCsvResource.importCsvStream(stream, 4));
-        seed("products.csv", stream -> productCsvResource.importCsvStream(stream, 9));
-        seed("product-families.csv", stream -> productFamilyCsvResource.importCsvStream(stream, 5));
-        seed("product-category-storages.csv", stream -> productCategoryStorageCsvResource.importCsvStream(stream, 6));
-        seed("prices.csv", stream -> priceCsvResource.importCsvStream(stream, 9));
-        seed("offers.csv", stream -> offerCsvResource.importCsvStream(stream, 5));
+        seed("stores.csv", stream -> storeCsvResource.importCsvStream(
+                stream, StoreCsvResource.COL_CODE, StoreCsvResource.REQUIRED_COLUMNS));
+        seed("store-groups.csv", stream -> storeGroupCsvResource.importCsvStream(
+                stream, StoreGroupCsvResource.COL_CODE, StoreGroupCsvResource.REQUIRED_COLUMNS));
+        seed("products.csv", stream -> productCsvResource.importCsvStream(
+                stream, ProductCsvResource.COL_EAN, ProductCsvResource.REQUIRED_COLUMNS));
+        seed("product-families.csv", stream -> productFamilyCsvResource.importCsvStream(
+                stream, ProductFamilyCsvResource.COL_CODE, ProductFamilyCsvResource.REQUIRED_COLUMNS));
+        seed("product-category-storages.csv", stream -> productCategoryStorageCsvResource.importCsvStream(
+                stream, ProductCategoryStorageCsvResource.COL_EAN, ProductCategoryStorageCsvResource.REQUIRED_COLUMNS));
+        seed("prices.csv", stream -> priceCsvResource.importCsvStream(
+                stream, PriceCsvResource.COL_EAN, PriceCsvResource.REQUIRED_COLUMNS));
+        seed("offers.csv", stream -> offerCsvResource.importCsvStream(
+                stream, OfferCsvResource.COL_CODE, OfferCsvResource.REQUIRED_COLUMNS));
         LOGGER.info("Reference data seed completed.");
     }
 

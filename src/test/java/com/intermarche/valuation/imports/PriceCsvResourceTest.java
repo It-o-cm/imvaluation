@@ -61,6 +61,27 @@ public class PriceCsvResourceTest {
     @Inject
     PriceCsvResource priceCsvResource;
 
+    /** Header names of the test rows, in cell order (the canonical price feed). */
+    private static final String[] TEST_HEADER = {
+            "EAN", "STORE_CODE", "PRICE_EXCL_TAX", "PRICE_INCL_TAX", "VAT_RATE",
+            "PRICE_USAGE", "PRIORITY", "START_DATE", "END_DATE"};
+
+    /**
+     * Builds a header-bound row for the importer: the header maps the
+     * TEST_HEADER names onto the cell positions and EAN is the key column.
+     *
+     * @param lineNumber The 1-based line number.
+     * @param cells The raw cells of the row.
+     * @return The header-bound line.
+     */
+    private static ImporterCsvResource.LineData line(int lineNumber, String[] cells) {
+        Map<String, Integer> header = new LinkedHashMap<>();
+        for (int i = 0; i < TEST_HEADER.length; i++) {
+            header.put(TEST_HEADER[i], i);
+        }
+        return new ImporterCsvResource.LineData(lineNumber, header, cells, TEST_HEADER[0]);
+    }
+
     /**
      * The TransactionManager for manual transaction control in tests.
      */
@@ -114,7 +135,7 @@ public class PriceCsvResourceTest {
             return true;
         });
 
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 "3270190123456|S001|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
         authenticated()
@@ -173,7 +194,7 @@ public class PriceCsvResourceTest {
         });
 
         // 2. Act: Import CSV with different PriceExcludingTax
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 "3270190999999|S001|8.50|10.20|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
         authenticated()
@@ -228,7 +249,7 @@ public class PriceCsvResourceTest {
         });
 
         // 2. Act: Import CSV with SAME data
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 "3270190888888|S001|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
         authenticated()
@@ -258,7 +279,7 @@ public class PriceCsvResourceTest {
             return true;
         });
 
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 "NON_EXISTENT_EAN|S001|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
         authenticated()
@@ -289,7 +310,7 @@ public class PriceCsvResourceTest {
             return true;
         });
 
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 "3270190123456|NON_EXISTENT_STORE|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
         authenticated()
@@ -326,7 +347,7 @@ public class PriceCsvResourceTest {
             return true;
         });
 
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 "3270190123456|S001|10.00|12.00|0.2000||0|2023-01-01T00:00:00|"; // Empty Usage
 
         authenticated()
@@ -370,7 +391,7 @@ public class PriceCsvResourceTest {
         // 1. Valid
         // 2. Valid (different priority -> new price)
         // 3. Invalid (Empty usage -> Rollback -> Fallback)
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 "3270190123456|S001|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|\n" +
                 "3270190123456|S001|10.00|12.00|0.2000|DEFAULT|1|2023-01-01T00:00:00|\n" +
                 "3270190123456|S001|10.00|12.00|0.2000||0|2023-01-01T00:00:00|";
@@ -415,11 +436,8 @@ public class PriceCsvResourceTest {
     @Test
     void testProcessChunkWithFallback_EmptyTargetCodes() {
         // Create a dummy line so parsedLines is NOT empty
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "CODE",
-                new String[]{"CODE", "S001", "10.00", "12.00", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""}
-        );
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"CODE", "S001", "10.00", "12.00", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""});
         List<ImporterCsvResource.LineData> parsedLines = List.of(line);
 
         // Explicitly pass an EMPTY set of codes
@@ -435,25 +453,27 @@ public class PriceCsvResourceTest {
     }
 
     /**
-     * Tests {@link PriceCsvResource#safeParsePriceUsage} with an index out of bounds.
+     * Tests {@link PriceCsvResource#safeParsePriceUsage} with a cell beyond
+     * the line's cells.
      * <p>
-     * Covers: {@code if (index >= parts.length) return null; }
+     * Covers: the column resolving to null (short line).
      */
     @Test
     void testSafeParsePriceUsage_Bounds() {
-        String[] parts = {"Val1", "Val2"};
-        assertNull(priceCsvResource.safeParsePriceUsage(parts, 6));
+        // Row with 2 cells only: PRICE_USAGE (index 5) has no cell
+        assertNull(priceCsvResource.safeParsePriceUsage(
+                line(1, new String[]{"Val1", "Val2"}), "PRICE_USAGE"));
     }
 
     /**
      * Tests {@link PriceCsvResource#safeParsePriceUsage} with an empty value.
      * <p>
-     * Covers: {@code if (val.isEmpty()) return null; }
+     * Covers: {@code if (val == null || val.isEmpty()) return null; }
      */
     @Test
     void testSafeParsePriceUsage_EmptyValue() {
-        String[] parts = {"Val1", "Val2", "Val3", "Val4", "Val5", ""};
-        assertNull(priceCsvResource.safeParsePriceUsage(parts, 5));
+        assertNull(priceCsvResource.safeParsePriceUsage(
+                line(1, new String[]{"Val1", "Val2", "Val3", "Val4", "Val5", ""}), "PRICE_USAGE"));
     }
 
     /**
@@ -463,8 +483,8 @@ public class PriceCsvResourceTest {
      */
     @Test
     void testSafeParsePriceUsage_InvalidEnum() {
-        String[] parts = {"Val1", "Val2", "Val3", "Val4", "Val5", "INVALID_USAGE"};
-        assertNull(priceCsvResource.safeParsePriceUsage(parts, 5));
+        assertNull(priceCsvResource.safeParsePriceUsage(
+                line(1, new String[]{"Val1", "Val2", "Val3", "Val4", "Val5", "INVALID_USAGE"}), "PRICE_USAGE"));
     }
 
     /**
@@ -472,7 +492,7 @@ public class PriceCsvResourceTest {
      */
     @Test
     void testSecurity_AccessDeniedForNonAdmin() {
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 "3270190123456|S001|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
 
         given()
@@ -492,11 +512,8 @@ public class PriceCsvResourceTest {
     @Test
     void testGetStoreMap_EmptyCodes() {
         // Create a line where store code is null/empty
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "EAN1",
-                new String[]{"EAN1", null, "10.0", "12.0", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""}
-        );
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"EAN1", null, "10.0", "12.0", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""});
 
         List<ImporterCsvResource.LineData> lines = List.of(line);
         Set<String> targetCodes = Set.of("EAN1");
@@ -516,16 +533,13 @@ public class PriceCsvResourceTest {
     /**
      * Tests {@link PriceCsvResource#getTargetStoreCodes} with a line where the store code is missing.
      * <p>
-     * Covers: {@code String storeCode = safeGet(data.parts, 1); } resulting in null.
+     * Covers: {@code String storeCode = safeGet(data, COL_STORE_CODE); } resulting in null.
      */
     @Test
     void testGetTargetStoreCodes_NullCode() {
-        // Line with insufficient columns (Index 1 doesn't exist)
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "EAN1",
-                new String[]{"EAN1", "10.0", "12.0"} // Store column missing
-        );
+        // Line whose STORE_CODE cell carries a null value
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"EAN1", null, "10.0"}); // Store cell null
 
         // We can't call getTargetStoreCodes directly (private), but we can observe the result via processChunkWithFallback
         List<ImporterCsvResource.LineData> lines = List.of(line);
@@ -563,12 +577,9 @@ public class PriceCsvResourceTest {
         pMap.put("EAN1", p);
         entityMap.put("__CTX_PRODUCTS__", pMap);
 
-        // Create LineData with null store code at index 1
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "EAN1",
-                new String[]{"EAN1", null, "10.0", "12.0", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""}
-        );
+        // Create LineData with a null STORE_CODE cell
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"EAN1", null, "10.0", "12.0", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""});
 
         int[] counters = {0, 0};
 
@@ -603,11 +614,8 @@ public class PriceCsvResourceTest {
         });
 
         // Create LineData for a NEW price (not in DB)
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "EAN1",
-                new String[]{"EAN1", "S001", "10.0", "12.0", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""}
-        );
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"EAN1", "S001", "10.0", "12.0", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""});
 
         // Create a context map WITHOUT the Price map (simulating fallback mode entry)
         Map<String, Object> entityMap = new HashMap<>();
@@ -629,12 +637,9 @@ public class PriceCsvResourceTest {
      */
     @Test
     void testFindEntityForLine_NullStoreCode() {
-        // Create LineData with null store code at index 1
-        ImporterCsvResource.LineData line = new ImporterCsvResource.LineData(
-                1,
-                "EAN1",
-                new String[]{"EAN1", null, "10.0", "12.0", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""}
-        );
+        // Create LineData with a null STORE_CODE cell
+        ImporterCsvResource.LineData line = line(1,
+                new String[]{"EAN1", null, "10.0", "12.0", "0.2", "DEFAULT", "0", "2023-01-01T00:00:00", ""});
 
         Object result = priceCsvResource.findEntityForLine(line);
         assertNull(result);
@@ -707,7 +712,7 @@ public class PriceCsvResourceTest {
         // CSV:
         // Line 1: Start Date is empty (null)
         // Line 2: Start Date is valid
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 "3270190000001|S001|10.00|12.00|0.2|DEFAULT|0||\n" + // Start null
                 "3270190000001|S001|15.00|18.00|0.2|DEFAULT|0|2023-01-01T00:00:00|"; // Start valid
 
@@ -777,7 +782,7 @@ public class PriceCsvResourceTest {
         // 2. Act: CSV with mixed lines
         // Line 1: Valid, matches existing price (Will force retrievePrices to fetch it).
         // Line 2: Invalid (Invalid Usage -> Rollback -> Fallback).
-        String csvContent = "ean|store|priceET|priceIT|vat|usage|priority|start|end\n" +
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
                 ean + "|" + storeCode + "|15.00|18.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|\n" + // Valid (Update)
                 "BAD_EAN|S005|10.00|12.00|0.2000|INVALID_USAGE|0|2023-01-01T00:00:00|"; // Invalid (Trigger Fallback)
 

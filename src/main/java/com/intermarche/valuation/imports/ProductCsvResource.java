@@ -25,8 +25,9 @@ import java.util.Set;
  * REST Endpoint for bulk importing or updating Products from a CSV file stream.
  * <p>
  * This specific implementation extends {@link ImporterCsvResource} to handle
- * {@link Product} entities. It defines the CSV structure (9 columns) and the
- * business logic for creating/updating products.
+ * {@link Product} entities. It names the columns it consumes from the
+ * shared feed (header-driven, see the COL_* dictionary) and the business
+ * logic for creating/updating products.
  * <p>
  * It leverages the parent's Staged Fallback algorithm (1000 -> 100 -> 10 -> 1).
  */
@@ -37,13 +38,38 @@ public class ProductCsvResource extends ImporterCsvResource {
 
     private static final Logger LOGGER = Logger.getLogger(ProductCsvResource.class);
 
+    /** Header name of the natural key: the product EAN. */
+    static final String COL_EAN = "EAN";
+    /** Header name of the product label. */
+    static final String COL_NAME = "NAME";
+    /** Header name of the product description. */
+    static final String COL_DESCRIPTION = "DESCRIPTION";
+    /** Header name of the brand. */
+    static final String COL_BRAND = "BRAND";
+    /** Header name of the reference weight. */
+    static final String COL_REFERENCE_WEIGHT = "REFERENCE_WEIGHT";
+    /** Header name of the reference volume. */
+    static final String COL_REFERENCE_VOLUME = "REFERENCE_VOLUME";
+    /** Header name of the product type enum. */
+    static final String COL_PRODUCT_TYPE = "PRODUCT_TYPE";
+    /** Header name of the unit label. */
+    static final String COL_UNIT_NAME = "UNIT_NAME";
+    /** Header name of the active flag. */
+    static final String COL_ACTIVE = "ACTIVE";
+
+    /** The columns this importer cannot work without. */
+    static final List<String> REQUIRED_COLUMNS = List.of(
+            COL_NAME, COL_DESCRIPTION, COL_BRAND, COL_REFERENCE_WEIGHT,
+            COL_REFERENCE_VOLUME, COL_PRODUCT_TYPE, COL_UNIT_NAME, COL_ACTIVE);
+
     /**
      * Imports or updates products from a CSV stream.
      * <p>
      * Delegates the stream reading and chunking to the abstract base class.
      * <p>
-     * Expected CSV format (9 columns):
-     * EAN, Name, Description, Brand, ReferenceWeight, ReferenceVolume, ProductType, UnitName, Active
+     * Consumed columns (resolved by header name; unknown columns of the
+     * shared feed are ignored): EAN (key), NAME, DESCRIPTION, BRAND,
+     * REFERENCE_WEIGHT, REFERENCE_VOLUME, PRODUCT_TYPE, UNIT_NAME, ACTIVE.
      *
      * @param inputStream The input stream containing CSV data.
      * @return A Response containing a JSON summary of created/updated counts and errors.
@@ -53,8 +79,7 @@ public class ProductCsvResource extends ImporterCsvResource {
     @Produces(MediaType.APPLICATION_JSON)
     @RolesAllowed("ADMIN")
     public Response importProducts(InputStream inputStream) {
-        // 9 columns expected
-        return this.importCsvStream(inputStream, 9);
+        return this.importCsvStream(inputStream, COL_EAN, REQUIRED_COLUMNS);
     }
 
     /**
@@ -139,15 +164,14 @@ public class ProductCsvResource extends ImporterCsvResource {
      * @param product The Product entity to populate.
      */
     private void feedProduct(LineData data, Product product) {
-        String[] parts = data.parts;
-        product.name = parts[1].trim();
-        product.description = safeGet(parts, 2);
-        product.brand = safeGet(parts, 3);
-        product.referenceWeight = safeParseBigDecimal(parts, 4);
-        product.referenceVolume = safeParseBigDecimal(parts, 5);
-        product.productType = safeParseProductType(parts, 6);
-        product.unitName = safeGet(parts, 7);
-        product.active = safeParseBoolean(parts, 8);
+        product.name = data.get(COL_NAME);
+        product.description = safeGet(data, COL_DESCRIPTION);
+        product.brand = safeGet(data, COL_BRAND);
+        product.referenceWeight = safeParseBigDecimal(data, COL_REFERENCE_WEIGHT);
+        product.referenceVolume = safeParseBigDecimal(data, COL_REFERENCE_VOLUME);
+        product.productType = safeParseProductType(data, COL_PRODUCT_TYPE);
+        product.unitName = safeGet(data, COL_UNIT_NAME);
+        product.active = safeParseBoolean(data, COL_ACTIVE);
     }
 
     /**
@@ -160,36 +184,34 @@ public class ProductCsvResource extends ImporterCsvResource {
      * @return The integer hash of incoming data.
      */
     private int computeIncomingChecksum(LineData data) {
-        String[] parts = data.parts;
         return Objects.hash(
-                data.code,                    // ean
-                parts[1].trim(),             // name
-                safeGet(parts, 2),           // description
-                safeGet(parts, 3),           // brand
-                safeParseBigDecimal(parts, 4),// referenceWeight
-                safeParseBigDecimal(parts, 5),// referenceVolume
-                safeParseProductType(parts, 6),// productType
-                safeGet(parts, 7),           // unitName
-                safeParseBoolean(parts, 8)    // active
+                data.code,                                      // ean
+                data.get(COL_NAME),                             // name
+                safeGet(data, COL_DESCRIPTION),                 // description
+                safeGet(data, COL_BRAND),                       // brand
+                safeParseBigDecimal(data, COL_REFERENCE_WEIGHT),// referenceWeight
+                safeParseBigDecimal(data, COL_REFERENCE_VOLUME),// referenceVolume
+                safeParseProductType(data, COL_PRODUCT_TYPE),   // productType
+                safeGet(data, COL_UNIT_NAME),                   // unitName
+                safeParseBoolean(data, COL_ACTIVE)              // active
         );
     }
 
     /**
-     * Safely parses a ProductType Enum from an array by index.
+     * Safely parses a ProductType Enum from a column resolved by name.
      *
-     * @param parts The string array.
-     * @param index The index to parse.
-     * @return The ProductType value or null if parsing fails or index is out of bounds.
+     * @param data The parsed CSV line.
+     * @param column The header name of the column.
+     * @return The ProductType value, or null on any missing/invalid input.
      */
-    ProductType safeParseProductType(String[] parts, int index) {
-        if (index >= parts.length) return null;
-        String val = parts[index].trim();
-        if (val.isEmpty()) return null;
+    ProductType safeParseProductType(LineData data, String column) {
+        String val = data.get(column);
+        if (val == null || val.isEmpty()) return null;
         try {
             // Assuming enum constants are stored as strings (e.g., "UNIT", "WEIGHT")
             return ProductType.valueOf(val.toUpperCase());
         } catch (IllegalArgumentException e) {
-            LOGGER.warn("Unknown ProductType value: " + val + " at index " + index);
+            LOGGER.warn("Unknown ProductType value: " + val + " in column " + column);
             return null;
         }
     }

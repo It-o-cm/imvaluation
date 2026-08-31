@@ -27,8 +27,9 @@ import java.util.*;
  * It processes line by line. For each line, it ensures the StoreGroup exists (Create or Update),
  * then links the associated Stores and Sub-Groups.
  * <p>
- * CSV Format (4 columns):
- * group_code|group_name|store_codes_list|store_group_codes_list
+ * Consumed columns (resolved by header name; unknown columns of the
+ * shared feed are ignored): CODE (key), NAME, STORE_CODES,
+ * STORE_GROUP_CODES.
  * <p>
  * Note: Lists use semicolon ';' as separator.
  */
@@ -45,6 +46,19 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
     static final String CTX_STORES = "__CTX_STORES__";
     static final String CTX_CHILD_GROUPS = "__CTX_CHILD_GROUPS__";
 
+    /** Header name of the natural key: the group code. */
+    static final String COL_CODE = "CODE";
+    /** Header name of the group label. */
+    static final String COL_NAME = "NAME";
+    /** Header name of the semicolon-separated member store codes. */
+    static final String COL_STORE_CODES = "STORE_CODES";
+    /** Header name of the semicolon-separated child group codes. */
+    static final String COL_STORE_GROUP_CODES = "STORE_GROUP_CODES";
+
+    /** The columns this importer cannot work without. */
+    static final List<String> REQUIRED_COLUMNS = List.of(
+            COL_NAME, COL_STORE_CODES, COL_STORE_GROUP_CODES);
+
     /**
      * Imports or updates the hierarchy of StoreGroups from a CSV stream.
      *
@@ -56,7 +70,7 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
     @Produces(MediaType.APPLICATION_JSON)
     @RolesAllowed("ADMIN")
     public Response importHierarchy(InputStream inputStream) {
-        return this.importCsvStream(inputStream, 4);
+        return this.importCsvStream(inputStream, COL_CODE, REQUIRED_COLUMNS);
     }
 
     /**
@@ -80,8 +94,8 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
         Map<String, StoreGroup> groupMap = getStoreGroupsMap(targetCodes);
 
         // Step 2: Collect codes for Children (Stores & Sub-Groups) to perform Bulk Fetch
-        Set<String> storeCodesToFetch = getCodesFromColumn(parsedLines, 2);
-        Set<String> childGroupCodesToFetch = getCodesFromColumn(parsedLines, 3);
+        Set<String> storeCodesToFetch = getCodesFromColumn(parsedLines, COL_STORE_CODES);
+        Set<String> childGroupCodesToFetch = getCodesFromColumn(parsedLines, COL_STORE_GROUP_CODES);
 
         // Step 3: Bulk Fetch Children
         Map<String, Store> storeMap = getStoresMap(storeCodesToFetch);
@@ -115,7 +129,7 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
         }
 
         // Step 2: Fetch Stores
-        String[] storeCodes = parseSemicolonCodes(safeGet(data.parts, 2));
+        String[] storeCodes = parseSemicolonCodes(safeGet(data, COL_STORE_CODES));
         Map<String, Store> storeMap = new HashMap<>();
         if (storeCodes.length > 0) {
             List<Store> stores = Store.list("code IN ?1", Arrays.asList(storeCodes));
@@ -125,7 +139,7 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
         }
 
         // Step 3: Fetch Child Groups
-        String[] childGroupCodes = parseSemicolonCodes(safeGet(data.parts, 3));
+        String[] childGroupCodes = parseSemicolonCodes(safeGet(data, COL_STORE_GROUP_CODES));
         Map<String, StoreGroup> childGroupMap = new HashMap<>();
         if (childGroupCodes.length > 0) {
             List<StoreGroup> groups = StoreGroup.list("code IN ?1", Arrays.asList(childGroupCodes));
@@ -195,7 +209,7 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
             group = StoreGroup.find("code", data.code).firstResult();
         }
 
-        String groupName = safeGet(data.parts, 1);
+        String groupName = safeGet(data, COL_NAME);
 
         if (group == null) {
             // CREATE
@@ -227,7 +241,7 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
      * @param group    The parent StoreGroup entity.
      */
     void linkStores(LineData data, Map<String, Store> storeMap, StoreGroup group) {
-        String[] requestedCodes = parseSemicolonCodes(safeGet(data.parts, 2));
+        String[] requestedCodes = parseSemicolonCodes(safeGet(data, COL_STORE_CODES));
         for (String sCode : requestedCodes) {
             Store s = storeMap.get(sCode.trim());
             if (s != null) {
@@ -248,7 +262,7 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
      * @param group          The parent StoreGroup entity.
      */
     void linkSubGroups(LineData data, Map<String, StoreGroup> childGroupMap, StoreGroup group) {
-        String[] requestedCodes = parseSemicolonCodes(safeGet(data.parts, 3));
+        String[] requestedCodes = parseSemicolonCodes(safeGet(data, COL_STORE_GROUP_CODES));
         for (String gCode : requestedCodes) {
             StoreGroup child = childGroupMap.get(gCode.trim());
             if (child != null) {
@@ -296,16 +310,16 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
     }
 
     /**
-     * Extracts and aggregates codes from a specific column index across all lines.
+     * Extracts and aggregates codes from a column resolved by name across all lines.
      *
      * @param parsedLines  The list of parsed lines.
-     * @param columnIndex  The column index to extract codes from.
+     * @param column       The header name of the column to extract codes from.
      * @return A set of unique codes found.
      */
-    Set<String> getCodesFromColumn(List<LineData> parsedLines, int columnIndex) {
+    Set<String> getCodesFromColumn(List<LineData> parsedLines, String column) {
         Set<String> codes = new HashSet<>();
         for (LineData data : parsedLines) {
-            String[] parts = parseSemicolonCodes(safeGet(data.parts, columnIndex));
+            String[] parts = parseSemicolonCodes(safeGet(data, column));
             Collections.addAll(codes, parts);
         }
         return codes;
