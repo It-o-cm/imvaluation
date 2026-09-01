@@ -216,7 +216,9 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
                 tiers.add(new DiscountTier(threshold, value, type));
             }
             // Ordering is delegated to the shared TierTable built by the applier.
-            appliers.add(new FreeDeliveryThresholdApplier(offer.code, tiers));
+            FreeDeliveryThresholdApplier applier = new FreeDeliveryThresholdApplier(offer.code, tiers);
+            applier.configuration = offer;
+            appliers.add(applier);
         });
     }
 
@@ -227,6 +229,14 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
 
         private static final double AFTER_ALL_STANDARD_DISCOUNTS = -1.0;
         private final String code;
+
+        /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
 
         /**
          * The tiers, held by the shared {@link TierTable} ("highest reached" semantics).
@@ -364,7 +374,7 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
         OfferApplication getDeliveryOfferApplication(BasketEvaluation evaluation) {
             OfferApplication deliveryOffer = null;
             if (evaluation.getOffers() != null) {
-                for (OfferApplication app : evaluation.getOffers()) {
+                for (OfferApplication app : evaluation.getAvailableOffers()) {
                     // Check for Delivery Offer to handle potential refund separately
                     if (app.getClass().getSimpleName().equals("DeliveryApplication")) {
                         deliveryOffer = app;
@@ -384,7 +394,7 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
         BigDecimal getMerchandiseTotal(BasketEvaluation evaluation) {
             BigDecimal merchandiseTotal = BigDecimal.ZERO;
             if (evaluation.getOffers() != null) {
-                for (OfferApplication app : evaluation.getOffers()) {
+                for (OfferApplication app : evaluation.getAvailableOffers()) {
                     // Check for ProductAware Offer to sum into the merchandise total
                     if (app instanceof ProductAwareOfferApplication) {
                         AmountEvaluation price = app.getAmount();
@@ -407,12 +417,48 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
         public double getEfficiencyScore() {
             return AFTER_ALL_STANDARD_DISCOUNTS;
         }
+
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
+        }
     }
 
     /**
      * Represents the discount application that refunds the delivery cost.
      */
     public static class FreeDeliveryThresholdApplication implements DiscountApplication {
+
+        /**
+         * The application moment restituted in the response (spec §3.6), set by the arbitration.
+         * Defaults to AT_TOTAL, the current behaviour.
+         */
+        private String applicationMoment = "AT_TOTAL";
+
+        /**
+         * Returns the application moment of the configuration that produced this advantage.
+         *
+         * @return the application moment, AT_TOTAL until the arbitration sets it.
+         */
+        @Override
+        public String getApplicationMoment() {
+            return applicationMoment;
+        }
+
+        /**
+         * Records the application moment set by the arbitration.
+         *
+         * @param applicationMoment the moment (AT_TRIGGER or AT_TOTAL).
+         */
+        @Override
+        public void setApplicationMoment(String applicationMoment) {
+            this.applicationMoment = applicationMoment;
+        }
 
         private final String code;
         private final OfferApplication deliveryOffer;

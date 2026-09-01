@@ -111,6 +111,19 @@ public class Basket {
           "x-widget": "ean-quantity-map",
           "x-label": "Vignettes"
         },
+        "couponCodes": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Coupon codes presented at the till or online. Duplicates are ignored (a set).",
+          "x-widget": "string-list",
+          "x-label": "Coupon codes"
+        },
+        "closed": {
+          "type": "boolean",
+          "default": true,
+          "description": "A fact declared by the caller: true = final basket, everything applies; false = basket in progress (till scan), AT_TOTAL advantages never fall. Never guessed by the engine.",
+          "x-label": "Closed"
+        },
         "items": {
           "type": "array",
           "minItems": 1,
@@ -243,6 +256,27 @@ public class Basket {
      * Value: Number of vignettes available/spent for this product.
      */
     public Map<String, Integer> vignettes;
+
+    /**
+     * Coupon codes presented at the till or online (spec §3.7).
+     * <p>
+     * A set in spirit: duplicates are ignored, and the trigger counts a code once however
+     * many times it is presented. A basket without coupon codes satisfies no
+     * {@code COUPON_CODE} condition.
+     */
+    public List<String> couponCodes;
+
+    /**
+     * Whether the basket is final (spec §3.7).
+     * <p>
+     * A fact declared by the caller, never guessed by the engine, so two identical baskets
+     * yield two identical responses (the stateless invariant). {@code true} means the basket
+     * is final and everything applies (the default and the current behaviour); {@code false}
+     * means the basket is still in progress (a till scan), where {@code AT_TOTAL} advantages
+     * never fall. A {@code null} value is read as closed: a basket without {@code closed} is
+     * closed.
+     */
+    public Boolean closed;
 
     // --------------------------------------------------
     // Inner Classes (Nested DTOs)

@@ -1,5 +1,7 @@
 package com.intermarche.valuation.engine;
 
+import com.intermarche.valuation.domain.Offer;
+
 import java.util.Collection;
 
 /**
@@ -9,6 +11,21 @@ import java.util.Collection;
  * finding applicable discounts, and returning the results of those calculations.
  */
 public interface AdvantageApplier {
+
+    /**
+     * Returns the configuration (the {@link Offer} table row) this applier was built from.
+     * <p>
+     * This link is what lets the arbitration read the applier's trigger and arbitration
+     * parameters per configuration (spec §4). The contract is honest and abstract on
+     * purpose: every applier answers for itself. An applier that is not born from a
+     * configuration row returns {@code null}, and the arbitration then treats it as
+     * {@link Trigger#ALWAYS} with the default arbitration parameters (priority 500,
+     * cumulable, no exclusion groups, no limits, {@code consumesContributors} false).
+     *
+     * @return the source configuration, or {@code null} when the applier is not born from a
+     *         configuration row.
+     */
+    Offer getConfiguration();
 
     /**
      * Determines if this discount applier is applicable to the given offer applier.

@@ -73,6 +73,19 @@ public class ImportsUiResourceCoverageTest {
     };
 
     /**
+     * The importer-specific header line for each known domain, so a header-only upload passes
+     * every importer's required-columns check and reports an empty successful import.
+     */
+    private static final java.util.Map<String, String> DOMAIN_HEADERS = java.util.Map.of(
+            "STORES", "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n",
+            "STORE_GROUPS", "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n",
+            "PRODUCTS", "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n",
+            "PRODUCT_FAMILIES", "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n",
+            "CATEGORIES", "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n",
+            "PRICES", "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n",
+            "OFFERS", "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n");
+
+    /**
      * Clears the whole reference set before each test so rows written by an upload here or by
      * another class cannot skew the assertions; the order is the reverse of the foreign keys.
      */
@@ -204,14 +217,15 @@ public class ImportsUiResourceCoverageTest {
     }
 
     /**
-     * Tests that every known domain dispatch arm is reached by uploading a header-only file to
-     * each, so each importer runs and the summary reports zero created, zero updated.
+     * Tests that every known domain dispatch arm is reached by uploading a header-only file
+     * (with that domain's own header) to each, so each importer runs and the summary reports
+     * zero created, zero updated.
      */
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testRun_dispatchesEveryKnownDomain() {
         for (String domain : DOMAINS) {
-            String location = postImport(domain, HEADER_ONLY);
+            String location = postImport(domain, DOMAIN_HEADERS.get(domain));
             org.junit.jupiter.api.Assertions.assertTrue(location.contains(domain),
                     "location should carry the domain " + domain);
             org.junit.jupiter.api.Assertions.assertTrue(location.contains("noticeOk=true"),

@@ -209,7 +209,7 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
             if (!targetItems.isEmpty()) {
                 SelectionStrategy strategy = SelectionStrategy.valueOf(strategyStr);
                 DiscountType discountType = DiscountType.valueOf(typeStr);
-                appliers.add(new NPlusMOfferApplier(
+                NPlusMOfferApplier applier = new NPlusMOfferApplier(
                         offer.code,
                         targetItems,
                         quantityToPay,
@@ -218,7 +218,9 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
                         discountType,
                         value,
                         store
-                ));
+                );
+                applier.configuration = offer;
+                appliers.add(applier);
             }
         });
     }
@@ -229,6 +231,15 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
     public static class NPlusMOfferApplier extends OfferApplier implements ProductAwareOfferApplier {
 
         private final String code;
+
+        /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
+
         private final Map<String, Basket.Item> targetItems;
         private final int quantityToPay;
         private final int discountedQuantity;
@@ -268,6 +279,16 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
                 Price price = item.getPrice(store, PriceUsage.BASE_FOR_DISCOUNT);
                 priceCache.put(product.ean, price);
             }
+        }
+
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
         }
 
         /**

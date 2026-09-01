@@ -158,7 +158,9 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
             BigDecimal basketPrice = spec.get("basketPrice").decimalValue(); // TTC
             BigDecimal vatRate = spec.get("vatRate").decimalValue();
 
-            appliers.add(new DepositBasketOfferApplier(offer.code, basketVolume, basketPrice, vatRate));
+            DepositBasketOfferApplier applier = new DepositBasketOfferApplier(offer.code, basketVolume, basketPrice, vatRate);
+            applier.configuration = offer;
+            appliers.add(applier);
         });
     }
 
@@ -173,6 +175,14 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
         private final BigDecimal vatRate;
 
         /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
+
+        /**
          * Constructs a new DepositBasketOfferApplier.
          *
          * @param offerCode          The offer code.
@@ -185,6 +195,16 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
             this.basketVolumeCapacity = basketVolumeCapacity;
             this.basketPriceTTC = basketPriceTTC;
             this.vatRate = vatRate;
+        }
+
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
         }
 
         /**

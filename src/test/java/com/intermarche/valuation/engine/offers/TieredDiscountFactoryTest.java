@@ -88,7 +88,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("100"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1))));
         return new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER1", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER1", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
     }
@@ -104,7 +104,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_Success() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_01", store, "TIERED_DISCOUNT", jsonSpec);
 
@@ -121,7 +121,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_MissingTiersRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\" }";
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\" }";
         DomainUtils.createAndPersistOffer("TIERED_02", store, "TIERED_DISCOUNT", jsonSpec);
 
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -135,7 +135,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_ItemsScopeWithoutTargetsRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_03", store, "TIERED_DISCOUNT", jsonSpec);
 
@@ -149,7 +149,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_NewPriceInProgressiveRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"NEW_PRICE\", \"value\": 4.75 } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_04", store, "TIERED_DISCOUNT", jsonSpec);
 
@@ -223,7 +223,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("3"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.AMOUNT_PER_ITEM, new BigDecimal("0.50"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER2", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER2", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -250,7 +250,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("50"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.AMOUNT, new BigDecimal("500"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER3", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER3", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -285,7 +285,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("100"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("15"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER4", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER4", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.PROGRESSIVE, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -310,7 +310,7 @@ public class TieredDiscountFactoryTest {
         TieredDiscountFactory.Award award = new TieredDiscountFactory.Award(
                 TieredDiscountFactory.AwardType.AMOUNT, new BigDecimal("1.00"), null, 1);
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER5", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER5", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.PER_MULTIPLE, PriceUsage.BASE_FOR_DISCOUNT,
                 null, new BigDecimal("50"), award, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -344,7 +344,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("100"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER6", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER6", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of());
         BasketEvaluation evaluation = newEvaluation();
@@ -374,7 +374,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("100"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER7", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER7", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of());
         BasketEvaluation evaluation = newEvaluation();
@@ -406,7 +406,7 @@ public class TieredDiscountFactoryTest {
                         TieredDiscountFactory.AwardType.ITEM_FREE, null,
                         TieredDiscountFactory.Selection.CHEAPEST, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER8", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER8", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(cheap, expensive));
         BasketEvaluation evaluation = newEvaluation();
@@ -435,7 +435,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("2"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.NEW_PRICE, new BigDecimal("4.75"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER9", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER9", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -460,7 +460,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_TicketQuantityRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"TICKET\", "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 3.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_TQ", store, "TIERED_DISCOUNT", jsonSpec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -473,7 +473,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_TicketAmountPerItemRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"TICKET\", "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"AMOUNT_PER_ITEM\", \"value\": 0.50 } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_TAPI", store, "TIERED_DISCOUNT", jsonSpec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -486,7 +486,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_PerMultipleNewPriceRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
                 + "\"every\": { \"step\": 2.0, \"award\": { \"type\": \"NEW_PRICE\", \"value\": 4.75 } } }";
         DomainUtils.createAndPersistOffer("TIERED_PMNP", store, "TIERED_DISCOUNT", jsonSpec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -499,7 +499,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_ItemFreeWithoutSelectionRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 5.0, \"award\": { \"type\": \"ITEM_FREE\", \"quantity\": 1 } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_IFNS", store, "TIERED_DISCOUNT", jsonSpec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -512,7 +512,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_PercentageWithoutValueRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\" } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_PNV", store, "TIERED_DISCOUNT", jsonSpec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -553,7 +553,7 @@ public class TieredDiscountFactoryTest {
         TieredDiscountFactory.Award award = new TieredDiscountFactory.Award(
                 TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1);
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_PMPA", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_PMPA", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.PER_MULTIPLE, PriceUsage.BASE_FOR_DISCOUNT,
                 null, new BigDecimal("50"), award, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -577,7 +577,7 @@ public class TieredDiscountFactoryTest {
         TieredDiscountFactory.Award award = new TieredDiscountFactory.Award(
                 TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1);
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_PMPQ", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_PMPQ", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.PER_MULTIPLE, PriceUsage.BASE_FOR_DISCOUNT,
                 null, new BigDecimal("2"), award, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -602,7 +602,7 @@ public class TieredDiscountFactoryTest {
         TieredDiscountFactory.Award award = new TieredDiscountFactory.Award(
                 TieredDiscountFactory.AwardType.ITEM_FREE, null, TieredDiscountFactory.Selection.CHEAPEST, 1);
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_PMIF", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_PMIF", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.PER_MULTIPLE, PriceUsage.BASE_FOR_DISCOUNT,
                 null, new BigDecimal("2"), award, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -630,7 +630,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("3"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.AMOUNT_PER_ITEM, new BigDecimal("0.20"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_PAPI", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_PAPI", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.PROGRESSIVE, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -664,7 +664,7 @@ public class TieredDiscountFactoryTest {
                         TieredDiscountFactory.AwardType.ITEM_FREE, null,
                         TieredDiscountFactory.Selection.MOST_EXPENSIVE, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_IFME", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_IFME", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(cheap, expensive));
         BasketEvaluation evaluation = newEvaluation();
@@ -694,7 +694,7 @@ public class TieredDiscountFactoryTest {
                         TieredDiscountFactory.AwardType.ITEM_FREE, null,
                         TieredDiscountFactory.Selection.CHEAPEST, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_IFNP", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_IFNP", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(priced, noPrice));
         BasketEvaluation evaluation = newEvaluation();
@@ -725,7 +725,7 @@ public class TieredDiscountFactoryTest {
                         TieredDiscountFactory.AwardType.ITEM_FREE, null,
                         TieredDiscountFactory.Selection.CHEAPEST, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_PUD", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_PUD", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.DEFAULT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -751,7 +751,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("2"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.NEW_PRICE, new BigDecimal("7.00"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_NPAB", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_NPAB", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -780,7 +780,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("100"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_3W", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_3W", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of());
         BasketEvaluation evaluation = newEvaluation();
@@ -843,7 +843,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_PriceUsageDefaultParsed() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"HIGHEST_REACHED\", \"priceUsage\": \"DEFAULT\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"HIGHEST_REACHED\", \"priceUsage\": \"DEFAULT\", "
                 + "\"tiers\": [ { \"threshold\": 1.0, \"award\": { \"type\": \"ITEM_FREE\", "
                 + "\"selection\": \"CHEAPEST\", \"quantity\": 2 } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_PU", store, "TIERED_DISCOUNT", jsonSpec);
@@ -857,7 +857,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_PerMultipleValid() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
                 + "\"every\": { \"step\": 2.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 1.0 } } }";
         DomainUtils.createAndPersistOffer("TIERED_PM", store, "TIERED_DISCOUNT", jsonSpec);
         assertEquals(1, factory.buildAppliers(newEvaluation()).size());
@@ -871,7 +871,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_ProgressiveAmountPerItemAmountTriggerRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"AMOUNT_PER_ITEM\", \"value\": 0.5 } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_PAPIAT", store, "TIERED_DISCOUNT", jsonSpec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -884,7 +884,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_PerMultipleWithoutEveryRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
                 + "\"tiers\": [ { \"threshold\": 2.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 1.0 } } ] }";
         DomainUtils.createAndPersistOffer("TIERED_PMNE", store, "TIERED_DISCOUNT", jsonSpec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -898,7 +898,7 @@ public class TieredDiscountFactoryTest {
     void testBuildAppliers_HighestWithoutTiersRejected() {
         setUpDatabase();
         String jsonSpec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"every\": { \"step\": 2.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 1.0 } } }";
         DomainUtils.createAndPersistOffer("TIERED_HNT", store, "TIERED_DISCOUNT", jsonSpec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -927,7 +927,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("50"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_TA", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_TA", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of());
         assertTrue(applier.isApplicable(new FakeProductApplier("1000000000001")));
@@ -964,7 +964,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("50"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_PBF", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_PBF", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.PROGRESSIVE, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -987,7 +987,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("3"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_PPQ", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_PPQ", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.PROGRESSIVE, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -1010,7 +1010,7 @@ public class TieredDiscountFactoryTest {
         TieredDiscountFactory.Award award = new TieredDiscountFactory.Award(
                 TieredDiscountFactory.AwardType.AMOUNT, new BigDecimal("1.00"), null, 1);
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_PMB", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_PMB", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.PER_MULTIPLE, PriceUsage.BASE_FOR_DISCOUNT,
                 null, new BigDecimal("100"), award, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -1031,7 +1031,7 @@ public class TieredDiscountFactoryTest {
                         TieredDiscountFactory.AwardType.ITEM_FREE, null,
                         TieredDiscountFactory.Selection.CHEAPEST, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_IFNP2", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_IFNP2", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -1053,7 +1053,7 @@ public class TieredDiscountFactoryTest {
                         TieredDiscountFactory.AwardType.ITEM_FREE, null,
                         TieredDiscountFactory.Selection.CHEAPEST, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_IFUP", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_IFUP", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -1076,7 +1076,7 @@ public class TieredDiscountFactoryTest {
                         TieredDiscountFactory.AwardType.ITEM_FREE, null,
                         TieredDiscountFactory.Selection.CHEAPEST, 2))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_IFM", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_IFM", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -1103,7 +1103,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("2"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.NEW_PRICE, new BigDecimal("4.75"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_NPNP", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_NPNP", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -1122,7 +1122,7 @@ public class TieredDiscountFactoryTest {
         TieredDiscountFactory.Award award = new TieredDiscountFactory.Award(
                 TieredDiscountFactory.AwardType.ITEM_FREE, null, TieredDiscountFactory.Selection.CHEAPEST, 1);
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_PMIFNP", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_PMIFNP", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.PER_MULTIPLE, PriceUsage.BASE_FOR_DISCOUNT,
                 null, new BigDecimal("2"), award, List.of(product));
         BasketEvaluation evaluation = newEvaluation();
@@ -1149,7 +1149,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("1"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("5"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_NPA", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Trigger.QUANTITY,
+                "TIER_NPA", TieredDiscountFactory.Scope.ITEMS, TieredDiscountFactory.Metric.QUANTITY,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of(product));
         assertTrue(applier.apply(evaluation).isEmpty());
@@ -1171,7 +1171,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("50"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_TPP", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_TPP", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.PROGRESSIVE, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of());
         BasketEvaluation evaluation = newEvaluation();
@@ -1199,7 +1199,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("1"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.AMOUNT, new BigDecimal("0.01"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_ZS", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_ZS", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of());
         BasketEvaluation evaluation = newEvaluation();
@@ -1223,7 +1223,7 @@ public class TieredDiscountFactoryTest {
                 new TierTable.Tier<>(new BigDecimal("1"), new TieredDiscountFactory.Award(
                         TieredDiscountFactory.AwardType.PERCENTAGE, new BigDecimal("10"), null, 1))));
         TieredDiscountFactory.TieredDiscountApplier applier = new TieredDiscountFactory.TieredDiscountApplier(
-                "TIER_ZHT", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Trigger.AMOUNT,
+                "TIER_ZHT", TieredDiscountFactory.Scope.TICKET, TieredDiscountFactory.Metric.AMOUNT,
                 TieredDiscountFactory.Mode.HIGHEST_REACHED, PriceUsage.BASE_FOR_DISCOUNT,
                 table, null, null, List.of());
         BasketEvaluation evaluation = newEvaluation();
@@ -1283,6 +1283,16 @@ public class TieredDiscountFactoryTest {
         public boolean isApplicable(Product product) {
             return product != null && ean.equals(product.ean);
         }
+
+        /**
+         * Returns no configuration: this test double is not born from a configuration row.
+         *
+         * @return always null.
+         */
+        @Override
+        public com.intermarche.valuation.domain.Offer getConfiguration() {
+            return null;
+        }
     }
 
     /**
@@ -1300,6 +1310,16 @@ public class TieredDiscountFactoryTest {
         @Override
         public Collection<OfferApplication> apply(BasketEvaluation basketEvaluation) {
             return List.of();
+        }
+
+        /**
+         * Returns no configuration: this test double is not born from a configuration row.
+         *
+         * @return always null.
+         */
+        @Override
+        public com.intermarche.valuation.domain.Offer getConfiguration() {
+            return null;
         }
     }
 

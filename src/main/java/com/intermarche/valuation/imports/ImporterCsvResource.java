@@ -262,7 +262,7 @@ public abstract class ImporterCsvResource {
         sb.append("{\"createdCount\":").append(counters[0]);
         sb.append(", \"updatedCount\":").append(counters[1]);
         if (!errors.isEmpty()) {
-            sb.append(", \"errors\":[");
+            sb.append(", \"errors\":[\"");
             sb.append(String.join("\",\"", errors));
             sb.append("\"]");
         }

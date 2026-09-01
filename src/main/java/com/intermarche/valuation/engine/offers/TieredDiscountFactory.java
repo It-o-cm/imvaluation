@@ -39,7 +39,7 @@ import java.util.Set;
  * <p>
  * Offers are retrieved from the database (store and store groups) where the type is
  * "TIERED_DISCOUNT". The specification declares a scope (a list of target EANs or the
- * whole ticket), a trigger dimension (amount or quantity), one of three tier modes, and
+ * whole ticket), a metric dimension (amount or quantity), one of three tier modes, and
  * an award per tier:
  * <ul>
  *   <li>{@code HIGHEST_REACHED} — the highest reached tier applies once on the whole
@@ -76,7 +76,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
       "title": "Tiered Discount Offer Specification",
       "description": "Defines a threshold-based discount: highest tier reached, progressive brackets, or per-multiple step.",
       "type": "object",
-      "required": ["scope", "trigger", "mode"],
+      "required": ["scope", "metric", "mode"],
       "oneOf": [
         { "required": ["tiers"] },
         { "required": ["every"] }
@@ -96,11 +96,11 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
           "x-widget": "ean-list",
           "x-label": "Eligible products"
         },
-        "trigger": {
+        "metric": {
           "type": "string",
           "enum": ["AMOUNT", "QUANTITY"],
           "description": "Dimension of the thresholds: a monetary amount or a number of units.",
-          "x-label": "Trigger"
+          "x-label": "Metric"
         },
         "mode": {
           "type": "string",
@@ -147,7 +147,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
             "step": {
               "type": "number",
               "exclusiveMinimum": 0,
-              "description": "Size of one step, in the trigger's dimension.",
+              "description": "Size of one step, in the metric's dimension.",
               "x-label": "Step"
             },
             "award": { "$ref": "#/definitions/award" }
@@ -206,7 +206,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
     /**
      * Dimension of the thresholds.
      */
-    public enum Trigger {
+    public enum Metric {
         /** Thresholds compare against a monetary amount (tax included). */
         AMOUNT,
         /** Thresholds compare against a number of standard units. */
@@ -311,34 +311,36 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
     private void processOffer(Offer offer, List<AdvantageApplier> appliers) {
         this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
             Scope scope = Scope.valueOf(spec.get("scope").asText());
-            Trigger trigger = Trigger.valueOf(spec.get("trigger").asText());
+            Metric metric = Metric.valueOf(spec.get("metric").asText());
             Mode mode = Mode.valueOf(spec.get("mode").asText());
             PriceUsage priceUsage = spec.has("priceUsage")
                     ? PriceUsage.valueOf(spec.get("priceUsage").asText())
                     : PriceUsage.BASE_FOR_DISCOUNT;
             Set<String> targetEans = parseTargetEans(spec);
-            validateCrossRules(offer.code, scope, trigger, mode, targetEans, spec);
+            validateCrossRules(offer.code, scope, metric, mode, targetEans, spec);
             TierTable<Award> table = null;
             BigDecimal step = null;
             Award stepAward = null;
             if (mode == Mode.PER_MULTIPLE) {
                 JsonNode every = spec.get("every");
                 step = every.get("step").decimalValue();
-                stepAward = parseAward(offer.code, every.get("award"), scope, trigger, mode);
+                stepAward = parseAward(offer.code, every.get("award"), scope, metric, mode);
             } else {
                 List<TierTable.Tier<Award>> tiers = new ArrayList<>();
                 for (JsonNode tierNode : spec.get("tiers")) {
                     tiers.add(new TierTable.Tier<>(
                             tierNode.get("threshold").decimalValue(),
-                            parseAward(offer.code, tierNode.get("award"), scope, trigger, mode)));
+                            parseAward(offer.code, tierNode.get("award"), scope, metric, mode)));
                 }
                 table = TierTable.of(tiers);
             }
             List<Product> targetProducts = scope == Scope.ITEMS
                     ? Product.findByEans(targetEans)
                     : List.of();
-            appliers.add(new TieredDiscountApplier(
-                    offer.code, scope, trigger, mode, priceUsage, table, step, stepAward, targetProducts));
+            TieredDiscountApplier applier = new TieredDiscountApplier(
+                    offer.code, scope, metric, mode, priceUsage, table, step, stepAward, targetProducts);
+            applier.configuration = offer;
+            appliers.add(applier);
         });
     }
 
@@ -364,12 +366,12 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
      * @param offerCode the offer code, for error messages.
      * @param node      the award node.
      * @param scope     the offer scope, for validation.
-     * @param trigger   the trigger dimension, for validation.
+     * @param metric   the metric dimension, for validation.
      * @param mode      the tier mode, for validation.
      * @return the parsed award.
      * @throws IllegalArgumentException if the award violates a cross-field rule.
      */
-    private Award parseAward(String offerCode, JsonNode node, Scope scope, Trigger trigger, Mode mode) {
+    private Award parseAward(String offerCode, JsonNode node, Scope scope, Metric metric, Mode mode) {
         AwardType type = AwardType.valueOf(node.get("type").asText());
         BigDecimal value = node.has("value") ? node.get("value").decimalValue() : null;
         Selection selection = node.has("selection") ? Selection.valueOf(node.get("selection").asText()) : null;
@@ -391,9 +393,9 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                     "TIERED_DISCOUNT offer '%s': mode PROGRESSIVE only allows PERCENTAGE and AMOUNT_PER_ITEM awards.",
                     offerCode));
         }
-        if (mode == Mode.PROGRESSIVE && type == AwardType.AMOUNT_PER_ITEM && trigger != Trigger.QUANTITY) {
+        if (mode == Mode.PROGRESSIVE && type == AwardType.AMOUNT_PER_ITEM && metric != Metric.QUANTITY) {
             throw new IllegalArgumentException(String.format(
-                    "TIERED_DISCOUNT offer '%s': AMOUNT_PER_ITEM in PROGRESSIVE mode requires the QUANTITY trigger.",
+                    "TIERED_DISCOUNT offer '%s': AMOUNT_PER_ITEM in PROGRESSIVE mode requires the QUANTITY metric.",
                     offerCode));
         }
         if (mode == Mode.PER_MULTIPLE && (type == AwardType.AMOUNT_PER_ITEM || type == AwardType.NEW_PRICE)) {
@@ -412,21 +414,21 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
      *
      * @param offerCode  the offer code, for error messages.
      * @param scope      the offer scope.
-     * @param trigger    the trigger dimension.
+     * @param metric    the metric dimension.
      * @param mode       the tier mode.
      * @param targetEans the parsed target EANs.
      * @param spec       the parsed specification.
      * @throws IllegalArgumentException if a rule is violated.
      */
-    private void validateCrossRules(String offerCode, Scope scope, Trigger trigger, Mode mode,
+    private void validateCrossRules(String offerCode, Scope scope, Metric metric, Mode mode,
                                     Set<String> targetEans, JsonNode spec) {
         if (scope == Scope.ITEMS && targetEans.isEmpty()) {
             throw new IllegalArgumentException(String.format(
                     "TIERED_DISCOUNT offer '%s': scope ITEMS requires targetEans.", offerCode));
         }
-        if (scope == Scope.TICKET && trigger == Trigger.QUANTITY) {
+        if (scope == Scope.TICKET && metric == Metric.QUANTITY) {
             throw new IllegalArgumentException(String.format(
-                    "TIERED_DISCOUNT offer '%s': scope TICKET requires the AMOUNT trigger.", offerCode));
+                    "TIERED_DISCOUNT offer '%s': scope TICKET requires the AMOUNT metric.", offerCode));
         }
         if (mode == Mode.PER_MULTIPLE && !spec.has("every")) {
             throw new IllegalArgumentException(String.format(
@@ -462,14 +464,22 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
         private final String code;
 
         /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
+
+        /**
          * The offer scope.
          */
         private final Scope scope;
 
         /**
-         * The trigger dimension of the thresholds.
+         * The metric dimension of the thresholds.
          */
-        private final Trigger trigger;
+        private final Metric metric;
 
         /**
          * The tier mode.
@@ -506,7 +516,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
          *
          * @param code           the offer code.
          * @param scope          the offer scope.
-         * @param trigger        the trigger dimension.
+         * @param metric        the metric dimension.
          * @param mode           the tier mode.
          * @param priceUsage     the price rows used for unit price lookups.
          * @param table          the tier table; null in PER_MULTIPLE mode.
@@ -514,12 +524,12 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
          * @param stepAward      the award of the repeating step; null unless PER_MULTIPLE.
          * @param targetProducts the targeted products; empty in TICKET scope.
          */
-        public TieredDiscountApplier(String code, Scope scope, Trigger trigger, Mode mode,
+        public TieredDiscountApplier(String code, Scope scope, Metric metric, Mode mode,
                                      PriceUsage priceUsage, TierTable<Award> table,
                                      BigDecimal step, Award stepAward, List<Product> targetProducts) {
             this.code = code;
             this.scope = scope;
-            this.trigger = trigger;
+            this.metric = metric;
             this.mode = mode;
             this.priceUsage = priceUsage;
             this.table = table;
@@ -566,6 +576,16 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
         }
 
         /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
+        }
+
+        /**
          * Applies the tiered discount to the evaluation.
          * <p>
          * The assiette is gathered from the product-aware offer applications (the amounts
@@ -593,7 +613,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
             if (baseAmount.signum() <= 0) {
                 return applications;
             }
-            BigDecimal base = (trigger == Trigger.AMOUNT) ? baseAmount : baseQuantity;
+            BigDecimal base = (metric == Metric.AMOUNT) ? baseAmount : baseQuantity;
             Result result = computeTotalDiscount(evaluation, contributions, base, baseAmount, baseQuantity);
             if (result == null) {
                 return applications;
@@ -629,7 +649,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
             if (evaluation.getOffers() == null) {
                 return contributions;
             }
-            for (OfferApplication app : evaluation.getOffers()) {
+            for (OfferApplication app : evaluation.getAvailableOffers()) {
                 if (!(app instanceof ProductAwareOfferApplication productAwareApp)) {
                     continue;
                 }
@@ -660,7 +680,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
          *
          * @param evaluation    the evaluation context (store, for unit price lookups).
          * @param contributions the assiette contributions.
-         * @param base          the compared value (amount or quantity per the trigger).
+         * @param base          the compared value (amount or quantity per the metric).
          * @param baseAmount    the monetary assiette, tax included.
          * @param baseQuantity  the assiette in standard units.
          * @return the raw total and its display detail, or null when no tier applies.
@@ -687,11 +707,11 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                     for (TierTable.Slice<Award> slice : slices) {
                         Award award = slice.award();
                         if (award.type() == AwardType.PERCENTAGE) {
-                            BigDecimal portionAmount = (trigger == Trigger.AMOUNT)
+                            BigDecimal portionAmount = (metric == Metric.AMOUNT)
                                     ? slice.portion()
                                     : slice.portion().multiply(avgUnit);
                             total = total.add(portionAmount.multiply(percent(award.value())));
-                        } else { // AMOUNT_PER_ITEM, guaranteed QUANTITY trigger by validation
+                        } else { // AMOUNT_PER_ITEM, guaranteed QUANTITY metric by validation
                             total = total.add(slice.portion().multiply(award.value()));
                         }
                     }
@@ -705,7 +725,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                     BigDecimal covered = step.multiply(BigDecimal.valueOf(multiples));
                     BigDecimal total = switch (stepAward.type()) {
                         case PERCENTAGE -> {
-                            BigDecimal coveredAmount = (trigger == Trigger.AMOUNT)
+                            BigDecimal coveredAmount = (metric == Metric.AMOUNT)
                                     ? covered
                                     : covered.multiply(averageUnit(baseAmount, baseQuantity));
                             yield coveredAmount.multiply(percent(stepAward.value()));
@@ -914,6 +934,32 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
      * The application of a tiered discount on one targeted offer application.
      */
     public static class TieredDiscountApplication implements DiscountApplication {
+
+        /**
+         * The application moment restituted in the response (spec §3.6), set by the arbitration.
+         * Defaults to AT_TOTAL, the current behaviour.
+         */
+        private String applicationMoment = "AT_TOTAL";
+
+        /**
+         * Returns the application moment of the configuration that produced this advantage.
+         *
+         * @return the application moment, AT_TOTAL until the arbitration sets it.
+         */
+        @Override
+        public String getApplicationMoment() {
+            return applicationMoment;
+        }
+
+        /**
+         * Records the application moment set by the arbitration.
+         *
+         * @param applicationMoment the moment (AT_TRIGGER or AT_TOTAL).
+         */
+        @Override
+        public void setApplicationMoment(String applicationMoment) {
+            this.applicationMoment = applicationMoment;
+        }
 
         /**
          * The offer code.

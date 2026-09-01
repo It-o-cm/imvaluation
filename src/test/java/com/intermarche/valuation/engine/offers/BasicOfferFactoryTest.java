@@ -485,6 +485,16 @@ public class BasicOfferFactoryTest {
         public double getEfficiencyScore() {
             return 0.0; // Score is irrelevant for this test
         }
+
+        /**
+         * Returns no configuration: this test double is not born from a configuration row.
+         *
+         * @return always null.
+         */
+        @Override
+        public com.intermarche.valuation.domain.Offer getConfiguration() {
+            return null;
+        }
     }
 
 }

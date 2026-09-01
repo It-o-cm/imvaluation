@@ -184,7 +184,7 @@ class GroupDIT {
                 .body(csv)
                 .when().post("/stores/import")
                 .then().statusCode(200)
-                .body(containsString("\"errors\":[Line 2 ignored (fewer cells than the header): firstbad"))
+                .body(containsString("\"errors\":[\"Line 2 ignored (fewer cells than the header): firstbad"))
                 .body(containsString("firstbad\",\"Line 3 ignored (fewer cells than the header): secondbad|x"))
                 .body(containsString("secondbad|x\"]}"))
                 .body(not(containsString("\"errors\":[\"")));

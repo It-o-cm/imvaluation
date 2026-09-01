@@ -84,6 +84,16 @@ public class OfferApplierTest {
             public Collection<OfferApplication> apply(BasketEvaluation basketEvaluation) {
                 return appsToReturn;
             }
+
+            /**
+             * Returns no configuration: this test double is not born from a configuration row.
+             *
+             * @return always null.
+             */
+            @Override
+            public com.intermarche.valuation.domain.Offer getConfiguration() {
+                return null;
+            }
         };
     }
 

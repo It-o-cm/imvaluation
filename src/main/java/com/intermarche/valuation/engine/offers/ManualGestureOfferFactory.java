@@ -1,5 +1,6 @@
 package com.intermarche.valuation.engine.offers;
 
+import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Store;
@@ -67,6 +68,18 @@ public class ManualGestureOfferFactory implements OfferApplierFactory, EngineTra
         public ManualGestureOfferApplier(Store store, Basket.Item item) {
             this.store = store;
             this.item = item;
+        }
+
+        /**
+         * Returns no configuration: a manual gesture is not born from a configuration row,
+         * so it carries no trigger and the arbitration treats it as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS}.
+         *
+         * @return always null.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return null;
         }
 
         /**

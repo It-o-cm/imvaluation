@@ -98,6 +98,16 @@ public class AdvantageApplierFactoryTest {
             public double getEfficiencyScore() {
                 return 0.0;
             }
+
+            /**
+             * Returns no configuration: this test double is not born from a configuration row.
+             *
+             * @return always null.
+             */
+            @Override
+            public com.intermarche.valuation.domain.Offer getConfiguration() {
+                return null;
+            }
         };
         Collection<AdvantageApplier> expected = List.of(applier);
         AdvantageApplierFactory factory = createMinimalFactory(expected);

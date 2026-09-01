@@ -174,7 +174,9 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
                 catalog.add(new VignetteRule(ean, required, DiscountType.valueOf(typeStr), value));
             }
             // Pass a copy of the vignettes map to avoid modifying the original basket object directly
-            appliers.add(new VignetteDiscountApplier(offer.code, catalog, new HashMap<>(vignettes), store));
+            VignetteDiscountApplier applier = new VignetteDiscountApplier(offer.code, catalog, new HashMap<>(vignettes), store);
+            applier.configuration = offer;
+            appliers.add(applier);
         });
     }
 
@@ -238,6 +240,14 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
          * The unique code identifying the offer.
          */
         private final String offerCode;
+
+        /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
 
         /**
          * The list of rules defining eligible products and discounts.
@@ -327,7 +337,7 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
          * @param applications The list to populate with valid discount applications.
          */
         void processAppliedOffers(BasketEvaluation evaluation, List<AdvantageApplication> applications) {
-            for (OfferApplication offerApp : evaluation.getOffers()) {
+            for (OfferApplication offerApp : evaluation.getAvailableOffers()) {
                 if (offerApp instanceof ProductAwareOfferApplication) {
                     processProductAwareOffer((ProductAwareOfferApplication) offerApp, applications);
                 }
@@ -473,12 +483,48 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
         public double getEfficiencyScore() {
             return 10.0;
         }
+
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
+        }
     }
 
     /**
      * Result object representing a Vignette Discount application.
      */
     public static class VignetteDiscountApplication implements DiscountApplication {
+
+        /**
+         * The application moment restituted in the response (spec §3.6), set by the arbitration.
+         * Defaults to AT_TOTAL, the current behaviour.
+         */
+        private String applicationMoment = "AT_TOTAL";
+
+        /**
+         * Returns the application moment of the configuration that produced this advantage.
+         *
+         * @return the application moment, AT_TOTAL until the arbitration sets it.
+         */
+        @Override
+        public String getApplicationMoment() {
+            return applicationMoment;
+        }
+
+        /**
+         * Records the application moment set by the arbitration.
+         *
+         * @param applicationMoment the moment (AT_TRIGGER or AT_TOTAL).
+         */
+        @Override
+        public void setApplicationMoment(String applicationMoment) {
+            this.applicationMoment = applicationMoment;
+        }
 
         /**
          * The offer code.

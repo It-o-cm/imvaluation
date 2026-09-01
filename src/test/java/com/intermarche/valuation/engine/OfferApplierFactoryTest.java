@@ -77,6 +77,16 @@ public class OfferApplierFactoryTest {
             public Collection<OfferApplication> apply(BasketEvaluation basketEvaluation) {
                 return List.of();
             }
+
+            /**
+             * Returns no configuration: this test double is not born from a configuration row.
+             *
+             * @return always null.
+             */
+            @Override
+            public com.intermarche.valuation.domain.Offer getConfiguration() {
+                return null;
+            }
         };
         Collection<OfferApplier> expected = List.of(applier);
         OfferApplierFactory factory = createMinimalFactory(expected);

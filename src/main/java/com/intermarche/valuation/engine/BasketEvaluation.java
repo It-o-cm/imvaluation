@@ -1,6 +1,7 @@
 package com.intermarche.valuation.engine;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
 
@@ -85,6 +86,28 @@ public class BasketEvaluation {
      * The total price evaluation of the basket after applying offers and discounts.
      */
     private AmountEvaluation totalPrice;
+
+    /**
+     * Memoized trigger evaluation, one entry per configuration (spec §3.3).
+     * <p>
+     * The trigger of a configuration is evaluated once per arbitration, against the current
+     * amounts, and reused until the cache is invalidated (spec §4.3). Keyed by the
+     * {@link Offer} row. Ignored in the JSON response: internal arbitration state.
+     */
+    @JsonIgnore
+    private final Map<Offer, TriggerResult> triggerCache = new HashMap<>();
+
+    /**
+     * The offer applications consumed as carriers (spec §4.4).
+     * <p>
+     * When an applied advantage carries {@code consumesContributors}, the contributors of its
+     * trigger become consumed carriers: they no longer count toward the measures of the
+     * triggers evaluated afterwards. Identity-based so two distinct applications of the same
+     * amount stay distinct. Ignored in the JSON response.
+     */
+    @JsonIgnore
+    private final Set<OfferApplication> consumedContributors =
+            Collections.newSetFromMap(new IdentityHashMap<>());
 
     /**
      * Constructs a new BasketEvaluation.
@@ -559,6 +582,90 @@ public class BasketEvaluation {
      */
     public java.util.List<VatLine> getVatBreakdown() {
         return VatBreakdown.compute(this);
+    }
+
+    /**
+     * Evaluates a configuration's trigger once, memoizing the result (spec §3.3).
+     * <p>
+     * The result is cached per {@link Offer} and reused until {@link #invalidateTriggerCache()}
+     * is called (spec §4.3). A configuration without a row (a {@code null} offer, for an
+     * applier not born from a configuration) is never cached and always evaluates its
+     * trigger, which for such appliers is {@link Trigger#ALWAYS}.
+     *
+     * @param configuration the configuration row, or {@code null}.
+     * @param trigger       the configuration's trigger.
+     * @return the memoized outcome.
+     */
+    public TriggerResult triggerResult(Offer configuration, Trigger trigger) {
+        if (configuration == null) {
+            return trigger.evaluate(this);
+        }
+        TriggerResult cached = triggerCache.get(configuration);
+        if (cached != null) {
+            return cached;
+        }
+        TriggerResult result = trigger.evaluate(this);
+        triggerCache.put(configuration, result);
+        return result;
+    }
+
+    /**
+     * Invalidates the trigger cache, so the next evaluation reflects the current amounts
+     * (spec §4.3): called when a discount really applies or when carriers are consumed.
+     */
+    public void invalidateTriggerCache() {
+        triggerCache.clear();
+    }
+
+    /**
+     * Marks offer applications as consumed carriers (spec §4.4).
+     * <p>
+     * Consumed carriers leave the measures of the triggers evaluated afterwards: a consumed
+     * amount no longer counts toward anyone's threshold.
+     *
+     * @param contributors the contributors to consume.
+     */
+    public void markConsumed(Collection<OfferApplication> contributors) {
+        if (contributors != null) {
+            consumedContributors.addAll(contributors);
+        }
+    }
+
+    /**
+     * Tells whether an offer application has been consumed as a carrier (spec §4.4).
+     *
+     * @param application the offer application to test.
+     * @return {@code true} when the application is a consumed carrier.
+     */
+    public boolean isConsumed(OfferApplication application) {
+        return consumedContributors.contains(application);
+    }
+
+    /**
+     * Returns the offer applications available to the arbitration: every applied offer minus
+     * the carriers consumed so far (spec §4.4).
+     * <p>
+     * This is the view an advantage builds its assiette from and a trigger takes its measures
+     * on, so a consumed carrier leaves both. It is deliberately distinct from
+     * {@link #getOffers()}, which is the response payload and must keep showing the consumed
+     * lines — the customer still bought them; they are only withdrawn from the calculations of
+     * the configurations arbitrated afterwards.
+     *
+     * @return the applied offers that are not consumed carriers; a live filtered view, never
+     *         null.
+     */
+    @JsonIgnore
+    public Collection<OfferApplication> getAvailableOffers() {
+        if (consumedContributors.isEmpty()) {
+            return offers;
+        }
+        List<OfferApplication> available = new ArrayList<>();
+        for (OfferApplication application : offers) {
+            if (!consumedContributors.contains(application)) {
+                available.add(application);
+            }
+        }
+        return available;
     }
 
     /**

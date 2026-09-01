@@ -97,9 +97,9 @@ public class TieredInstrumentEndToEndTest {
 
         importCsv("/offers/import", """
                 CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES
-                TIERED_RICE_0109|TIERED_DISCOUNT|{"scope": "TICKET", "trigger": "AMOUNT", "mode": "HIGHEST_REACHED", "tiers": [{"threshold": 50.0, "award": {"type": "PERCENTAGE", "value": 5.0}}]}|0109|
-                VOUCHER_TICKET_0109|VOUCHER_GRANT|{"scope": "TICKET", "trigger": "AMOUNT", "mode": "HIGHEST_REACHED", "usage": {"validityDays": 30}, "tiers": [{"threshold": 50.0, "award": {"type": "AMOUNT", "value": 5.0}}]}|0109|
-                COUPON_POINTS_0109|COUPON_GRANT|{"scope": "TICKET", "trigger": "AMOUNT", "mode": "HIGHEST_REACHED", "unit": "POINTS", "tiers": [{"threshold": 50.0, "award": {"type": "AMOUNT", "value": 10.0}}]}|0109|
+                TIERED_RICE_0109|TIERED_DISCOUNT|{"scope": "TICKET", "metric": "AMOUNT", "mode": "HIGHEST_REACHED", "tiers": [{"threshold": 50.0, "award": {"type": "PERCENTAGE", "value": 5.0}}]}|0109|
+                VOUCHER_TICKET_0109|VOUCHER_GRANT|{"scope": "TICKET", "metric": "AMOUNT", "mode": "HIGHEST_REACHED", "usage": {"validityDays": 30}, "tiers": [{"threshold": 50.0, "award": {"type": "AMOUNT", "value": 5.0}}]}|0109|
+                COUPON_POINTS_0109|COUPON_GRANT|{"scope": "TICKET", "metric": "AMOUNT", "mode": "HIGHEST_REACHED", "unit": "POINTS", "tiers": [{"threshold": 50.0, "award": {"type": "AMOUNT", "value": 10.0}}]}|0109|
                 """);
 
         seeded = true;

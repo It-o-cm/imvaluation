@@ -316,6 +316,8 @@ public class ImmediateVoucherDiscountFactoryTest {
             // For the test, we say the product is always applicable
             return true;
         }
+        @Override
+        public com.intermarche.valuation.domain.Offer getConfiguration() { return null; }
     }
 
     /**
@@ -328,6 +330,8 @@ public class ImmediateVoucherDiscountFactoryTest {
         public double computeEfficiencyScore(Basket basket) { return 0.0; }
         @Override
         public boolean isApplicable(Product product) { return true; }
+        @Override
+        public com.intermarche.valuation.domain.Offer getConfiguration() { return null; }
     }
 
     // --------------------------------------------------
@@ -729,6 +733,8 @@ public class ImmediateVoucherDiscountFactoryTest {
         public Collection<OfferApplication> apply(BasketEvaluation evaluation) { return Collections.emptyList(); }
         @Override
         public double computeEfficiencyScore(Basket basket) { return 0.0; }
+        @Override
+        public com.intermarche.valuation.domain.Offer getConfiguration() { return null; }
     }
 
     /**
@@ -742,6 +748,8 @@ public class ImmediateVoucherDiscountFactoryTest {
         public double computeEfficiencyScore(Basket basket) { return 0.0; }
         @Override
         public boolean isApplicable(Product product) { return false; }
+        @Override
+        public com.intermarche.valuation.domain.Offer getConfiguration() { return null; }
     }
 
     // --------------------------------------------------

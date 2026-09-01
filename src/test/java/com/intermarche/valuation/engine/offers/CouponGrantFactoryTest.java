@@ -54,7 +54,7 @@ public class CouponGrantFactoryTest {
     @Test
     void testApply_CouponDiscriminatorAndLabel() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("CG_01", store, "COUPON_GRANT", spec);
         Basket basket = new Basket();

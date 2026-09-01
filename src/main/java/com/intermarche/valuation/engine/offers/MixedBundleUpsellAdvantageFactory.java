@@ -151,7 +151,9 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
                 components.add(new UpsellBundleComponent(mainEan, validEans, requiredQty));
             }
             MixedBundleConfig config = new MixedBundleConfig(offer.code, components);
-            appliers.add(new MixedBundleUpsellAdvantageApplier(config, store));
+            MixedBundleUpsellAdvantageApplier applier = new MixedBundleUpsellAdvantageApplier(config, store);
+            applier.configuration = offer;
+            appliers.add(applier);
         });
     }
 
@@ -203,6 +205,14 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
 
         private final MixedBundleConfig config;
         private final Store store;
+
+        /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
 
         /**
          * Constructs the applier with configuration and store context.
@@ -363,6 +373,16 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
         public double getEfficiencyScore() {
             return -100.0;
         }
+
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
+        }
     }
 
     /**
@@ -395,6 +415,32 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
      * Implements {@link AdvantageApplication} but not {@link DiscountApplication}.
      */
     public static class MixedBundleUpsellAdvantageApplication implements AdvantageApplication {
+
+        /**
+         * The application moment restituted in the response (spec §3.6), set by the arbitration.
+         * Defaults to AT_TOTAL, the current behaviour.
+         */
+        private String applicationMoment = "AT_TOTAL";
+
+        /**
+         * Returns the application moment of the configuration that produced this advantage.
+         *
+         * @return the application moment, AT_TOTAL until the arbitration sets it.
+         */
+        @Override
+        public String getApplicationMoment() {
+            return applicationMoment;
+        }
+
+        /**
+         * Records the application moment set by the arbitration.
+         *
+         * @param applicationMoment the moment (AT_TRIGGER or AT_TOTAL).
+         */
+        @Override
+        public void setApplicationMoment(String applicationMoment) {
+            this.applicationMoment = applicationMoment;
+        }
 
         private final String offerCode;
         private final UpsellSuggestion suggestion;

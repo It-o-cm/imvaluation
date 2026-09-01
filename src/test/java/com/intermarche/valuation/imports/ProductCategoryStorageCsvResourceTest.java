@@ -238,7 +238,7 @@ public class ProductCategoryStorageCsvResourceTest {
 
     /**
      * Tests the error handling when the Product EAN is invalid (e.g., empty or null).
-     * Note: Since EANs are Strings, format validation is less strict, but an empty string should fail lookup.
+     * Note: An empty key is rejected upstream by the importer, which ignores the line with an explicit error.
      */
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
@@ -255,7 +255,7 @@ public class ProductCategoryStorageCsvResourceTest {
                 .statusCode(200)
                 .body(containsString("\"createdCount\":0"))
                 .body(containsString("\"errors\""))
-                .body(containsString("Product with EAN '' not found"));
+                .body(containsString("Line 2 ignored (empty key 'EAN')"));
     }
 
     /**

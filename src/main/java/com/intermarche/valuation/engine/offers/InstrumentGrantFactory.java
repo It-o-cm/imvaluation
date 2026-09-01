@@ -61,7 +61,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
       "title": "Instrument Grant Offer Specification",
       "description": "Defines a voucher or coupon granted by the basket: tier mechanics on an assiette, an amount in euros or points, and echoed usage constraints.",
       "type": "object",
-      "required": ["scope", "trigger", "mode"],
+      "required": ["scope", "metric", "mode"],
       "oneOf": [
         { "required": ["tiers"] },
         { "required": ["every"] }
@@ -81,11 +81,11 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
           "x-widget": "ean-list",
           "x-label": "Eligible products"
         },
-        "trigger": {
+        "metric": {
           "type": "string",
           "enum": ["AMOUNT", "QUANTITY"],
           "description": "Dimension of the thresholds: a monetary amount or a number of units.",
-          "x-label": "Trigger"
+          "x-label": "Metric"
         },
         "mode": {
           "type": "string",
@@ -132,7 +132,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             "step": {
               "type": "number",
               "exclusiveMinimum": 0,
-              "description": "Size of one step, in the trigger's dimension.",
+              "description": "Size of one step, in the metric's dimension.",
               "x-label": "Step"
             },
             "award": { "$ref": "#/definitions/award" }
@@ -215,7 +215,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
     /**
      * Dimension of the thresholds.
      */
-    public enum Trigger {
+    public enum Metric {
         /** Thresholds compare against a monetary amount (tax included). */
         AMOUNT,
         /** Thresholds compare against a number of standard units. */
@@ -320,7 +320,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
     private void processOffer(Offer offer, List<AdvantageApplier> appliers) {
         this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
             Scope scope = Scope.valueOf(spec.get("scope").asText());
-            Trigger trigger = Trigger.valueOf(spec.get("trigger").asText());
+            Metric metric = Metric.valueOf(spec.get("metric").asText());
             Mode mode = Mode.valueOf(spec.get("mode").asText());
             Unit unit = spec.has("unit") ? Unit.valueOf(spec.get("unit").asText()) : Unit.EUR;
             Set<String> targetEans = new LinkedHashSet<>();
@@ -329,20 +329,20 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                     targetEans.add(ean.asText());
                 }
             }
-            validateCrossRules(offer.code, scope, trigger, mode, targetEans, spec);
+            validateCrossRules(offer.code, scope, metric, mode, targetEans, spec);
             TierTable<Award> table = null;
             BigDecimal step = null;
             Award stepAward = null;
             if (mode == Mode.PER_MULTIPLE) {
                 JsonNode every = spec.get("every");
                 step = every.get("step").decimalValue();
-                stepAward = parseAward(offer.code, every.get("award"), mode, trigger);
+                stepAward = parseAward(offer.code, every.get("award"), mode, metric);
             } else {
                 List<TierTable.Tier<Award>> tiers = new ArrayList<>();
                 for (JsonNode tierNode : spec.get("tiers")) {
                     tiers.add(new TierTable.Tier<>(
                             tierNode.get("threshold").decimalValue(),
-                            parseAward(offer.code, tierNode.get("award"), mode, trigger)));
+                            parseAward(offer.code, tierNode.get("award"), mode, metric)));
                 }
                 table = TierTable.of(tiers);
             }
@@ -350,8 +350,10 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                     ? Product.findByEans(targetEans)
                     : List.of();
             JsonNode usage = spec.has("usage") ? spec.get("usage") : null;
-            appliers.add(new InstrumentGrantApplier(offer.code, scope, trigger, mode, unit,
-                    table, step, stepAward, targetProducts, usage));
+            InstrumentGrantApplier applier = new InstrumentGrantApplier(offer.code, scope, metric, mode, unit,
+                    table, step, stepAward, targetProducts, usage);
+            applier.configuration = offer;
+            appliers.add(applier);
         });
     }
 
@@ -361,11 +363,11 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
      * @param offerCode the offer code, for error messages.
      * @param node      the award node.
      * @param mode      the tier mode, for validation.
-     * @param trigger   the trigger dimension, for validation.
+     * @param metric   the metric dimension, for validation.
      * @return the parsed award.
      * @throws IllegalArgumentException if the award violates a cross-field rule.
      */
-    private Award parseAward(String offerCode, JsonNode node, Mode mode, Trigger trigger) {
+    private Award parseAward(String offerCode, JsonNode node, Mode mode, Metric metric) {
         AwardType type = AwardType.valueOf(node.get("type").asText());
         BigDecimal value = node.has("value") ? node.get("value").decimalValue() : null;
         if (type != AwardType.VAT_AMOUNT && value == null) {
@@ -382,9 +384,9 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                     "%s offer '%s': mode PROGRESSIVE only allows PERCENTAGE and AMOUNT_PER_ITEM awards.",
                     getOfferType(), offerCode));
         }
-        if (mode == Mode.PROGRESSIVE && type == AwardType.AMOUNT_PER_ITEM && trigger != Trigger.QUANTITY) {
+        if (mode == Mode.PROGRESSIVE && type == AwardType.AMOUNT_PER_ITEM && metric != Metric.QUANTITY) {
             throw new IllegalArgumentException(String.format(
-                    "%s offer '%s': AMOUNT_PER_ITEM in PROGRESSIVE mode requires the QUANTITY trigger.",
+                    "%s offer '%s': AMOUNT_PER_ITEM in PROGRESSIVE mode requires the QUANTITY metric.",
                     getOfferType(), offerCode));
         }
         if (mode == Mode.PER_MULTIPLE && type == AwardType.AMOUNT_PER_ITEM) {
@@ -400,21 +402,21 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
      *
      * @param offerCode  the offer code, for error messages.
      * @param scope      the assiette scope.
-     * @param trigger    the trigger dimension.
+     * @param metric    the metric dimension.
      * @param mode       the tier mode.
      * @param targetEans the parsed target EANs.
      * @param spec       the parsed specification.
      * @throws IllegalArgumentException if a rule is violated.
      */
-    private void validateCrossRules(String offerCode, Scope scope, Trigger trigger, Mode mode,
+    private void validateCrossRules(String offerCode, Scope scope, Metric metric, Mode mode,
                                     Set<String> targetEans, JsonNode spec) {
         if (scope == Scope.ITEMS && targetEans.isEmpty()) {
             throw new IllegalArgumentException(String.format(
                     "%s offer '%s': scope ITEMS requires targetEans.", getOfferType(), offerCode));
         }
-        if (scope == Scope.TICKET && trigger == Trigger.QUANTITY) {
+        if (scope == Scope.TICKET && metric == Metric.QUANTITY) {
             throw new IllegalArgumentException(String.format(
-                    "%s offer '%s': scope TICKET requires the AMOUNT trigger.", getOfferType(), offerCode));
+                    "%s offer '%s': scope TICKET requires the AMOUNT metric.", getOfferType(), offerCode));
         }
         if (scope == Scope.TICKET && spec.has("tiers")) {
             for (JsonNode tierNode : spec.get("tiers")) {
@@ -458,14 +460,22 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         private final String code;
 
         /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
+
+        /**
          * The assiette scope.
          */
         private final Scope scope;
 
         /**
-         * The trigger dimension of the thresholds.
+         * The metric dimension of the thresholds.
          */
-        private final Trigger trigger;
+        private final Metric metric;
 
         /**
          * The tier mode.
@@ -507,7 +517,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
          *
          * @param code           the offer code.
          * @param scope          the assiette scope.
-         * @param trigger        the trigger dimension.
+         * @param metric        the metric dimension.
          * @param mode           the tier mode.
          * @param unit           the unit of the granted amount.
          * @param table          the tier table; null in PER_MULTIPLE mode.
@@ -516,12 +526,12 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
          * @param targetProducts the targeted products; empty in TICKET scope.
          * @param usage          the echoed usage constraints; may be null.
          */
-        public InstrumentGrantApplier(String code, Scope scope, Trigger trigger, Mode mode, Unit unit,
+        public InstrumentGrantApplier(String code, Scope scope, Metric metric, Mode mode, Unit unit,
                                       TierTable<Award> table, BigDecimal step, Award stepAward,
                                       List<Product> targetProducts, JsonNode usage) {
             this.code = code;
             this.scope = scope;
-            this.trigger = trigger;
+            this.metric = metric;
             this.mode = mode;
             this.unit = unit;
             this.table = table;
@@ -555,6 +565,16 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         }
 
         /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
+        }
+
+        /**
          * Computes the granted instrument for the current evaluation.
          * <p>
          * The assiette is gathered from the product-aware offer applications, the tier
@@ -584,7 +604,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             if (baseAmount.signum() <= 0) {
                 return applications;
             }
-            BigDecimal base = (trigger == Trigger.AMOUNT) ? baseAmount : baseQuantity;
+            BigDecimal base = (metric == Metric.AMOUNT) ? baseAmount : baseQuantity;
             BigDecimal amount;
             String detail;
             switch (mode) {
@@ -605,11 +625,11 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                     BigDecimal total = BigDecimal.ZERO;
                     for (TierTable.Slice<Award> slice : slices) {
                         if (slice.award().type() == AwardType.PERCENTAGE) {
-                            BigDecimal portionAmount = (trigger == Trigger.AMOUNT)
+                            BigDecimal portionAmount = (metric == Metric.AMOUNT)
                                     ? slice.portion()
                                     : slice.portion().multiply(avgUnit);
                             total = total.add(portionAmount.multiply(percent(slice.award().value())));
-                        } else { // AMOUNT_PER_ITEM, guaranteed QUANTITY trigger by validation
+                        } else { // AMOUNT_PER_ITEM, guaranteed QUANTITY metric by validation
                             total = total.add(slice.portion().multiply(slice.award().value()));
                         }
                     }
@@ -624,7 +644,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                     BigDecimal covered = step.multiply(BigDecimal.valueOf(multiples));
                     amount = switch (stepAward.type()) {
                         case PERCENTAGE -> {
-                            BigDecimal coveredAmount = (trigger == Trigger.AMOUNT)
+                            BigDecimal coveredAmount = (metric == Metric.AMOUNT)
                                     ? covered
                                     : covered.multiply(averageUnit(baseAmount, baseQuantity));
                             yield coveredAmount.multiply(percent(stepAward.value()));
@@ -663,7 +683,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             if (evaluation.getOffers() == null) {
                 return contributions;
             }
-            for (OfferApplication app : evaluation.getOffers()) {
+            for (OfferApplication app : evaluation.getAvailableOffers()) {
                 if (!(app instanceof ProductAwareOfferApplication productAwareApp)) {
                     continue;
                 }
@@ -753,6 +773,32 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
      * a grant never changes the basket total.
      */
     public static class InstrumentGrantApplication implements AdvantageApplication {
+
+        /**
+         * The application moment restituted in the response (spec §3.6), set by the arbitration.
+         * Defaults to AT_TOTAL, the current behaviour.
+         */
+        private String applicationMoment = "AT_TOTAL";
+
+        /**
+         * Returns the application moment of the configuration that produced this advantage.
+         *
+         * @return the application moment, AT_TOTAL until the arbitration sets it.
+         */
+        @Override
+        public String getApplicationMoment() {
+            return applicationMoment;
+        }
+
+        /**
+         * Records the application moment set by the arbitration.
+         *
+         * @param applicationMoment the moment (AT_TRIGGER or AT_TOTAL).
+         */
+        @Override
+        public void setApplicationMoment(String applicationMoment) {
+            this.applicationMoment = applicationMoment;
+        }
 
         /**
          * The display label of the granting type ("Voucher Grant" or "Coupon Grant").

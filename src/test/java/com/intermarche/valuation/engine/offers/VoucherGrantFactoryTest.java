@@ -97,7 +97,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testBuildAppliers_Success() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("VG_01", store, "VOUCHER_GRANT", spec);
 
@@ -113,7 +113,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testBuildAppliers_ItemsScopeWithoutTargetsRejected() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"ITEMS\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"ITEMS\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("VG_02", store, "VOUCHER_GRANT", spec);
 
@@ -126,7 +126,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testBuildAppliers_VatAmountOutsideHighestRejected() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"VAT_AMOUNT\" } } ] }";
         DomainUtils.createAndPersistOffer("VG_03", store, "VOUCHER_GRANT", spec);
 
@@ -140,7 +140,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_HighestReached_Percentage() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"usage\": { \"validityDays\": 30 }, "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 5.0 } }, "
                 + "{ \"threshold\": 100.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
@@ -168,7 +168,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_VatAmount() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"VAT_AMOUNT\" } } ] }";
 
         Collection<AdvantageApplication> grants = applyOn(spec, 120.00);
@@ -186,7 +186,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_PerMultiple_Points() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"PER_MULTIPLE\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"PER_MULTIPLE\", "
                 + "\"unit\": \"POINTS\", "
                 + "\"every\": { \"step\": 10.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 1 } } }";
 
@@ -206,7 +206,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_BelowFirstTier() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 5.0 } } ] }";
 
         assertTrue(applyOn(spec, 30.00).isEmpty());
@@ -220,7 +220,7 @@ public class VoucherGrantFactoryTest {
     void testApply_ItemsScope_FiltersContributions() {
         setUpDatabase();
         String spec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
         Product target = DomainUtils.createAndPersistProduct(
                 "1000000000001", "Target", com.intermarche.valuation.domain.ProductType.UNIT);
@@ -249,7 +249,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_Progressive_Percentage() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 5.0 } }, "
                 + "{ \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } }, "
                 + "{ \"threshold\": 100.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 15.0 } } ] }";
@@ -269,7 +269,7 @@ public class VoucherGrantFactoryTest {
     void testApply_Progressive_AmountPerItem_Quantity() {
         setUpDatabase();
         String spec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"PROGRESSIVE\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"PROGRESSIVE\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"AMOUNT_PER_ITEM\", \"value\": 0.10 } }, "
                 + "{ \"threshold\": 3.0, \"award\": { \"type\": \"AMOUNT_PER_ITEM\", \"value\": 0.20 } } ] }";
         Product target = DomainUtils.createAndPersistProduct("1000000000001", "Target", ProductType.UNIT);
@@ -293,7 +293,7 @@ public class VoucherGrantFactoryTest {
     void testApply_VatAmount_ItemsScope_MultiRate() {
         setUpDatabase();
         String spec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\", \"1000000000002\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"VAT_AMOUNT\" } } ] }";
         Product standard = DomainUtils.createAndPersistProduct("1000000000001", "Standard", ProductType.UNIT);
         Product reduced = DomainUtils.createAndPersistProduct("1000000000002", "Reduced", ProductType.UNIT);
@@ -317,7 +317,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_Points_RoundsToWholePoint() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"unit\": \"POINTS\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
         Collection<AdvantageApplication> grants = applyOn(spec, 54.00);
@@ -337,7 +337,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_UsageAbsent_NullAndNotSerialized() throws Exception {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } ] }";
         Collection<AdvantageApplication> grants = applyOn(spec, 60.00);
         InstrumentGrantFactory.InstrumentGrantApplication grant =
@@ -357,7 +357,7 @@ public class VoucherGrantFactoryTest {
         StoreGroup group = DomainUtils.createAndPersistStoreGroup("GROUP_01");
         group.stores.add(store);
         group.persist();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } ] }";
         com.intermarche.valuation.domain.Offer offer = new com.intermarche.valuation.domain.Offer();
         offer.code = "VG_GROUP";
@@ -385,7 +385,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_EmptyAssiette_NoApplication() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("VG_EMPTY", store, "VOUCHER_GRANT", spec);
         BasketEvaluation evaluation = newEvaluation();
@@ -408,7 +408,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testBuildAppliers_AmountWithoutValueRejected() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"AMOUNT\" } } ] }";
         DomainUtils.createAndPersistOffer("VG_NOVAL", store, "VOUCHER_GRANT", spec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -420,7 +420,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testBuildAppliers_ProgressiveAmountRejected() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("VG_PROGA", store, "VOUCHER_GRANT", spec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -434,7 +434,7 @@ public class VoucherGrantFactoryTest {
     void testBuildAppliers_ProgressiveAmountPerItemAmountTriggerRejected() {
         setUpDatabase();
         String spec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"AMOUNT_PER_ITEM\", \"value\": 0.5 } } ] }";
         DomainUtils.createAndPersistOffer("VG_PAPIAT", store, "VOUCHER_GRANT", spec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -447,7 +447,7 @@ public class VoucherGrantFactoryTest {
     void testBuildAppliers_PerMultipleAmountPerItemRejected() {
         setUpDatabase();
         String spec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
                 + "\"every\": { \"step\": 2.0, \"award\": { \"type\": \"AMOUNT_PER_ITEM\", \"value\": 0.5 } } }";
         DomainUtils.createAndPersistOffer("VG_PMAPI", store, "VOUCHER_GRANT", spec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -459,7 +459,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testBuildAppliers_TicketQuantityRejected() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"QUANTITY\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"QUANTITY\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 3.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("VG_TQ", store, "VOUCHER_GRANT", spec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -472,7 +472,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testBuildAppliers_TicketAmountPerItemRejected() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"AMOUNT_PER_ITEM\", \"value\": 0.5 } } ] }";
         DomainUtils.createAndPersistOffer("VG_TAPI", store, "VOUCHER_GRANT", spec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -484,7 +484,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testBuildAppliers_PerMultipleWithoutEveryRejected() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"PER_MULTIPLE\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"PER_MULTIPLE\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistOffer("VG_PMNE", store, "VOUCHER_GRANT", spec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -497,7 +497,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testBuildAppliers_HighestWithoutTiersRejected() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"every\": { \"step\": 50.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } }";
         DomainUtils.createAndPersistOffer("VG_HNT", store, "VOUCHER_GRANT", spec);
         assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(newEvaluation()));
@@ -509,7 +509,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_Progressive_BelowFirstFloor_NoGrant() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"PROGRESSIVE\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
         assertTrue(applyOn(spec, 30.00).isEmpty());
     }
@@ -522,7 +522,7 @@ public class VoucherGrantFactoryTest {
     void testApply_Progressive_Percentage_QuantityTrigger() {
         setUpDatabase();
         String spec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"PROGRESSIVE\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"PROGRESSIVE\", "
                 + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 5.0 } }, "
                 + "{ \"threshold\": 3.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
         Product target = DomainUtils.createAndPersistProduct("1000000000001", "Target", ProductType.UNIT);
@@ -542,7 +542,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_PerMultiple_BelowStep_NoGrant() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"PER_MULTIPLE\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"PER_MULTIPLE\", "
                 + "\"every\": { \"step\": 100.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } }";
         assertTrue(applyOn(spec, 30.00).isEmpty());
     }
@@ -554,7 +554,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_PerMultiple_Percentage_AmountTrigger() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"PER_MULTIPLE\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"PER_MULTIPLE\", "
                 + "\"every\": { \"step\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } }";
         Collection<AdvantageApplication> grants = applyOn(spec, 120.00);
         InstrumentGrantFactory.InstrumentGrantApplication grant =
@@ -570,7 +570,7 @@ public class VoucherGrantFactoryTest {
     void testApply_PerMultiple_Percentage_QuantityTrigger() {
         setUpDatabase();
         String spec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"PER_MULTIPLE\", "
                 + "\"every\": { \"step\": 2.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } }";
         Product target = DomainUtils.createAndPersistProduct("1000000000001", "Target", ProductType.UNIT);
         DomainUtils.createAndPersistOffer("VG_PMPQ", store, "VOUCHER_GRANT", spec);
@@ -591,7 +591,7 @@ public class VoucherGrantFactoryTest {
     void testApply_HighestReached_AmountPerItem() {
         setUpDatabase();
         String spec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"QUANTITY\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"QUANTITY\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 3.0, \"award\": { \"type\": \"AMOUNT_PER_ITEM\", \"value\": 0.50 } } ] }";
         Product target = DomainUtils.createAndPersistProduct("1000000000001", "Target", ProductType.UNIT);
         DomainUtils.createAndPersistOffer("VG_API", store, "VOUCHER_GRANT", spec);
@@ -611,7 +611,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_Points_RoundsToZero_NoGrant() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"unit\": \"POINTS\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 0.5 } } ] }";
         assertTrue(applyOn(spec, 50.00).isEmpty());
@@ -624,7 +624,7 @@ public class VoucherGrantFactoryTest {
     @Test
     void testApply_GetOfferEchoesType() {
         setUpDatabase();
-        String spec = "{ \"scope\": \"TICKET\", \"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } ] }";
         Collection<AdvantageApplication> grants = applyOn(spec, 60.00);
         InstrumentGrantFactory.InstrumentGrantApplication grant =
@@ -640,7 +640,7 @@ public class VoucherGrantFactoryTest {
     void testApply_ItemsScope_NullProductAmount_NoGrant() {
         setUpDatabase();
         String spec = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1000000000001\"], "
-                + "\"trigger\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
                 + "\"tiers\": [ { \"threshold\": 1.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 5.0 } } ] }";
         DomainUtils.createAndPersistProduct("1000000000001", "Target", ProductType.UNIT);
         DomainUtils.createAndPersistOffer("VG_NULLAMT", store, "VOUCHER_GRANT", spec);

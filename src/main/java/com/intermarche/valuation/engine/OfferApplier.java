@@ -1,5 +1,6 @@
 package com.intermarche.valuation.engine;
 
+import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.PriceUsage;
 
 import java.util.ArrayList;
@@ -32,6 +33,22 @@ public abstract class OfferApplier {
      * @return A collection of offer applications representing calculated offers.
      */
     public abstract Collection<OfferApplication> apply(BasketEvaluation basketEvaluation);
+
+    /**
+     * Returns the configuration (the {@link Offer} table row) this offer applier was built
+     * from.
+     * <p>
+     * Only the optional offers ({@code N+M}, {@code MIXED_BUNDLE}) need this link, so their
+     * trigger can be evaluated by the arbitration (spec §4.2.A): an optional offer whose
+     * trigger is not satisfied is dropped and its lines fall back on the Basic valuation.
+     * Abstract on purpose so every offer applier answers honestly: an applier not born from
+     * a configuration row (Basic valuation, manual gesture, generic line) returns
+     * {@code null}, which the arbitration reads as {@link Trigger#ALWAYS}.
+     *
+     * @return the source configuration, or {@code null} when the applier is not born from a
+     *         configuration row.
+     */
+    public abstract Offer getConfiguration();
 
     /**
      * Sets the efficiency score of this offer applier.

@@ -1,5 +1,6 @@
 package com.intermarche.valuation.engine.offers;
 
+import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
@@ -78,6 +79,18 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
             this.product = product;
             this.defaultPrice = defaultPrice;
             this.refPrice = refPrice;
+        }
+
+        /**
+         * Returns no configuration: the Basic valuation is not born from a configuration
+         * row, so it carries no trigger and the arbitration treats it as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS}.
+         *
+         * @return always null.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return null;
         }
 
         /**

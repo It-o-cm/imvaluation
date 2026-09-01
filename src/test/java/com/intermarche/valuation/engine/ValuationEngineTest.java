@@ -670,6 +670,11 @@ public class ValuationEngineTest {
             public Collection<OfferApplication> apply(BasketEvaluation basketEvaluation) {
                 return Collections.emptyList();
             }
+
+            @Override
+            public com.intermarche.valuation.domain.Offer getConfiguration() {
+                return null;
+            }
         };
         realApplier.setEfficiencyScore(1.0); // Set score for sorting logic
 
@@ -709,6 +714,11 @@ public class ValuationEngineTest {
             public Collection<OfferApplication> apply(BasketEvaluation basketEvaluation) {
                 return Collections.emptyList();
             }
+
+            @Override
+            public com.intermarche.valuation.domain.Offer getConfiguration() {
+                return null;
+            }
         };
         realApplier.setEfficiencyScore(1.0);
 
@@ -743,6 +753,11 @@ public class ValuationEngineTest {
             @Override
             public Collection<OfferApplication> apply(BasketEvaluation basketEvaluation) {
                 return Collections.emptyList();
+            }
+
+            @Override
+            public com.intermarche.valuation.domain.Offer getConfiguration() {
+                return null;
             }
         };
         realApplier.setEfficiencyScore(1.0);
@@ -793,6 +808,10 @@ public class ValuationEngineTest {
 
         // Mock de l'évaluation
         BasketEvaluation eval = mock(BasketEvaluation.class);
+        // The rewritten two-wave arbitration (spec §4.2) asks the evaluation for the memoized
+        // trigger before applying: a mocked evaluation must answer it (a default advantage is
+        // ALWAYS-satisfied).
+        when(eval.triggerResult(any(), any())).thenReturn(new TriggerResult(true, List.of()));
         // On doit retourner une vraie collection mutable pour le .addAll()
         Collection<AdvantageApplication> advantageSet = new HashSet<>();
         when(eval.getAdvantages()).thenReturn(advantageSet);
@@ -820,6 +839,7 @@ public class ValuationEngineTest {
         when(applier.apply(any())).thenReturn(null);
 
         BasketEvaluation eval = mock(BasketEvaluation.class);
+        lenient().when(eval.triggerResult(any(), any())).thenReturn(new TriggerResult(true, List.of()));
         Collection<AdvantageApplication> advantageSet = new HashSet<>();
         lenient().when(eval.getAdvantages()).thenReturn(advantageSet);
 
@@ -845,6 +865,7 @@ public class ValuationEngineTest {
         doThrow(new IllegalStateException("Applier crashed")).when(applier).apply(any());
 
         BasketEvaluation eval = mock(BasketEvaluation.class);
+        when(eval.triggerResult(any(), any())).thenReturn(new TriggerResult(true, List.of()));
 
         // Act & Assert
         RuntimeException ex = assertThrows(RuntimeException.class, () -> {

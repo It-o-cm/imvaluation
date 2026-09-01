@@ -157,7 +157,9 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
             if (!targetOfferClasses.isEmpty() && !targetItems.isEmpty()) {
                 DiscountType discountType = DiscountType.valueOf(discountTypeStr);
                 // Pass the 'store' to the Applier to allow dynamic efficiency score calculation
-                appliers.add(new ImmediateVoucherApplier(offer.code, targetOfferClasses, targetItems, discountType, value, store));
+                ImmediateVoucherApplier applier = new ImmediateVoucherApplier(offer.code, targetOfferClasses, targetItems, discountType, value, store);
+                applier.configuration = offer;
+                appliers.add(applier);
             }
         });
     }
@@ -225,6 +227,14 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
     public static class ImmediateVoucherApplier implements AdvantageApplier, EngineTrait {
 
         private final String code;
+
+        /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
         private final Set<String> targetOfferClassNames;
         private final Map<String, Product> productMap;
         private final Map<String, Price> priceMap;
@@ -351,7 +361,7 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
         @Override
         public Collection<AdvantageApplication> apply(BasketEvaluation evaluation) {
             List<AdvantageApplication> applications = new ArrayList<>();
-            for (OfferApplication offerApp : evaluation.getOffers()) {
+            for (OfferApplication offerApp : evaluation.getAvailableOffers()) {
                 if (offerApp instanceof ProductAwareOfferApplication) {
                     ProductAwareOfferApplication productAwareApp = (ProductAwareOfferApplication) offerApp;
                     // Check class match first (optimization)
@@ -420,12 +430,48 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
             return this.efficiencyScore;
         }
 
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
+        }
+
     }
 
     /**
      * Represents the application of an Immediate Voucher.
      */
     public static class ImmediateVoucherApplication implements DiscountApplication {
+
+        /**
+         * The application moment restituted in the response (spec §3.6), set by the arbitration.
+         * Defaults to AT_TOTAL, the current behaviour.
+         */
+        private String applicationMoment = "AT_TOTAL";
+
+        /**
+         * Returns the application moment of the configuration that produced this advantage.
+         *
+         * @return the application moment, AT_TOTAL until the arbitration sets it.
+         */
+        @Override
+        public String getApplicationMoment() {
+            return applicationMoment;
+        }
+
+        /**
+         * Records the application moment set by the arbitration.
+         *
+         * @param applicationMoment the moment (AT_TRIGGER or AT_TOTAL).
+         */
+        @Override
+        public void setApplicationMoment(String applicationMoment) {
+            this.applicationMoment = applicationMoment;
+        }
 
         private final String code;
         private final OfferApplication offerApplication;

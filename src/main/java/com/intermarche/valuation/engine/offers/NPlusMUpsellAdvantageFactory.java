@@ -151,7 +151,9 @@ public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, En
                 }
             }
             NPlusMOfferConfig config = new NPlusMOfferConfig(offer.code, targetEans, quantityToPay, discountedQuantity);
-            appliers.add(new NPlusMUpsellAdvantageApplier(config, store));
+            NPlusMUpsellAdvantageApplier applier = new NPlusMUpsellAdvantageApplier(config, store);
+            applier.configuration = offer;
+            appliers.add(applier);
         });
     }
 
@@ -197,6 +199,14 @@ public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, En
 
         private final NPlusMOfferConfig config;
         private final Store store;
+
+        /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
 
         /**
          * Constructs a new N+M Upsell Applier for a specific configuration.
@@ -308,6 +318,16 @@ public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, En
             // Suggestion advantages usually run last
             return -100.0;
         }
+
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
+        }
     }
 
     /**
@@ -352,6 +372,32 @@ public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, En
      * not apply a financial reduction directly, but suggests a purchase path.
      */
     public static class NPlusMUpsellAdvantageApplication implements AdvantageApplication {
+
+        /**
+         * The application moment restituted in the response (spec §3.6), set by the arbitration.
+         * Defaults to AT_TOTAL, the current behaviour.
+         */
+        private String applicationMoment = "AT_TOTAL";
+
+        /**
+         * Returns the application moment of the configuration that produced this advantage.
+         *
+         * @return the application moment, AT_TOTAL until the arbitration sets it.
+         */
+        @Override
+        public String getApplicationMoment() {
+            return applicationMoment;
+        }
+
+        /**
+         * Records the application moment set by the arbitration.
+         *
+         * @param applicationMoment the moment (AT_TRIGGER or AT_TOTAL).
+         */
+        @Override
+        public void setApplicationMoment(String applicationMoment) {
+            this.applicationMoment = applicationMoment;
+        }
 
         private final String offerCode;
         private final UpsellSuggestion suggestion;

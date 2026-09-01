@@ -3,6 +3,7 @@ package com.intermarche.valuation.engine;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Product;
 import com.networknt.schema.JsonSchema;
@@ -21,6 +22,67 @@ import java.util.stream.Collectors;
  * providing shared validation, database retrieval, and JSON parsing logic.
  */
 public interface EngineTrait {
+
+    /**
+     * JSON Schema fragment for the optional {@code trigger} block (spec §3.1), injected into
+     * every offer/advantage schema by {@link #processSpecification} — the single funnel, so
+     * no factory is edited one by one.
+     */
+    String TRIGGER_PROPERTY_SCHEMA = """
+        { "type": "object", "additionalProperties": false,
+          "required": ["conditions"],
+          "properties": {
+            "conditions": { "type": "array", "minItems": 1,
+              "items": { "$ref": "#/definitions/triggerCondition" } } } }""";
+
+    /**
+     * JSON Schema definition of a single trigger condition — the three kinds of spec §3.1.
+     * The scope/eans cross-rules a schema cannot express are enforced in code by
+     * {@link Trigger#of}.
+     */
+    String TRIGGER_CONDITION_DEFINITION = """
+        { "oneOf": [
+            { "type": "object", "additionalProperties": false,
+              "required": ["kind", "scope", "threshold"],
+              "properties": {
+                "kind": { "const": "MINIMUM_AMOUNT" },
+                "scope": { "enum": ["TICKET", "ITEMS"] },
+                "eans": { "type": "array", "minItems": 1,
+                          "items": { "type": "string", "minLength": 1 } },
+                "threshold": { "type": "number", "exclusiveMinimum": 0 } } },
+            { "type": "object", "additionalProperties": false,
+              "required": ["kind", "eans", "threshold"],
+              "properties": {
+                "kind": { "const": "MINIMUM_QUANTITY" },
+                "eans": { "type": "array", "minItems": 1,
+                          "items": { "type": "string", "minLength": 1 } },
+                "threshold": { "type": "number", "exclusiveMinimum": 0 } } },
+            { "type": "object", "additionalProperties": false,
+              "required": ["kind", "code"],
+              "properties": {
+                "kind": { "const": "COUPON_CODE" },
+                "code": { "type": "string", "minLength": 1 } } } ] }""";
+
+    /**
+     * JSON Schema fragment for the optional {@code applicationMoment} (spec §3.6): declared
+     * in C1, its effect delivered in C2.
+     */
+    String APPLICATION_MOMENT_SCHEMA = """
+        { "enum": ["AT_TRIGGER", "AT_TOTAL"], "default": "AT_TOTAL" }""";
+
+    /**
+     * JSON Schema fragment for the optional {@code arbitration} block (spec §4.1): all
+     * defaults reproduce the current behaviour — activation by data, never by code.
+     */
+    String ARBITRATION_SCHEMA = """
+        { "type": "object", "additionalProperties": false,
+          "properties": {
+            "priority": { "type": "integer", "minimum": 0, "maximum": 1000, "default": 500 },
+            "cumulable": { "type": "boolean", "default": true },
+            "exclusionGroups": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "maxApplicationsPerTicket": { "type": "integer", "minimum": 1 },
+            "maxApplicationsPerLine": { "type": "integer", "minimum": 1 },
+            "consumesContributors": { "type": "boolean", "default": false } } }""";
 
     /**
      * Retrieves the {@link Basket} from the evaluation context.
@@ -104,17 +166,25 @@ public interface EngineTrait {
      */
     default void processSpecification(String schemaSpecification, String offerSpecification, Consumer<JsonNode> process) {
         try {
+            ObjectMapper mapper = new ObjectMapper();
+            // 0. Inject the shared trigger / applicationMoment / arbitration fragments once,
+            // centrally, into every offer/advantage schema (spec §3.5). The basket schema is
+            // left untouched.
+            String effectiveSchema = injectSharedFragments(mapper, schemaSpecification);
             // 1. Configure the factory for the desired schema version (V7, V2019-09, V2020-12, etc.)
             // Here we use Draft 7 (widely used).
             JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7);
             // 2. Load the schema
-            JsonSchema schema = factory.getSchema(schemaSpecification);
+            JsonSchema schema = factory.getSchema(effectiveSchema);
             // 3. Parse JSON content into JsonNode (Jackson)
-            JsonNode jsonNode = new ObjectMapper().readTree(offerSpecification);
+            JsonNode jsonNode = mapper.readTree(offerSpecification);
             // 4. Perform validation
             Set<ValidationMessage> errors = schema.validate(jsonNode);
             // 5. Analyze results
             if (errors.isEmpty()) {
+                // Cross-field trigger rules a schema cannot express (spec §3.8), rejected at
+                // creation through the very same channel.
+                validateTriggerCrossRules(jsonNode);
                 process.accept(jsonNode);
             } else {
                 // Print errors for debugging
@@ -123,6 +193,64 @@ public interface EngineTrait {
             }
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Error parsing offer.", e);
+        }
+    }
+
+    /**
+     * Injects the shared {@code trigger}, {@code applicationMoment} and {@code arbitration}
+     * fragments (spec §3.5, §4.1) into an offer/advantage schema, centrally and once.
+     * <p>
+     * This is the single funnel the spec requires: no factory schema is edited on its own,
+     * and a future type inherits the blocks for free. The basket schema is deliberately left
+     * untouched — it is validated through the same method but must not carry these offer-only
+     * blocks. A schema without a top-level {@code properties} object is returned unchanged.
+     *
+     * @param mapper              the shared object mapper.
+     * @param schemaSpecification the raw factory schema.
+     * @return the schema augmented with the three optional blocks, or the input unchanged
+     *         when it is the basket schema, is malformed, or carries no {@code properties}.
+     */
+    private String injectSharedFragments(ObjectMapper mapper, String schemaSpecification) {
+        if (Basket.BASKET_SCHEMA.equals(schemaSpecification)) {
+            return schemaSpecification;
+        }
+        try {
+            JsonNode root = mapper.readTree(schemaSpecification);
+            if (!(root instanceof ObjectNode rootObject)
+                    || !(root.get("properties") instanceof ObjectNode properties)) {
+                return schemaSpecification;
+            }
+            properties.set("trigger", mapper.readTree(TRIGGER_PROPERTY_SCHEMA));
+            properties.set("applicationMoment", mapper.readTree(APPLICATION_MOMENT_SCHEMA));
+            properties.set("arbitration", mapper.readTree(ARBITRATION_SCHEMA));
+            ObjectNode definitions = root.get("definitions") instanceof ObjectNode existing
+                    ? existing : mapper.createObjectNode();
+            definitions.set("triggerCondition", mapper.readTree(TRIGGER_CONDITION_DEFINITION));
+            rootObject.set("definitions", definitions);
+            return mapper.writeValueAsString(rootObject);
+        } catch (JsonProcessingException e) {
+            // A malformed factory schema is a coding error, not a user input error: keep the
+            // original so the downstream validation surfaces it exactly as it did before.
+            return schemaSpecification;
+        }
+    }
+
+    /**
+     * Applies the trigger cross-field rules of spec §3.8 that a JSON Schema cannot express —
+     * scope {@code ITEMS} requires {@code eans}, scope {@code TICKET} forbids them — by
+     * parsing the trigger block through {@link Trigger#of}.
+     *
+     * @param specification the validated specification node.
+     * @throws IllegalArgumentException through the existing "Error validating offer: "
+     *                                  channel when a cross-field rule is violated.
+     */
+    private void validateTriggerCrossRules(JsonNode specification) {
+        if (specification != null && specification.has("trigger")) {
+            try {
+                Trigger.of(specification.get("trigger"));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Error validating offer: " + e.getMessage());
+            }
         }
     }
 }

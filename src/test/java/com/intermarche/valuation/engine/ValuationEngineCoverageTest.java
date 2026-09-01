@@ -46,6 +46,16 @@ public class ValuationEngineCoverageTest {
             public Collection<OfferApplication> apply(BasketEvaluation basketEvaluation) {
                 throw new IllegalStateException("boom-offer");
             }
+
+            /**
+             * Returns no configuration: this test double is not born from a configuration row.
+             *
+             * @return always null.
+             */
+            @Override
+            public com.intermarche.valuation.domain.Offer getConfiguration() {
+                return null;
+            }
         };
         List<OfferApplier> appliers = new ArrayList<>();
         appliers.add(throwing);
@@ -68,6 +78,9 @@ public class ValuationEngineCoverageTest {
         List<AdvantageApplier> appliers = new ArrayList<>();
         appliers.add(throwing);
         BasketEvaluation evaluation = mock(BasketEvaluation.class);
+        // The two-wave arbitration (spec §4.2) consults the memoized trigger before applying;
+        // a mocked evaluation must answer it so the apply() path (and its catch) is reached.
+        when(evaluation.triggerResult(any(), any())).thenReturn(new TriggerResult(true, List.of()));
         ValuationEngine engine = new ValuationEngine();
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> engine.createDiscountApplications(appliers, evaluation));

@@ -132,7 +132,9 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
             String flag = flag = spec.get("flag").asText();
             // Read the threshold (cap)
             BigDecimal threshold = threshold = spec.get("threshold").decimalValue();
-            appliers.add(new MealVoucherAdvantageApplier(offer.code, flag, threshold));
+            MealVoucherAdvantageApplier applier = new MealVoucherAdvantageApplier(offer.code, flag, threshold);
+            applier.configuration = offer;
+            appliers.add(applier);
         });
     }
 
@@ -150,6 +152,14 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
          * The unique code identifying the Offer configuration.
          */
         private final String offerCode;
+
+        /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
 
         /**
          * The flag (e.g., "FOOD") that a product must possess in its family hierarchy to be eligible.
@@ -207,7 +217,7 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
             BigDecimal totalEligibleAmount = BigDecimal.ZERO;
 
             // Iterate over all offers that have been applied to the basket
-            for (OfferApplication offerApp : evaluation.getOffers()) {
+            for (OfferApplication offerApp : evaluation.getAvailableOffers()) {
 
                 // We can only verify product eligibility if the offer implements ProductAwareOfferApplication
                 if (offerApp instanceof ProductAwareOfferApplication) {
@@ -305,6 +315,16 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
         public double getEfficiencyScore() {
             return -2.0;
         }
+
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
+        }
     }
 
     /**
@@ -316,6 +336,32 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
      * </p>
      */
     public static class MealVoucherAdvantageApplication implements AdvantageApplication {
+
+        /**
+         * The application moment restituted in the response (spec §3.6), set by the arbitration.
+         * Defaults to AT_TOTAL, the current behaviour.
+         */
+        private String applicationMoment = "AT_TOTAL";
+
+        /**
+         * Returns the application moment of the configuration that produced this advantage.
+         *
+         * @return the application moment, AT_TOTAL until the arbitration sets it.
+         */
+        @Override
+        public String getApplicationMoment() {
+            return applicationMoment;
+        }
+
+        /**
+         * Records the application moment set by the arbitration.
+         *
+         * @param applicationMoment the moment (AT_TRIGGER or AT_TOTAL).
+         */
+        @Override
+        public void setApplicationMoment(String applicationMoment) {
+            this.applicationMoment = applicationMoment;
+        }
 
         /**
          * The unique code of the offer that generated this application.

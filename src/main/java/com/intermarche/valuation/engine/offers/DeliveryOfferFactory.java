@@ -188,7 +188,9 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
             }
             // Sort tiers by maxDistance ascending to find the first matching tier
             tiers.sort(Comparator.comparingDouble(t -> t.maxDistance));
-            appliers.add(new DeliveryOfferApplier(offer.code, store, basket.deliveryAddress, vatRate, tiers));
+            DeliveryOfferApplier applier = new DeliveryOfferApplier(offer.code, store, basket.deliveryAddress, vatRate, tiers);
+            applier.configuration = offer;
+            appliers.add(applier);
         });
     }
 
@@ -222,6 +224,14 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
         private final List<DeliveryTier> tiers;
 
         /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
+
+        /**
          * Constructs a new DeliveryOfferApplier.
          *
          * @param offerCode      The offer code.
@@ -244,6 +254,16 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
          * @param evaluation The evaluation context.
          * @return A collection of offer applications.
          */
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
+        }
+
         @Override
         public Collection<OfferApplication> apply(BasketEvaluation evaluation) {
             List<OfferApplication> applications = new ArrayList<>();

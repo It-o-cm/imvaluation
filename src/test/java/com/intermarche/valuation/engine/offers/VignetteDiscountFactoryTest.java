@@ -496,6 +496,7 @@ public class VignetteDiscountFactoryTest {
                 return product.ean.equals("1111111111111");
             }
             @Override public Collection<OfferApplication> apply(BasketEvaluation evaluation) { return null; }
+            @Override public com.intermarche.valuation.domain.Offer getConfiguration() { return null; }
         }
 
         // Act & Assert
@@ -538,6 +539,7 @@ public class VignetteDiscountFactoryTest {
                 return product.ean.equals("2222222222222");
             }
             @Override public Collection<OfferApplication> apply(BasketEvaluation evaluation) { return null; }
+            @Override public com.intermarche.valuation.domain.Offer getConfiguration() { return null; }
         }
 
         // Act & Assert
@@ -576,6 +578,7 @@ public class VignetteDiscountFactoryTest {
         // Mock ONLY implements OfferApplier (Not ProductAware)
         class MockApplier extends OfferApplier {
             @Override public Collection<OfferApplication> apply(BasketEvaluation evaluation) { return null; }
+            @Override public com.intermarche.valuation.domain.Offer getConfiguration() { return null; }
         }
 
         // Act & Assert

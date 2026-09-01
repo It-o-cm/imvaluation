@@ -396,6 +396,7 @@ public class FreeDeliveryThresholdDiscountFactoryTest {
         OfferApplier otherApplier = new OfferApplier() {
             @Override public Collection<OfferApplication> apply(BasketEvaluation e) { return Collections.emptyList(); }
             @Override public double computeEfficiencyScore(Basket b) { return 0.0; }
+            @Override public com.intermarche.valuation.domain.Offer getConfiguration() { return null; }
         };
 
         // Act

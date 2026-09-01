@@ -224,7 +224,9 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
                 }
             }
             if (allComponentsAvailable) {
-                appliers.add(new MixedBundleOfferApplier(offer.code, bundlePrice, discountType, discountValue, vatRate, components, basketItems, store));
+                MixedBundleOfferApplier applier = new MixedBundleOfferApplier(offer.code, bundlePrice, discountType, discountValue, vatRate, components, basketItems, store);
+                applier.configuration = offer;
+                appliers.add(applier);
             }
         });
     }
@@ -267,6 +269,14 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
         private final Store store;
 
         /**
+         * The configuration (the {@link Offer} row) this applier was built from, set by the
+         * factory right after construction. Never null in production; left null when an
+         * applier is built directly (as in unit tests), which the arbitration reads as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS} with default parameters.
+         */
+        private Offer configuration;
+
+        /**
          * Constructs a new Mixed Bundle Offer Applier.
          *
          * @param offerCode     The code identifying the offer.
@@ -287,6 +297,16 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
             this.components = components;
             this.store = store;
             this.basketItems = basketItems;
+        }
+
+        /**
+         * Returns the configuration this applier was built from.
+         *
+         * @return the source offer, or null when the applier was built without one.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return configuration;
         }
 
         /**

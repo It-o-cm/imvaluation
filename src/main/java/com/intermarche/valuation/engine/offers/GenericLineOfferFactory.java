@@ -2,6 +2,7 @@ package com.intermarche.valuation.engine.offers;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.engine.AmountEvaluation;
 import com.intermarche.valuation.engine.Basket;
@@ -98,6 +99,18 @@ public class GenericLineOfferFactory implements OfferApplierFactory {
          */
         public GenericLineOfferApplier(Basket.Item item) {
             this.item = item;
+        }
+
+        /**
+         * Returns no configuration: a generic line valuation is not born from a
+         * configuration row, so it carries no trigger and the arbitration treats it as
+         * {@link com.intermarche.valuation.engine.Trigger#ALWAYS}.
+         *
+         * @return always null.
+         */
+        @Override
+        public Offer getConfiguration() {
+            return null;
         }
 
         /**
