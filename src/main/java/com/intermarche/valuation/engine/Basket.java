@@ -473,6 +473,10 @@ public class Basket {
          * @param priceUsage The price usage type (e.g., DEFAULT).
          * @return The {@link Price} entity (either constructed from item data or retrieved from the database).
          * @throws IllegalStateException if the product, store, or price cannot be resolved, or if the date string is invalid.
+         * @implNote When no price row exists for a non-DEFAULT usage (e.g. BASE_FOR_DISCOUNT), the
+         *           lookup falls back to the DEFAULT usage: a product without a dedicated reference
+         *           price uses its current price as the reference. Only a missing DEFAULT price is
+         *           a configuration error.
          */
         public Price getPrice(Store store, PriceUsage priceUsage) throws IllegalStateException {
             // 1. Check if pricing info is defined directly on the item (Manual Pricing Override)
@@ -499,6 +503,12 @@ public class Basket {
             Product product = this.getProduct();
             // 3. Find the active price at the determined date
             Price price = Price.findActivePriceAtDate(product.id, store.id, dateToUse, priceUsage);
+            if (price == null && priceUsage != PriceUsage.DEFAULT) {
+                // No dedicated row for this usage: the reference price falls back to the
+                // current price, so referentials only maintain BASE_FOR_DISCOUNT rows where
+                // a distinct reference actually exists.
+                price = Price.findActivePriceAtDate(product.id, store.id, dateToUse, PriceUsage.DEFAULT);
+            }
             if (price == null) {
                 throw new IllegalStateException(String.format(
                         "Configuration Error: No active price found for Product '%s' (ID: %d) in Store '%s' (Checked at date: %s)",

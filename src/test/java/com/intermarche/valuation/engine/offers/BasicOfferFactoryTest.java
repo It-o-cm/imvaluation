@@ -160,6 +160,34 @@ public class BasicOfferFactoryTest {
     }
 
     /**
+     * Tests that a product carrying only a DEFAULT price row is still fully priceable: the
+     * BASE_FOR_DISCOUNT lookup falls back to the DEFAULT usage, so a referential that does not
+     * maintain a dedicated reference price for every product remains evaluable.
+     */
+    @Test
+    void testBasicOfferApplier_Apply_FallsBackToDefault_WhenNoBaseForDiscountRow() {
+        setUpDatabase();
+        // Arrange: a third product with a DEFAULT price only (no BASE_FOR_DISCOUNT row)
+        Product product3 = DomainUtils.createAndPersistProduct("3333333333333", "Product 3", ProductType.UNIT);
+        DomainUtils.createAndPersistPrice(product3, store, 0, PriceUsage.DEFAULT,
+                BigDecimal.valueOf(5.0), BigDecimal.valueOf(6.0), BigDecimal.valueOf(0.2));
+        Panache.getEntityManager().flush();
+        Basket basket = new Basket();
+        basket.storeCode = "STORE_01";
+        basket.items = List.of(createItem("3333333333333", 2.0));
+        BasketEvaluation evaluation = new BasketEvaluation(basket);
+        evaluation.feedFrom(basket);
+        // Act: building and applying resolves BOTH usages; the reference falls back to DEFAULT
+        Collection<OfferApplier> appliers = factory.buildAppliers(evaluation);
+        Collection<OfferApplication> applications = appliers.iterator().next().apply(evaluation);
+        // Assert: valued on the DEFAULT price, no configuration error raised
+        BasicOfferFactory.BasicApplication app = (BasicOfferFactory.BasicApplication) applications.iterator().next();
+        AmountEvaluation amount = app.getAmount();
+        assertEquals(new BigDecimal("10.00"), amount.amountExcludingTax);
+        assertEquals(new BigDecimal("12.00"), amount.amountIncludingTax);
+    }
+
+    /**
      * Tests {@link BasicOfferFactory#buildAppliers(BasketEvaluation)} ensuring that items
      * with a null EAN are safely skipped.
      * <p>
