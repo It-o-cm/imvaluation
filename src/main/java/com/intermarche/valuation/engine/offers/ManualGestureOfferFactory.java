@@ -157,7 +157,7 @@ public class ManualGestureOfferFactory implements OfferApplierFactory, EngineTra
         @Override
         public AmountEvaluation getAmount() {
             Price base = item.getPrice(store, PriceUsage.DEFAULT);
-            BigDecimal rate = base.vatRate;
+            BigDecimal rate = base.vatRate();
             BigDecimal unitTtc;
 
             if (gestureSource.manualForcedPrice != null) {

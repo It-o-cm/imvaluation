@@ -1,4 +1,5 @@
 package com.intermarche.valuation.domain;
+import com.intermarche.valuation.domain.util.DomainUtils;
 
 import com.intermarche.valuation.domain.util.DateTimeProvider;
 import io.quarkus.test.TestTransaction;
@@ -87,7 +88,10 @@ class PriceTest {
         price.priceUsage = usage;
         price.priceExcludingTax = new BigDecimal("10.00");
         price.priceIncludingTax = new BigDecimal("12.00");
-        price.vatRate = new BigDecimal("0.2000");
+        // The regime is left unset: this helper feeds both transient checksum tests (no
+        // transaction to persist a regime) and persisted finder tests (the vat_rate_id FK is
+        // nullable), and no test here asserts the rate. vatNumber() therefore answers null.
+        price.vat = null;
         price.priority = priority;
         return price;
     }

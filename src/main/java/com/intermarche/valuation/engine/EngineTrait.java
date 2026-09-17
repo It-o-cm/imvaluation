@@ -1,5 +1,6 @@
 package com.intermarche.valuation.engine;
 
+import com.intermarche.valuation.domain.util.DateTimeProvider;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -129,8 +130,9 @@ public interface EngineTrait {
      * @return a collection of matching offers.
      */
     default Collection<Offer> getOffers(BasketEvaluation basketEvaluation, String type) {
-        Set<Offer> offers = new HashSet<>(Offer.findByStoreAndType(basketEvaluation.getStore(), type));
-        offers.addAll(Offer.findByStoreGroupsAndType(basketEvaluation.getStoreGroups(), type));
+        java.time.LocalDateTime at = DateTimeProvider.now();
+        Set<Offer> offers = new HashSet<>(Offer.findInForceByStoreAndType(basketEvaluation.getStore(), type, at));
+        offers.addAll(Offer.findInForceByStoreGroupsAndType(basketEvaluation.getStoreGroups(), type, at));
         return offers;
     }
 
@@ -146,8 +148,9 @@ public interface EngineTrait {
      * @return a collection of matching offers.
      */
     default Collection<Offer> getOffers(BasketEvaluation basketEvaluation, Collection<String> eans, String type) {
-        Set<Offer> offers = new HashSet<>(Offer.findByEansAndStoreAndType(eans, basketEvaluation.getStore(), type));
-        offers.addAll(Offer.findByEansAndStoreGroupsAndType(eans, basketEvaluation.getStoreGroups(), type));
+        java.time.LocalDateTime at = DateTimeProvider.now();
+        Set<Offer> offers = new HashSet<>(Offer.findInForceByEansAndStoreAndType(eans, basketEvaluation.getStore(), type, at));
+        offers.addAll(Offer.findInForceByEansAndStoreGroupsAndType(eans, basketEvaluation.getStoreGroups(), type, at));
         return offers;
     }
 
@@ -164,6 +167,29 @@ public interface EngineTrait {
      * @param process            the consumer logic to execute on the parsed JSON node if validation passes.
      * @throws IllegalArgumentException if the JSON is invalid, validation fails, or a parsing error occurs.
      */
+    /**
+     * Offer-aware variant of {@link #processSpecification(String, String, Consumer)}: validates
+     * the offer's specification and, on rejection, carries the offer code in the message —
+     * {@code Error validating offer: [CODE] ...} — so a failing configuration is identifiable
+     * among the store's offers. The canonical prefixes are preserved verbatim.
+     *
+     * @param schemaSpecification The factory's JSON schema.
+     * @param offer               The configuration whose specification is validated.
+     * @param process             The consumer invoked with the validated specification node.
+     */
+    default void processSpecification(String schemaSpecification, Offer offer, Consumer<JsonNode> process) {
+        try {
+            processSpecification(schemaSpecification, offer.specification, process);
+        } catch (IllegalArgumentException e) {
+            String prefix = "Error validating offer: ";
+            String message = e.getMessage();
+            if (message != null && message.startsWith(prefix)) {
+                throw new IllegalArgumentException(prefix + "[" + offer.code + "] " + message.substring(prefix.length()), e);
+            }
+            throw new IllegalArgumentException("[" + offer.code + "] " + message, e);
+        }
+    }
+
     default void processSpecification(String schemaSpecification, String offerSpecification, Consumer<JsonNode> process) {
         try {
             ObjectMapper mapper = new ObjectMapper();

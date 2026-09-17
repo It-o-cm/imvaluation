@@ -190,7 +190,7 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
         List<AdvantageApplier> appliers = new ArrayList<>();
         Basket basket = getBasket(basketEvaluation, "Cannot create Free Delivery Threshold appliers without a valid basket.");
         Store store = basketEvaluation.getStore();
-        List<Offer> offers = Offer.findByStoreAndType(store, "FREE_DELIVERY_THRESHOLD");
+        List<Offer> offers = Offer.findInForceByStoreAndType(store, "FREE_DELIVERY_THRESHOLD", com.intermarche.valuation.domain.util.DateTimeProvider.now());
         for (Offer offer : offers) {
             processOffer(offer, appliers);
         }
@@ -204,7 +204,7 @@ public class FreeDeliveryThresholdDiscountFactory implements AdvantageApplierFac
      * @param appliers The list to which the applier will be added.
      */
     private void processOffer(Offer offer, List<AdvantageApplier> appliers) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             JsonNode tiersNode = spec.get("tiers");
             List<DiscountTier> tiers = new ArrayList<>();
             // Parse the list of tiers from the specification

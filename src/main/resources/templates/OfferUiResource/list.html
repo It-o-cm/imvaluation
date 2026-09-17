@@ -73,6 +73,7 @@
             <a class="col-sort" href="{view.sortUrl('type')}">Type <span class="sort-arrow">{view.sortIndicator('type')}</span></a>
         </th>
         <th>Targets</th>
+        <th>Status</th>
         <th class="{#if view.isSortedOn('eans')}is-sorted{/if}">
             <a class="col-sort" href="{view.sortUrl('eans')}">EANs <span class="sort-arrow">{view.sortIndicator('eans')}</span></a>
         </th>
@@ -90,6 +91,11 @@
         <td class="col-targets">
             {#for store in offer.stores}<span class="chip chip-store">{store.code}</span>{/for}
             {#for group in offer.storeGroups}<span class="chip chip-group">{group.code}</span>{/for}
+        </td>
+        <td>
+            {#if !offer.active}<span class="badge badge-off">Inactive</span>
+            {#else if !offer.isInForceAt(null)}<span class="badge badge-error">Out of window</span>
+            {#else}<span class="badge badge-ok">Active</span>{/if}
         </td>
         <td class="col-muted">
             {#if offer.eans.isEmpty()}&mdash;{#else}{offer.eans.size} product{#if offer.eans.size != 1}s{/if}{/if}

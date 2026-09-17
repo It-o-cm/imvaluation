@@ -180,7 +180,7 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
      * @param store       The store context.
      */
     private void processOffer(Offer offer, Map<String, Basket.Item> basketItems, List<OfferApplier> appliers, Store store) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             // Parse List of Target EANs
             Map<String, Basket.Item> targetItems = new HashMap<>();
             JsonNode eansNode = spec.get("targetEans");

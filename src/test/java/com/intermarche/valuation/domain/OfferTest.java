@@ -371,4 +371,126 @@ class OfferTest {
         assertEquals(1, results.size());
         assertEquals("COMPLEX_OFFER", results.get(0).code);
     }
+
+    // --------------------------------------------------
+    // Activation (isInForceAt) — one case per guard leg
+    // --------------------------------------------------
+
+    /**
+     * Builds a transient offer with the given activation state, for the pure
+     * {@link Offer#isInForceAt(java.time.LocalDateTime)} leg tests.
+     *
+     * @param active    The active flag.
+     * @param validFrom The window start, or null.
+     * @param validTo   The window end, or null.
+     * @return The transient offer.
+     */
+    private Offer activationOffer(boolean active, java.time.LocalDateTime validFrom, java.time.LocalDateTime validTo) {
+        Offer offer = new Offer();
+        offer.active = active;
+        offer.validFrom = validFrom;
+        offer.validTo = validTo;
+        return offer;
+    }
+
+    /**
+     * Tests that an inactive offer is never in force, whatever its window.
+     */
+    @Test
+    void isInForceAt_shouldRejectInactiveOffer() {
+        java.time.LocalDateTime at = java.time.LocalDateTime.of(2026, 6, 1, 12, 0);
+        assertFalse(activationOffer(false, null, null).isInForceAt(at));
+    }
+
+    /**
+     * Tests that an active offer with no window at all is permanently in force
+     * (null bounds are open — backward compatibility with undated configurations).
+     */
+    @Test
+    void isInForceAt_shouldAcceptOfferWithoutWindow() {
+        java.time.LocalDateTime at = java.time.LocalDateTime.of(2026, 6, 1, 12, 0);
+        assertTrue(activationOffer(true, null, null).isInForceAt(at));
+    }
+
+    /**
+     * Tests the validFrom bound: rejected strictly before it, accepted exactly at it
+     * (inclusive bound).
+     */
+    @Test
+    void isInForceAt_shouldTreatValidFromAsInclusive() {
+        java.time.LocalDateTime from = java.time.LocalDateTime.of(2026, 6, 1, 0, 0);
+        Offer offer = activationOffer(true, from, null);
+        assertFalse(offer.isInForceAt(from.minusSeconds(1)));
+        assertTrue(offer.isInForceAt(from));
+    }
+
+    /**
+     * Tests the validTo bound: accepted strictly before it, rejected exactly at it
+     * (exclusive bound).
+     */
+    @Test
+    void isInForceAt_shouldTreatValidToAsExclusive() {
+        java.time.LocalDateTime to = java.time.LocalDateTime.of(2026, 7, 1, 0, 0);
+        Offer offer = activationOffer(true, null, to);
+        assertTrue(offer.isInForceAt(to.minusSeconds(1)));
+        assertFalse(offer.isInForceAt(to));
+    }
+
+    /**
+     * Tests that a null instant falls back to {@code DateTimeProvider}: the same offer
+     * is in force or not depending on the fixed engine time.
+     */
+    @Test
+    void isInForceAt_shouldUseDateTimeProviderWhenInstantIsNull() {
+        java.time.LocalDateTime from = java.time.LocalDateTime.of(2026, 6, 1, 0, 0);
+        Offer offer = activationOffer(true, from, null);
+        try {
+            com.intermarche.valuation.domain.util.DateTimeProvider.setFixedDateTime(from.minusDays(1));
+            assertFalse(offer.isInForceAt(null));
+            com.intermarche.valuation.domain.util.DateTimeProvider.setFixedDateTime(from.plusDays(1));
+            assertTrue(offer.isInForceAt(null));
+        } finally {
+            com.intermarche.valuation.domain.util.DateTimeProvider.clear();
+        }
+    }
+
+    /**
+     * Tests that the in-force finder excludes an inactive offer and an expired offer,
+     * and includes an undated active one — the engine only sees offers in force.
+     */
+    @Test
+    @TestTransaction
+    void findInForceByStoreAndType_shouldFilterOnActivationState() {
+        Store store = new Store();
+        store.code = "S_ACT";
+        store.name = "Activation Store";
+        store.address = new Adresse();
+        store.persist();
+        java.time.LocalDateTime at = java.time.LocalDateTime.of(2026, 6, 1, 12, 0);
+        Offer live = new Offer();
+        live.code = "ACT_LIVE";
+        live.type = "SALE";
+        live.specification = "{}";
+        live.stores.add(store);
+        live.persist();
+        Offer disabled = new Offer();
+        disabled.code = "ACT_OFF";
+        disabled.type = "SALE";
+        disabled.specification = "{}";
+        disabled.active = false;
+        disabled.stores.add(store);
+        disabled.persist();
+        Offer expired = new Offer();
+        expired.code = "ACT_EXPIRED";
+        expired.type = "SALE";
+        expired.specification = "{}";
+        expired.validTo = at.minusDays(1);
+        expired.stores.add(store);
+        expired.persist();
+        em.flush();
+        List<Offer> inForce = Offer.findInForceByStoreAndType(store, "SALE", at);
+        assertEquals(1, inForce.size());
+        assertEquals("ACT_LIVE", inForce.get(0).code);
+        assertEquals(3, Offer.findByStoreAndType(store, "SALE").size());
+    }
 }

@@ -420,7 +420,7 @@ class OfferUiResourceTest {
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class);
              MockedConstruction<Offer> construction = mockConstruction(Offer.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save(null, "PROMO", "{}", null, null));
+                    () -> resource.save(null, "PROMO", "{}", null, null, null, null, null));
         }
     }
 
@@ -434,7 +434,7 @@ class OfferUiResourceTest {
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class);
              MockedConstruction<Offer> construction = mockConstruction(Offer.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("   ", "PROMO", "{}", "S1", "G1"));
+                    () -> resource.save("   ", "PROMO", "{}", "S1", "G1", null, null, null));
         }
     }
 
@@ -447,7 +447,7 @@ class OfferUiResourceTest {
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class);
              MockedConstruction<Offer> construction = mockConstruction(Offer.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("C", null, "{}", "S1", "G1"));
+                    () -> resource.save("C", null, "{}", "S1", "G1", null, null, null));
         }
     }
 
@@ -460,7 +460,7 @@ class OfferUiResourceTest {
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class);
              MockedConstruction<Offer> construction = mockConstruction(Offer.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("C", "  ", "{}", "S1", "G1"));
+                    () -> resource.save("C", "  ", "{}", "S1", "G1", null, null, null));
         }
     }
 
@@ -474,7 +474,7 @@ class OfferUiResourceTest {
              MockedConstruction<Offer> construction = mockConstruction(Offer.class)) {
             mocked.when(() -> PanacheEntityBase.count(eq("code"), any(Object[].class))).thenReturn(1L);
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("C", "PROMO", "{}", "S1", "G1"));
+                    () -> resource.save("C", "PROMO", "{}", "S1", "G1", null, null, null));
         }
     }
 
@@ -488,7 +488,7 @@ class OfferUiResourceTest {
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class);
              MockedConstruction<Offer> construction = mockConstruction(Offer.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("C", "PROMO", "{}", "   ", null));
+                    () -> resource.save("C", "PROMO", "{}", "   ", null, null, null, null));
         }
     }
 
@@ -504,7 +504,7 @@ class OfferUiResourceTest {
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class);
              MockedConstruction<Offer> construction = mockConstruction(Offer.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("C", "PROMO", null, "S1", null));
+                    () -> resource.save("C", "PROMO", null, "S1", null, null, null, null));
         }
     }
 
@@ -520,7 +520,7 @@ class OfferUiResourceTest {
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class);
              MockedConstruction<Offer> construction = mockConstruction(Offer.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("C", "PROMO", "   ", "S1", null));
+                    () -> resource.save("C", "PROMO", "   ", "S1", null, null, null, null));
         }
     }
 
@@ -536,7 +536,7 @@ class OfferUiResourceTest {
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class);
              MockedConstruction<Offer> construction = mockConstruction(Offer.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("C", "PROMO", "{}", "S1", null));
+                    () -> resource.save("C", "PROMO", "{}", "S1", null, null, null, null));
         }
     }
 
@@ -554,7 +554,7 @@ class OfferUiResourceTest {
             mocked.when(() -> PanacheEntityBase.list(eq("code in ?1"), eq(List.of("S1", "S2"))))
                     .thenReturn(List.of(store("S1")));
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("C", "PROMO", "{}", "S1,S2", null));
+                    () -> resource.save("C", "PROMO", "{}", "S1,S2", null, null, null, null));
         }
     }
 
@@ -573,7 +573,7 @@ class OfferUiResourceTest {
             mocked.when(() -> PanacheEntityBase.list(eq("code in ?1"), eq(List.of("G1"))))
                     .thenReturn(List.of());
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("C", "PROMO", "{}", null, "G1"));
+                    () -> resource.save("C", "PROMO", "{}", null, "G1", null, null, null));
         }
     }
 
@@ -594,7 +594,7 @@ class OfferUiResourceTest {
                     .thenReturn(List.of(store("S1"), store("S2")));
             mocked.when(() -> PanacheEntityBase.list(eq("code in ?1"), eq(List.of("G1"))))
                     .thenReturn(List.of(group("G1")));
-            Response response = resource.save("PROMO_CODE", "PROMO", "{}", " S1 , , S1 , S2 ", "G1");
+            Response response = resource.save("PROMO_CODE", "PROMO", "{}", " S1 , , S1 , S2 ", "G1", null, null, null);
             assertEquals(303, response.getStatus());
             assertEquals("/ui/offers", response.getLocation().getPath());
             assertNull(response.getLocation().getQuery());
@@ -626,7 +626,7 @@ class OfferUiResourceTest {
             mocked.when(() -> PanacheEntityBase.count(eq("code"), any(Object[].class))).thenReturn(0L);
             mocked.when(() -> PanacheEntityBase.list(eq("code in ?1"), eq(List.of("S1"))))
                     .thenReturn(List.of(store("S1")));
-            Response response = resource.save("C", "PROMO", "{}", "S1", null);
+            Response response = resource.save("C", "PROMO", "{}", "S1", null, null, null, null);
             assertEquals(303, response.getStatus());
             Offer created = construction.constructed().get(0);
             verify(created).persist();
@@ -646,7 +646,7 @@ class OfferUiResourceTest {
         OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class)) {
             mocked.when(() -> PanacheEntityBase.findById(9L)).thenReturn(null);
-            Response response = resource.update(9L, "PROMO", "{}", "S1", null);
+            Response response = resource.update(9L, "PROMO", "{}", "S1", null, null, null, null);
             assertEquals(404, response.getStatus());
             assertEquals("Offer 9 not found", response.getEntity());
         }
@@ -667,7 +667,7 @@ class OfferUiResourceTest {
             mocked.when(() -> PanacheEntityBase.findById(5L)).thenReturn(existing);
             mocked.when(() -> PanacheEntityBase.list(eq("code in ?1"), eq(List.of("S1"))))
                     .thenReturn(List.of(store("S1")));
-            Response response = resource.update(5L, "PROMO", "{}", "S1", null);
+            Response response = resource.update(5L, "PROMO", "{}", "S1", null, null, null, null);
             assertEquals(303, response.getStatus());
             assertEquals("/ui/offers", response.getLocation().getPath());
             assertEquals("PROMO", existing.type);
@@ -686,7 +686,7 @@ class OfferUiResourceTest {
         try (MockedStatic<PanacheEntityBase> mocked = mockStatic(PanacheEntityBase.class)) {
             mocked.when(() -> PanacheEntityBase.findById(5L)).thenReturn(existing);
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.update(5L, null, "{}", "S1", "G1"));
+                    () -> resource.update(5L, null, "{}", "S1", "G1", null, null, null));
         }
     }
 

@@ -6,6 +6,7 @@ import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.domain.VatRate;
 import com.intermarche.valuation.domain.util.DateTimeProvider;
 
 import java.math.BigDecimal;
@@ -204,6 +205,12 @@ public class Basket {
                 "type": "string",
                 "description": "Date used to look the price up, ISO-8601. Defaults to now.",
                 "x-label": "Price date"
+              },
+              "bestBeforeDate": {
+                "type": "string",
+                "format": "date",
+                "description": "Best-before date (DLC) of this line, ISO-8601. Optional; drives the anti-waste discount. Per line: two lots of the same EAN are two lines.",
+                "x-label": "Best-before date"
               }
             }
           }
@@ -352,6 +359,17 @@ public class Basket {
         public String priceDate;
 
         /**
+         * Best-before date (DLC) of this line, ISO-8601 ({@code yyyy-MM-dd}); optional.
+         * <p>
+         * Additive, backward-compatible field (spec §7): a line without it behaves exactly as
+         * before. It drives the {@code ANTI_WASTE_DISCOUNT} advantage, which reads the remaining
+         * days to this date. It is per line — two lots of the same EAN with distinct expiry are
+         * two lines, which is the caller's responsibility. The engine never derives or guesses
+         * it.
+         */
+        public String bestBeforeDate;
+
+        /**
          * The quantity (can be an integer or a decimal for weighed items).
          */
         public Double quantity;
@@ -484,7 +502,11 @@ public class Basket {
                 Price manualPrice = new Price();
                 manualPrice.priceExcludingTax = this.pricePerUnitExclTax;
                 manualPrice.priceIncludingTax = this.pricePerUnitInclTax;
-                manualPrice.vatRate = this.vatRate;
+                // The request contract is unchanged: a manual line still carries a bare rate. The
+                // transient carrier wraps it in an UNPERSISTED regime (number null) so that
+                // Price#vatRate() reads the rate through exactly as it does for a catalog price.
+                // This VatRate is never persisted and never joins the referential.
+                manualPrice.vat = new VatRate(null, this.vatRate, null);
                 return manualPrice;
             }
             // 2. Determine the date to use for the lookup

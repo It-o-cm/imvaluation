@@ -4,6 +4,7 @@ import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.domain.VatRate;
 import io.quarkus.hibernate.orm.panache.Panache;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.annotation.security.RolesAllowed;
@@ -411,7 +412,7 @@ public class PriceCsvResource extends ImporterCsvResource {
     private void feedPrice(LineData data, Price price) {
         price.priceExcludingTax = safeParseBigDecimal(data, COL_PRICE_EXCL_TAX);
         price.priceIncludingTax = safeParseBigDecimal(data, COL_PRICE_INCL_TAX);
-        price.vatRate = safeParseBigDecimal(data, COL_VAT_RATE);
+        price.vat = resolveRegime(data);
         price.priceUsage = safeParsePriceUsage(data, COL_PRICE_USAGE);
         if (price.priceUsage == null) {
             throw new IllegalArgumentException("PriceUsage is mandatory in column " + COL_PRICE_USAGE);
@@ -419,6 +420,60 @@ public class PriceCsvResource extends ImporterCsvResource {
         price.priority = safeParseInt(data, COL_PRIORITY);
         price.startDateTime = safeParseDateTime(data, COL_START_DATE);
         price.endDateTime = safeParseDateTime(data, COL_END_DATE);
+        checkVatCoherence(price);
+    }
+
+    /**
+     * Rejects a price whose triplet is fiscally incoherent: the excluding-tax amount
+     * grossed up by the VAT rate must land within one cent of the including-tax amount.
+     * <p>
+     * The cent of tolerance absorbs the legitimate commercial rounding (the displayed
+     * including-tax price is the source of truth, the excluding-tax amount derives from
+     * it rounded to the cent — worst observed legitimate deviation: 0.006), while a
+     * wrong rate or swapped columns deviates by whole cents and is refused. The POS
+     * derives one amount from the other through the rate (price-embedded stickers,
+     * invoices), so an incoherent stored triplet would price the same product two
+     * different ways.
+     *
+     * @param price The populated price to check.
+     * @throws IllegalArgumentException when the triplet is incoherent beyond one cent.
+     */
+    private void checkVatCoherence(Price price) {
+        if (price.priceExcludingTax == null || price.priceIncludingTax == null || price.vatRate() == null) {
+            return;
+        }
+        java.math.BigDecimal grossed = price.priceExcludingTax
+                .multiply(java.math.BigDecimal.ONE.add(price.vatRate()));
+        java.math.BigDecimal deviation = grossed.subtract(price.priceIncludingTax).abs();
+        if (deviation.compareTo(new java.math.BigDecimal("0.01")) > 0) {
+            throw new IllegalArgumentException(String.format(
+                    "Incoherent VAT triplet: %s x (1 + %s) = %s but including-tax price is %s (deviation %s > 0.01)",
+                    price.priceExcludingTax, price.vatRate(),
+                    grossed.setScale(4, java.math.RoundingMode.HALF_UP),
+                    price.priceIncludingTax, deviation.setScale(4, java.math.RoundingMode.HALF_UP)));
+        }
+    }
+
+    /**
+     * Resolves the VAT regime a line names by its RATE against the referential.
+     *
+     * <p>The feed format does not change: it still states a rate. A pricing engine, however,
+     * cannot ventilate a price under no regime, so an unknown rate is rejected here — stricter
+     * than the entity, which tolerates a null regime. The rate is attached through
+     * {@link VatRate#findByRate(java.math.BigDecimal)} (first row wins on a duplicate rate).
+     *
+     * @param data the parsed CSV line.
+     * @return the regime named by the line's rate.
+     * @throws IllegalArgumentException when the rate names no regime in the referential.
+     */
+    private VatRate resolveRegime(LineData data) {
+        java.math.BigDecimal rate = safeParseBigDecimal(data, COL_VAT_RATE);
+        VatRate regime = VatRate.findByRate(rate);
+        if (regime == null) {
+            throw new IllegalArgumentException(
+                    "Unknown VAT rate " + rate + ": no regime in the referential");
+        }
+        return regime;
     }
 
     /**
@@ -432,13 +487,18 @@ public class PriceCsvResource extends ImporterCsvResource {
      * @return The integer hash of incoming data.
      */
     private int computeIncomingChecksum(LineData data, Product product, Store store) {
+        // The feed states a rate; the fingerprint hashes the regime NUMBER, exactly as
+        // Price#getChecksum() now does — so a rate CORRECTED in the referential never rewrites
+        // the price rows that name that number. An unknown rate resolves to a null number here,
+        // which makes the checksum differ and routes the line to feedPrice, where it is rejected.
+        VatRate regime = VatRate.findByRate(safeParseBigDecimal(data, COL_VAT_RATE));
         return Objects.hash(
                 product.ean,
                 store.code,
                 safeParsePriceUsage(data, COL_PRICE_USAGE),
                 safeParseBigDecimal(data, COL_PRICE_EXCL_TAX),
                 safeParseBigDecimal(data, COL_PRICE_INCL_TAX),
-                safeParseBigDecimal(data, COL_VAT_RATE),
+                regime == null ? null : regime.number,
                 safeParseInt(data, COL_PRIORITY),
                 safeParseDateTime(data, COL_START_DATE),
                 safeParseDateTime(data, COL_END_DATE)

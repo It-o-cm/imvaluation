@@ -1,4 +1,5 @@
 package com.intermarche.valuation.engine;
+import com.intermarche.valuation.domain.VatRate;
 
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Product;
@@ -34,7 +35,7 @@ class AmountEvaluationCoverageTest {
         Price p = new Price();
         p.priceExcludingTax = new BigDecimal(ht);
         p.priceIncludingTax = new BigDecimal(ttc);
-        p.vatRate = new BigDecimal(vat);
+        p.vat = new VatRate(null, new BigDecimal(vat), null);
         return p;
     }
 

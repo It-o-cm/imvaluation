@@ -1,4 +1,5 @@
 package com.intermarche.valuation.imports;
+import com.intermarche.valuation.domain.util.DomainUtils;
 
 import com.intermarche.valuation.domain.StoreGroup;
 import com.intermarche.valuation.domain.ProductFamily;
@@ -109,6 +110,85 @@ public class PriceCsvResourceTest {
         Product.deleteAll();
         StoreGroup.deleteAll();
         Store.deleteAll();
+        // The price feed now attaches each line to the regime carrying its rate, so the
+        // referential must hold the standard regimes before any price CSV is imported.
+        DomainUtils.seedStandardVatRegimes();
+    }
+
+    /**
+     * Tests that a price whose rate names no regime in the referential is rejected, no row
+     * created, the error naming the unknown rate.
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = "ADMIN")
+    void testImportPrice_UnknownVatRate_Rejected() {
+        // Setup: Create Product and Store (the referential holds only the five seeded regimes).
+        withTransaction(() -> {
+            Product p = new Product();
+            p.ean = "3270190123456";
+            p.name = "Test Product";
+            p.productType = com.intermarche.valuation.domain.ProductType.UNIT;
+            p.persist();
+            Store s = new Store();
+            s.code = "S001";
+            s.name = "Store 1";
+            s.address = createTestAddress();
+            s.persist();
+            return true;
+        });
+
+        // 0.1500 names no regime: a pricing engine cannot ventilate a price with no regime.
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
+                "3270190123456|S001|10.00|11.50|0.1500|DEFAULT|0|2023-01-01T00:00:00|";
+
+        authenticated()
+                .body(csvContent)
+                .contentType(ContentType.TEXT)
+                .when()
+                .post("/prices/import")
+                .then()
+                .statusCode(200)
+                .body(containsString("\"createdCount\":0"))
+                .body(containsString("Unknown VAT rate 0.1500: no regime in the referential"));
+
+        assertEquals(0, Price.count());
+    }
+
+    /**
+     * Tests that a line with a valid rate but a missing tax-excluded amount is skipped: the VAT
+     * coherence check returns early on the incomplete triplet and the mandatory-field constraint
+     * then rejects the row.
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = "ADMIN")
+    void testImportPrice_MissingExclTax_Skipped() {
+        withTransaction(() -> {
+            Product p = new Product();
+            p.ean = "3270190123456";
+            p.name = "Test Product";
+            p.productType = com.intermarche.valuation.domain.ProductType.UNIT;
+            p.persist();
+            Store s = new Store();
+            s.code = "S001";
+            s.name = "Store 1";
+            s.address = createTestAddress();
+            s.persist();
+            return true;
+        });
+
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
+                "3270190123456|S001||12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
+
+        authenticated()
+                .body(csvContent)
+                .contentType(ContentType.TEXT)
+                .when()
+                .post("/prices/import")
+                .then()
+                .statusCode(200)
+                .body(containsString("\"createdCount\":0"));
+
+        assertEquals(0, Price.count());
     }
 
     /**
@@ -188,7 +268,7 @@ public class PriceCsvResourceTest {
             price.startDateTime = LocalDateTime.of(2023, 1, 1, 0, 0);
             price.priceExcludingTax = new BigDecimal("5.00");
             price.priceIncludingTax = new BigDecimal("6.00");
-            price.vatRate = new BigDecimal("0.2000");
+            price.vat = DomainUtils.resolveOrCreateVatRate(new BigDecimal("0.2000"));
             price.persist();
             return price.id;
         });
@@ -243,7 +323,7 @@ public class PriceCsvResourceTest {
             price.startDateTime = LocalDateTime.of(2023, 1, 1, 0, 0);
             price.priceExcludingTax = new BigDecimal("10.00");
             price.priceIncludingTax = new BigDecimal("12.00");
-            price.vatRate = new BigDecimal("0.2000");
+            price.vat = DomainUtils.resolveOrCreateVatRate(new BigDecimal("0.2000"));
             price.persist();
             return price.id;
         });
@@ -292,6 +372,45 @@ public class PriceCsvResourceTest {
                 .body(containsString("\"createdCount\":0"))
                 .body(containsString("\"errors\""))
                 .body(containsString("Product with EAN NON_EXISTENT_EAN not found"));
+    }
+
+    /**
+     * Tests the VAT coherence guard: a triplet whose excluding-tax amount grossed up by
+     * the rate deviates from the including-tax amount by more than one cent is rejected
+     * with an explicit line error, while a legitimate commercial rounding (deviation
+     * 0.006, the worst observed in real feeds) passes.
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = "ADMIN")
+    void testImportPrices_RejectsIncoherentVatTriplet() {
+        withTransaction(() -> {
+            Product p = new Product();
+            p.ean = "3270190999999";
+            p.name = "Coherence Product";
+            p.productType = com.intermarche.valuation.domain.ProductType.UNIT;
+            p.persist();
+            Store s = new Store();
+            s.code = "S00V";
+            s.name = "Coherence Store";
+            s.address = createTestAddress();
+            s.persist();
+            return true;
+        });
+        // Line 2: 10.00 x 1.055 = 10.55 but 12.00 declared -> incoherent, rejected.
+        // Line 3: 8.03 x 1.20 = 9.636 vs 9.63 declared -> 0.006 deviation, accepted.
+        String csvContent = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n" +
+                "3270190999999|S00V|10.00|12.00|0.0550|DEFAULT|0|2023-01-01T00:00:00|\n" +
+                "3270190999999|S00V|8.03|9.63|0.2000|DEFAULT|1|2023-01-01T00:00:00|";
+        authenticated()
+                .body(csvContent)
+                .contentType(ContentType.TEXT)
+                .when()
+                .post("/prices/import")
+                .then()
+                .statusCode(200)
+                .body(containsString("\"createdCount\":1"))
+                .body(containsString("\"errors\""))
+                .body(containsString("Incoherent VAT triplet"));
     }
 
     /**
@@ -774,7 +893,7 @@ public class PriceCsvResourceTest {
             existingPrice.startDateTime = LocalDateTime.of(2023, 1, 1, 0, 0);
             existingPrice.priceExcludingTax = new BigDecimal("10.00");
             existingPrice.priceIncludingTax = new BigDecimal("12.00");
-            existingPrice.vatRate = new BigDecimal("0.2000");
+            existingPrice.vat = DomainUtils.resolveOrCreateVatRate(new BigDecimal("0.2000"));
             existingPrice.persist();
             return true;
         });

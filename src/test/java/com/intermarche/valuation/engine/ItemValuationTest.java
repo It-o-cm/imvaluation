@@ -1,4 +1,5 @@
 package com.intermarche.valuation.engine;
+import com.intermarche.valuation.domain.VatRate;
 
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
@@ -57,7 +58,7 @@ public class ItemValuationTest {
         Price price = new Price();
         price.priceExcludingTax = BigDecimal.ZERO;
         price.priceIncludingTax = catalogTtc;
-        price.vatRate = rate;
+        price.vat = new VatRate(null, rate, null);
         when(item.getProduct()).thenReturn(product);
         when(item.getPrice(store, PriceUsage.BASE_FOR_DISCOUNT)).thenReturn(price);
         item.quantity = 1.0;

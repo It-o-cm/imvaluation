@@ -55,7 +55,7 @@ public class ImmediateVoucherDiscountFactoryTest {
         price.store = store;
         price.priceExcludingTax = new BigDecimal("10.00");
         price.priceIncludingTax = new BigDecimal("12.00"); // 20% VAT
-        price.vatRate = new BigDecimal("0.20");
+        price.vat = DomainUtils.resolveOrCreateVatRate(new BigDecimal("0.20"));
         price.priceUsage = PriceUsage.BASE_FOR_DISCOUNT;
         price.priority = 0;
         price.persist();

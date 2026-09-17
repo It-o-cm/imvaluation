@@ -53,6 +53,25 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
     private static final double EFFICIENCY_SCORE = -3.0;
 
     /**
+     * The single definition of "value of the VAT" of a priced amount (spec §4): the tax
+     * included minus the tax excluded.
+     * <p>
+     * Shared so the {@code VAT_AMOUNT} grant award and the {@code VAT_REFUND_DISCOUNT}
+     * advantage agree to the cent on what the VAT of an assiette is worth; duplicating the
+     * formula is precisely what the specification forbids. A {@code null} amount, or one with
+     * a missing component, contributes zero (a gift card at VAT 0 contributes 0).
+     *
+     * @param amount the priced amount; may be null.
+     * @return the VAT value, never null.
+     */
+    public static BigDecimal vatAmount(AmountEvaluation amount) {
+        if (amount == null || amount.amountIncludingTax == null || amount.amountExcludingTax == null) {
+            return BigDecimal.ZERO;
+        }
+        return amount.amountIncludingTax.subtract(amount.amountExcludingTax);
+    }
+
+    /**
      * JSON Schema definition for validating instrument grant specifications.
      */
     private static final String OFFER_SCHEMA = """
@@ -318,7 +337,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
      * @throws IllegalArgumentException if the specification violates a cross-field rule.
      */
     private void processOffer(Offer offer, List<AdvantageApplier> appliers) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             Scope scope = Scope.valueOf(spec.get("scope").asText());
             Metric metric = Metric.valueOf(spec.get("metric").asText());
             Mode mode = Mode.valueOf(spec.get("mode").asText());
@@ -597,8 +616,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             BigDecimal baseQuantity = BigDecimal.ZERO;
             for (Contribution contribution : contributions) {
                 baseAmount = baseAmount.add(contribution.amount().amountIncludingTax);
-                baseVat = baseVat.add(contribution.amount().amountIncludingTax
-                        .subtract(contribution.amount().amountExcludingTax));
+                baseVat = baseVat.add(vatAmount(contribution.amount()));
                 baseQuantity = baseQuantity.add(BigDecimal.valueOf(contribution.quantity()));
             }
             if (baseAmount.signum() <= 0) {

@@ -119,6 +119,17 @@ public class ValuationEndToEndTest {
                 CUISSON|Instruments de Cuisine||3300000000031,3300000000032|
                 """);
 
+        // VAT regimes are imported before prices: a price attaches to the regime carrying its
+        // rate, so the referential must already hold them (mirrors the production seed order).
+        importCsv("/vat-rates/import", """
+                NUMBER|RATE|LABEL
+                1|0.2000|Taux normal
+                2|0.0550|Taux réduit
+                3|0.1000|Taux intermédiaire
+                4|0.0210|Taux super-réduit
+                5|0.0000|Exonéré
+                """);
+
         importCsv("/prices/import", ("""
                 EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE
                 3300000000001|0101|1.00|1.20|0.2000|DEFAULT|0|<<D>>|

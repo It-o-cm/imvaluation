@@ -23,7 +23,8 @@ import java.util.stream.Collectors;
 @Table(name = "offers",
         indexes = {
                 @Index(name = "idx_offer_code", columnList = "code"),
-                @Index(name = "idx_offer_type", columnList = "type")
+                @Index(name = "idx_offer_type", columnList = "type"),
+                @Index(name = "idx_offer_active", columnList = "is_active")
         }
 )
 @Cacheable
@@ -69,6 +70,26 @@ public class Offer extends BaseEntity {
     @Column(nullable = false, length = 1000)
     @NotBlank(message = "Offer specification is mandatory")
     public String specification;
+
+    /**
+     * Whether the offer is active; an inactive offer is never loaded by the engine.
+     */
+    @Column(name = "is_active", nullable = false)
+    public boolean active = true;
+
+    /**
+     * Start of the validity window (inclusive); null means no lower bound, so an
+     * offer without a window stays permanently in force (backward compatibility
+     * with pre-existing configurations that carry no dates).
+     */
+    @Column(name = "valid_from")
+    public java.time.LocalDateTime validFrom;
+
+    /**
+     * End of the validity window (exclusive); null leaves the window open-ended.
+     */
+    @Column(name = "valid_to")
+    public java.time.LocalDateTime validTo;
 
     /**
      * The list of EANs extracted from the specification.
@@ -262,6 +283,91 @@ public class Offer extends BaseEntity {
         return list("select distinct o from Offer o where exists (select 1 from o.eans e where e in ?1) and exists (select 1 from o.storeGroups g where g in ?2) and o.type = ?3", eans, storeGroups, type);
     }
 
+    /**
+     * Indicates whether the offer is in force at the given instant: active and inside
+     * its validity window (validFrom inclusive, validTo exclusive). A null bound is
+     * open — unlike imfid's rules, an offer without validFrom is in force, because
+     * pre-existing configurations carry no window.
+     *
+     * @param at The instant to test; when null the current engine time is used.
+     * @return true when the offer is active and its window contains the instant.
+     */
+    public boolean isInForceAt(java.time.LocalDateTime at) {
+        java.time.LocalDateTime moment = at != null ? at : com.intermarche.valuation.domain.util.DateTimeProvider.now();
+        if (!active || (validFrom != null && moment.isBefore(validFrom))) {
+            return false;
+        }
+        return validTo == null || moment.isBefore(validTo);
+    }
+
+    /**
+     * The in-force predicate shared by the engine finders: active, and inside the
+     * validity window at the given instant (null bounds are open).
+     */
+    private static final String IN_FORCE = " and o.active = true"
+            + " and (o.validFrom is null or o.validFrom <= ?IN_FORCE_AT)"
+            + " and (o.validTo is null or o.validTo > ?IN_FORCE_AT)";
+
+    /**
+     * Finds the offers of a type linked to a store and in force at the given instant —
+     * the engine-facing variant of {@link #findByStoreAndType(Store, String)}.
+     *
+     * @param store The store entity.
+     * @param type  The type of the offer.
+     * @param at    The instant the offers must be in force at.
+     * @return A list of matching Offer entities.
+     */
+    public static List<Offer> findInForceByStoreAndType(Store store, String type, java.time.LocalDateTime at) {
+        return list("select distinct o from Offer o where exists (select 1 from o.stores s where s = ?1) and o.type = ?2"
+                + IN_FORCE.replace("?IN_FORCE_AT", "?3"), store, type, at);
+    }
+
+    /**
+     * Finds the offers of a type linked to any of the store groups and in force at the
+     * given instant — the engine-facing variant of {@link #findByStoreGroupsAndType(Collection, String)}.
+     *
+     * @param storeGroups A list of StoreGroup entities.
+     * @param type        The type of the offer.
+     * @param at          The instant the offers must be in force at.
+     * @return A list of matching Offer entities.
+     */
+    public static List<Offer> findInForceByStoreGroupsAndType(Collection<StoreGroup> storeGroups, String type, java.time.LocalDateTime at) {
+        return list("select distinct o from Offer o where exists (select 1 from o.storeGroups g where g in ?1) and o.type = ?2"
+                + IN_FORCE.replace("?IN_FORCE_AT", "?3"), storeGroups, type, at);
+    }
+
+    /**
+     * Finds the offers of a type targeting any of the EANs, linked to a store and in
+     * force at the given instant — the engine-facing variant of
+     * {@link #findByEansAndStoreAndType(Collection, Store, String)}.
+     *
+     * @param eans  The list of EANs the offer must target.
+     * @param store The store entity.
+     * @param type  The type of the offer.
+     * @param at    The instant the offers must be in force at.
+     * @return A list of matching Offer entities.
+     */
+    public static List<Offer> findInForceByEansAndStoreAndType(Collection<String> eans, Store store, String type, java.time.LocalDateTime at) {
+        return list("select distinct o from Offer o where exists (select 1 from o.eans e where e in ?1) and exists (select 1 from o.stores s where s = ?2) and o.type = ?3"
+                + IN_FORCE.replace("?IN_FORCE_AT", "?4"), eans, store, type, at);
+    }
+
+    /**
+     * Finds the offers of a type targeting any of the EANs, linked to store groups and
+     * in force at the given instant — the engine-facing variant of
+     * {@link #findByEansAndStoreGroupsAndType(Collection, Collection, String)}.
+     *
+     * @param eans        The list of EANs the offer must target.
+     * @param storeGroups A list of StoreGroup entities.
+     * @param type        The type of the offer.
+     * @param at          The instant the offers must be in force at.
+     * @return A list of matching Offer entities.
+     */
+    public static List<Offer> findInForceByEansAndStoreGroupsAndType(Collection<String> eans, Collection<StoreGroup> storeGroups, String type, java.time.LocalDateTime at) {
+        return list("select distinct o from Offer o where exists (select 1 from o.eans e where e in ?1) and exists (select 1 from o.storeGroups g where g in ?2) and o.type = ?3"
+                + IN_FORCE.replace("?IN_FORCE_AT", "?4"), eans, storeGroups, type, at);
+    }
+
     // --------------------------------------------------
     // Checksum
     // --------------------------------------------------
@@ -281,6 +387,6 @@ public class Offer extends BaseEntity {
                 .map(g -> g.code)
                 .sorted()
                 .collect(Collectors.joining("|"));
-        return Objects.hash(code, type, specification, storeCodes, groupCodes);
+        return Objects.hash(code, type, specification, storeCodes, groupCodes, active, validFrom, validTo);
     }
 }

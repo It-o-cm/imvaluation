@@ -4,6 +4,7 @@ import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.domain.VatRate;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -146,7 +147,7 @@ public class PriceResource implements GraphQLTrait {
             price.priceUsage = input.priceUsage;
             price.priceExcludingTax = input.priceExcludingTax;
             price.priceIncludingTax = input.priceIncludingTax;
-            price.vatRate = input.vatRate;
+            price.vat = resolveRegime(input.vatRate);
             price.priority = input.priority;
             price.startDateTime = input.startDateTime;
             price.endDateTime = input.endDateTime;
@@ -229,7 +230,7 @@ public class PriceResource implements GraphQLTrait {
             if (input.priceUsage != null) price.priceUsage = input.priceUsage;
             if (input.priceExcludingTax != null) price.priceExcludingTax = input.priceExcludingTax;
             if (input.priceIncludingTax != null) price.priceIncludingTax = input.priceIncludingTax;
-            if (input.vatRate != null) price.vatRate = input.vatRate;
+            if (input.vatRate != null) price.vat = resolveRegime(input.vatRate);
             if (input.priority != null) price.priority = input.priority;
             if (input.startDateTime != null) price.startDateTime = input.startDateTime;
             if (input.endDateTime != null) price.endDateTime = input.endDateTime;
@@ -257,6 +258,29 @@ public class PriceResource implements GraphQLTrait {
             LOGGER.info("Exiting method deletePrice. Result: " + result);
             return result;
         }, PriceResource.class, "deletePrice");
+    }
+
+    /**
+     * Resolves the VAT regime a mutation input names by its RATE against the referential.
+     *
+     * <p>The GraphQL input is unchanged: it still carries a bare {@code vatRate}. It is resolved
+     * to the regime that carries that rate; an unknown rate is rejected, because a pricing engine
+     * cannot store a price under no regime. It is resolved at the very place the old decimal was
+     * assigned — inside the {@code execute} supplier, after the product, store, usage and
+     * uniqueness checks — so the rejection is a {@link NoSuchElementException}, the same idiom the
+     * resource already uses for a referenced entity (product, store) that the referential does
+     * not know; a checked {@code GraphQLException} cannot cross the supplier boundary.
+     *
+     * @param rate the rate carried by the input, as a fraction.
+     * @return the regime that carries the rate.
+     * @throws NoSuchElementException when the rate names no regime in the referential.
+     */
+    private VatRate resolveRegime(BigDecimal rate) {
+        VatRate regime = VatRate.findByRate(rate);
+        if (regime == null) {
+            throw new NoSuchElementException("Unknown VAT rate " + rate + ": no regime in the referential");
+        }
+        return regime;
     }
 
     /**

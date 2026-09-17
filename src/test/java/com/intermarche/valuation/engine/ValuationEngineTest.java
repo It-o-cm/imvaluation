@@ -291,31 +291,6 @@ public class ValuationEngineTest {
         assertEquals(lowScore, appliers.get(2));
     }
 
-    /**
-     * Tests {@link ValuationEngine.DiscountApplierEvaluator#sort(List)}.
-     * <p>
-     * Verifies that appliers are sorted by efficiency score in descending order.
-     */
-    @Test
-    void testDiscountApplierEvaluator_Sort() {
-        // Arrange
-        AdvantageApplier applier1 = mock(AdvantageApplier.class);
-        when(applier1.getEfficiencyScore()).thenReturn(0.1);
-
-        AdvantageApplier applier2 = mock(AdvantageApplier.class);
-        when(applier2.getEfficiencyScore()).thenReturn(1.0);
-
-        List<AdvantageApplier> appliers = Arrays.asList(applier1, applier2);
-
-        ValuationEngine.DiscountApplierEvaluator evaluator = new ValuationEngine.DiscountApplierEvaluator();
-
-        // Act
-        evaluator.sort(appliers);
-
-        // Assert
-        assertEquals(applier2, appliers.get(0)); // Higher score first
-        assertEquals(applier1, appliers.get(1));
-    }
 
     // --------------------------------------------------
     // Tests for calculateAmountEvaluation (Private Method via Reflection)

@@ -93,6 +93,7 @@ class GroupMIT {
             {"/products/import", "seed/03-products.csv"},
             {"/product-families/import", "seed/04-product-families.csv"},
             {"/product-category-storages/import", "seed/05-product-category-storages.csv"},
+            {"/vat-rates/import", "seed/00-vat-rates.csv"},
             {"/prices/import", "seed/06-prices.csv"},
             {"/offers/import", "seed/07-offers.csv"},
     };

@@ -87,6 +87,17 @@ public class TieredInstrumentEndToEndTest {
                 3300000000202|Produit B|Article standard|Brand B|1.000|1.000|UNIT|pcs|true
                 """);
 
+        // VAT regimes before prices (mirrors the production seed order): a price attaches to the
+        // regime carrying its rate.
+        importCsv("/vat-rates/import", """
+                NUMBER|RATE|LABEL
+                1|0.2000|Taux normal
+                2|0.0550|Taux réduit
+                3|0.1000|Taux intermédiaire
+                4|0.0210|Taux super-réduit
+                5|0.0000|Exonéré
+                """);
+
         importCsv("/prices/import", ("""
                 EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE
                 3300000000201|0109|25.00|30.00|0.2000|DEFAULT|0|<<D>>|

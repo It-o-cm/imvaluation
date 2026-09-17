@@ -265,6 +265,7 @@ public class OfferUiResourceCoverageTest {
         form().formParam("code", "OFF_NEW").formParam("type", "FREE_DELIVERY_THRESHOLD")
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "S1")
                 .formParam("storeGroupCodes", "")
+                .formParam("active", "true")
                 .when().post("/ui/offers/new")
                 .then().statusCode(303);
     }
@@ -395,6 +396,7 @@ public class OfferUiResourceCoverageTest {
         form().formParam("code", "OFF_G").formParam("type", "FREE_DELIVERY_THRESHOLD")
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "")
                 .formParam("storeGroupCodes", "G1")
+                .formParam("active", "true")
                 .when().post("/ui/offers/new")
                 .then().statusCode(303);
     }
@@ -454,6 +456,7 @@ public class OfferUiResourceCoverageTest {
         Long id = seedOffer("OFF_U", "FREE_DELIVERY_THRESHOLD", VALID_SPEC, List.of("S1"), List.of());
         form().formParam("type", "FREE_DELIVERY_THRESHOLD")
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "S1")
+                .formParam("active", "true")
                 .when().post("/ui/offers/" + id)
                 .then().statusCode(303);
     }

@@ -127,7 +127,7 @@ public class MealVoucherAdvantageFactory implements AdvantageApplierFactory, Eng
      * @throws JsonProcessingException if the offer specification is not valid JSON.
      */
     private void processOffer(Offer offer, List<AdvantageApplier> appliers) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec)->{
+        this.processSpecification(OFFER_SCHEMA, offer, (spec)->{
             // Read the eligibility flag (e.g., "FOOD", "GROCERY")
             String flag = flag = spec.get("flag").asText();
             // Read the threshold (cap)

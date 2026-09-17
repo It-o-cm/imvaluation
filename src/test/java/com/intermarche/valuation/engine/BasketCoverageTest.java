@@ -50,7 +50,7 @@ public class BasketCoverageTest {
             Price result = item.getPrice(store, PriceUsage.DEFAULT);
             assertEquals(new BigDecimal("10.00"), result.priceExcludingTax);
             assertEquals(new BigDecimal("12.00"), result.priceIncludingTax);
-            assertEquals(new BigDecimal("0.20"), result.vatRate);
+            assertEquals(new BigDecimal("0.20"), result.vatRate());
             mockedPrice.verifyNoInteractions();
         }
     }

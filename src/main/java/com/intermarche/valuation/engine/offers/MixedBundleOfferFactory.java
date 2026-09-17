@@ -187,7 +187,7 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
      * @param store      The store concerned.
      */
     private void processOffer(Offer offer, List<OfferApplier> appliers, Map<String, Basket.Item> basketItems, Store store) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             // Exactly one pricing mode is present, enforced by the schema "oneOf" constraint.
             BigDecimal bundlePrice = spec.has("bundlePrice") ? spec.get("bundlePrice").decimalValue() : null;
             String discountType = null;

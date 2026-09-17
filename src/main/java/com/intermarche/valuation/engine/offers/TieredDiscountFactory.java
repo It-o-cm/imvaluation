@@ -114,6 +114,12 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
           "description": "Price rows used for unit price lookups (free item, new price). Defaults to BASE_FOR_DISCOUNT.",
           "x-label": "Price basis"
         },
+        "perProduct": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, the metric is measured and the tiers resolved per distinct target EAN, independently. Requires scope ITEMS and metric QUANTITY.",
+          "x-label": "Per identical product"
+        },
         "tiers": {
           "type": "array",
           "minItems": 1,
@@ -309,15 +315,21 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
      * @throws IllegalArgumentException if the specification violates a cross-field rule.
      */
     private void processOffer(Offer offer, List<AdvantageApplier> appliers) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             Scope scope = Scope.valueOf(spec.get("scope").asText());
             Metric metric = Metric.valueOf(spec.get("metric").asText());
             Mode mode = Mode.valueOf(spec.get("mode").asText());
             PriceUsage priceUsage = spec.has("priceUsage")
                     ? PriceUsage.valueOf(spec.get("priceUsage").asText())
                     : PriceUsage.BASE_FOR_DISCOUNT;
+            boolean perProduct = spec.has("perProduct") && spec.get("perProduct").asBoolean();
             Set<String> targetEans = parseTargetEans(spec);
             validateCrossRules(offer.code, scope, metric, mode, targetEans, spec);
+            if (perProduct && (scope != Scope.ITEMS || metric != Metric.QUANTITY)) {
+                throw new IllegalArgumentException(String.format(
+                        "TIERED_DISCOUNT offer '%s': perProduct requires scope ITEMS and metric QUANTITY.",
+                        offer.code));
+            }
             TierTable<Award> table = null;
             BigDecimal step = null;
             Award stepAward = null;
@@ -338,7 +350,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                     ? Product.findByEans(targetEans)
                     : List.of();
             TieredDiscountApplier applier = new TieredDiscountApplier(
-                    offer.code, scope, metric, mode, priceUsage, table, step, stepAward, targetProducts);
+                    offer.code, scope, metric, mode, priceUsage, table, step, stepAward, targetProducts, perProduct);
             applier.configuration = offer;
             appliers.add(applier);
         });
@@ -512,7 +524,17 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
         private final List<Product> targetProducts;
 
         /**
-         * Creates the applier for one offer.
+         * Whether the metric and the tiers are resolved per distinct target EAN (spec §8);
+         * false reproduces the current behaviour bit for bit. Only true with scope ITEMS and
+         * metric QUANTITY, enforced at creation.
+         */
+        private final boolean perProduct;
+
+        /**
+         * Creates the applier for one offer, with per-product resolution disabled.
+         * <p>
+         * A convenience overload preserving the pre-{@code perProduct} signature (spec §8 is
+         * additive): it delegates with {@code perProduct} false, the current behaviour.
          *
          * @param code           the offer code.
          * @param scope          the offer scope.
@@ -527,6 +549,27 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
         public TieredDiscountApplier(String code, Scope scope, Metric metric, Mode mode,
                                      PriceUsage priceUsage, TierTable<Award> table,
                                      BigDecimal step, Award stepAward, List<Product> targetProducts) {
+            this(code, scope, metric, mode, priceUsage, table, step, stepAward, targetProducts, false);
+        }
+
+        /**
+         * Creates the applier for one offer.
+         *
+         * @param code           the offer code.
+         * @param scope          the offer scope.
+         * @param metric        the metric dimension.
+         * @param mode           the tier mode.
+         * @param priceUsage     the price rows used for unit price lookups.
+         * @param table          the tier table; null in PER_MULTIPLE mode.
+         * @param step           the repeating step; null unless in PER_MULTIPLE mode.
+         * @param stepAward      the award of the repeating step; null unless PER_MULTIPLE.
+         * @param targetProducts the targeted products; empty in TICKET scope.
+         * @param perProduct     whether the tiers are resolved per distinct target EAN.
+         */
+        public TieredDiscountApplier(String code, Scope scope, Metric metric, Mode mode,
+                                     PriceUsage priceUsage, TierTable<Award> table,
+                                     BigDecimal step, Award stepAward, List<Product> targetProducts,
+                                     boolean perProduct) {
             this.code = code;
             this.scope = scope;
             this.metric = metric;
@@ -536,6 +579,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
             this.step = step;
             this.stepAward = stepAward;
             this.targetProducts = targetProducts;
+            this.perProduct = perProduct;
         }
 
         /**
@@ -604,6 +648,37 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
             if (contributions.isEmpty()) {
                 return applications;
             }
+            if (!perProduct) {
+                applyGroup(evaluation, applications, contributions);
+                return applications;
+            }
+            // Per identical product (spec §8): the metric is measured and the tiers resolved for
+            // each distinct target EAN independently, so 6 of A and 2 of B each reach their own
+            // tier. Scope ITEMS and metric QUANTITY are guaranteed by the creation-time check, so
+            // every contribution carries a product here.
+            Map<String, List<Contribution>> byEan = new LinkedHashMap<>();
+            for (Contribution contribution : contributions) {
+                byEan.computeIfAbsent(contribution.product().ean, k -> new ArrayList<>()).add(contribution);
+            }
+            for (List<Contribution> group : byEan.values()) {
+                applyGroup(evaluation, applications, group);
+            }
+            return applications;
+        }
+
+        /**
+         * Resolves and distributes the discount for one homogeneous set of contributions.
+         * <p>
+         * This is the whole-assiette computation of the default behaviour; {@link #apply} calls
+         * it once over every contribution when {@code perProduct} is false (bit for bit the
+         * current behaviour), or once per distinct target EAN when it is true.
+         *
+         * @param evaluation    the evaluation context (store, for unit price lookups).
+         * @param applications  the list receiving the produced applications.
+         * @param contributions the contributions to resolve together.
+         */
+        private void applyGroup(BasketEvaluation evaluation, List<AdvantageApplication> applications,
+                                List<Contribution> contributions) {
             BigDecimal baseAmount = BigDecimal.ZERO;
             BigDecimal baseQuantity = BigDecimal.ZERO;
             for (Contribution contribution : contributions) {
@@ -611,22 +686,21 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                 baseQuantity = baseQuantity.add(BigDecimal.valueOf(contribution.quantity()));
             }
             if (baseAmount.signum() <= 0) {
-                return applications;
+                return;
             }
             BigDecimal base = (metric == Metric.AMOUNT) ? baseAmount : baseQuantity;
             Result result = computeTotalDiscount(evaluation, contributions, base, baseAmount, baseQuantity);
             if (result == null) {
-                return applications;
+                return;
             }
             BigDecimal total = result.totalTtc().setScale(2, RoundingMode.HALF_UP);
             if (total.compareTo(baseAmount) > 0) {
                 total = baseAmount;
             }
             if (total.signum() <= 0) {
-                return applications;
+                return;
             }
             distribute(applications, contributions, total, baseAmount, result.detail());
-            return applications;
         }
 
         /**

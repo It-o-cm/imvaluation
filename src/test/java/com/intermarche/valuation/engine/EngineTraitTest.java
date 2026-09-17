@@ -149,10 +149,11 @@ public class EngineTraitTest {
         Offer groupOffer = new Offer();
         groupOffer.id = 200L;
         groupOffer.type = "PROMO";
-        // Mock Repository Calls
-        mockedOffer.when(() -> Offer.findByStoreAndType(store, "PROMO"))
+        // Mock Repository Calls: getOffers now goes through the activation-aware in-force
+        // finders (store + groups), taking the current instant supplied by DateTimeProvider.
+        mockedOffer.when(() -> Offer.findInForceByStoreAndType(eq(store), eq("PROMO"), any()))
                 .thenReturn(List.of(storeOffer));
-        mockedOffer.when(() -> Offer.findByStoreGroupsAndType(Set.of(group), "PROMO"))
+        mockedOffer.when(() -> Offer.findInForceByStoreGroupsAndType(any(), eq("PROMO"), any()))
                 .thenReturn(List.of(groupOffer));
         EngineTrait trait = createTrait();
         var result = trait.getOffers(eval, "PROMO");
@@ -160,8 +161,8 @@ public class EngineTraitTest {
         assertEquals(2, result.size());
         assertTrue(result.contains(storeOffer));
         assertTrue(result.contains(groupOffer));
-        mockedOffer.verify(() -> Offer.findByStoreAndType(store, "PROMO"));
-        mockedOffer.verify(() -> Offer.findByStoreGroupsAndType(Set.of(group), "PROMO"));
+        mockedOffer.verify(() -> Offer.findInForceByStoreAndType(eq(store), eq("PROMO"), any()));
+        mockedOffer.verify(() -> Offer.findInForceByStoreGroupsAndType(any(), eq("PROMO"), any()));
     }
 
     // --------------------------------------------------
@@ -188,10 +189,11 @@ public class EngineTraitTest {
         storeOffer.id = 100L;
         Offer groupOffer = new Offer();
         groupOffer.id = 200L;
-        // Mock Repository Calls
-        mockedOffer.when(() -> Offer.findByEansAndStoreAndType(eans, store, "DISCOUNT"))
+        // Mock Repository Calls: the EAN-scoped getOffers likewise resolves through the
+        // activation-aware in-force finders (store + groups) at the current instant.
+        mockedOffer.when(() -> Offer.findInForceByEansAndStoreAndType(eq(eans), eq(store), eq("DISCOUNT"), any()))
                 .thenReturn(List.of(storeOffer));
-        mockedOffer.when(() -> Offer.findByEansAndStoreGroupsAndType(eans, Set.of(group), "DISCOUNT"))
+        mockedOffer.when(() -> Offer.findInForceByEansAndStoreGroupsAndType(eq(eans), any(), eq("DISCOUNT"), any()))
                 .thenReturn(List.of(groupOffer));
         EngineTrait trait = createTrait();
         var result = trait.getOffers(eval, eans, "DISCOUNT");

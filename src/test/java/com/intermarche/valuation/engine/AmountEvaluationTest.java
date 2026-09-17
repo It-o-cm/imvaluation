@@ -68,7 +68,7 @@ public class AmountEvaluationTest {
         Price price = new Price();
         price.priceExcludingTax = ONE_HUNDRED;
         price.priceIncludingTax = ONE_HUNDRED_TTC_20;
-        price.vatRate = TAX_RATE_20;
+        price.vat = new VatRate(null, TAX_RATE_20, null);
 
         AmountEvaluation amount = new AmountEvaluation(price);
 
@@ -231,7 +231,7 @@ public class AmountEvaluationTest {
         Price price = new Price();
         price.priceExcludingTax = new BigDecimal("10.00");
         price.priceIncludingTax = new BigDecimal("12.00");
-        price.vatRate = TAX_RATE_20;
+        price.vat = new VatRate(null, TAX_RATE_20, null);
 
         double quantity = 3.0;
 
@@ -254,7 +254,7 @@ public class AmountEvaluationTest {
         Price price = new Price();
         price.priceExcludingTax = new BigDecimal("10.00"); // Price per 500g
         price.priceIncludingTax = new BigDecimal("12.00");
-        price.vatRate = TAX_RATE_20;
+        price.vat = new VatRate(null, TAX_RATE_20, null);
 
         double quantityKg = 1.500; // Buying 1.5kg
 
@@ -278,7 +278,7 @@ public class AmountEvaluationTest {
         Price price = new Price();
         price.priceExcludingTax = new BigDecimal("5.00"); // Price per Liter
         price.priceIncludingTax = new BigDecimal("6.00");
-        price.vatRate = TAX_RATE_20;
+        price.vat = new VatRate(null, TAX_RATE_20, null);
 
         double quantityLiters = 10.0;
 
@@ -415,7 +415,9 @@ public class AmountEvaluationTest {
         product.productType = ProductType.UNIT;
         price.priceExcludingTax = new BigDecimal("10.00");
         price.priceIncludingTax = new BigDecimal("12.00");
-        price.vatRate = TAX_RATE_20;
+        // price is a Mockito mock: vatRate() is an intercepted method, so it is stubbed rather
+        // than set through the (now relational) vat field.
+        when(price.vatRate()).thenReturn(TAX_RATE_20);
 
         // Execute
         AmountEvaluation result = AmountEvaluation.getAmount(item, store, PriceUsage.DEFAULT);
@@ -438,7 +440,7 @@ public class AmountEvaluationTest {
         Price pr1 = new Price();
         pr1.priceExcludingTax = new BigDecimal("10.00");
         pr1.priceIncludingTax = new BigDecimal("11.00"); // 10% tax
-        pr1.vatRate = TAX_RATE_10;
+        pr1.vat = new VatRate(null, TAX_RATE_10, null);
 
         when(item1.getProduct()).thenReturn(p1);
         when(item1.getPrice(store, PriceUsage.DEFAULT)).thenReturn(pr1);
@@ -449,7 +451,7 @@ public class AmountEvaluationTest {
         Price pr2 = new Price();
         pr2.priceExcludingTax = new BigDecimal("20.00");
         pr2.priceIncludingTax = new BigDecimal("22.00"); // 10% tax
-        pr2.vatRate = TAX_RATE_10;
+        pr2.vat = new VatRate(null, TAX_RATE_10, null);
 
         when(item2.getProduct()).thenReturn(p2);
         when(item2.getPrice(store, PriceUsage.DEFAULT)).thenReturn(pr2);
@@ -476,7 +478,7 @@ public class AmountEvaluationTest {
         Price pr1 = new Price();
         pr1.priceExcludingTax = new BigDecimal("10.00");
         pr1.priceIncludingTax = new BigDecimal("12.00");
-        pr1.vatRate = TAX_RATE_20;
+        pr1.vat = new VatRate(null, TAX_RATE_20, null);
 
         when(item1.getProduct()).thenReturn(p1);
         when(item1.getPrice(store, PriceUsage.DEFAULT)).thenReturn(pr1);
@@ -510,7 +512,7 @@ public class AmountEvaluationTest {
         Price pr = new Price();
         pr.priceExcludingTax = new BigDecimal("10.00");
         pr.priceIncludingTax = new BigDecimal("12.00");
-        pr.vatRate = TAX_RATE_20;
+        pr.vat = new VatRate(null, TAX_RATE_20, null);
 
         when(item.getProduct()).thenReturn(p);
         when(item.getPrice(store, PriceUsage.DEFAULT)).thenReturn(pr);

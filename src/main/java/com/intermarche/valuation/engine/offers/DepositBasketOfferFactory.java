@@ -130,7 +130,7 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
         }
         Store store = evaluation.getStore();
         // Retrieve all "DEPOSIT_BASKET" type offers for this store
-        List<Offer> offers = Offer.findByStoreAndType(store, "DEPOSIT_BASKET");
+        List<Offer> offers = Offer.findInForceByStoreAndType(store, "DEPOSIT_BASKET", com.intermarche.valuation.domain.util.DateTimeProvider.now());
         // Constraint: Only one deposit basket offer allowed per store
         if (offers.size() > 1) {
             throw new IllegalStateException(String.format(
@@ -153,7 +153,7 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
      * @param appliers The list to which the created applier will be added.
      */
     private void processOffer(Offer offer, List<OfferApplier> appliers) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             double basketVolume = spec.get("basketVolume").asDouble(); // in Liters
             BigDecimal basketPrice = spec.get("basketPrice").decimalValue(); // TTC
             BigDecimal vatRate = spec.get("vatRate").decimalValue();

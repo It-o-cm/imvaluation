@@ -78,6 +78,12 @@ public class DataInitializer {
     ProductCategoryStorageCsvResource productCategoryStorageCsvResource;
 
     /**
+     * Importer used to load the seed VAT regimes.
+     */
+    @Inject
+    VatRateCsvResource vatRateCsvResource;
+
+    /**
      * Importer used to load the seed prices.
      */
     @Inject
@@ -125,6 +131,10 @@ public class DataInitializer {
                 stream, ProductFamilyCsvResource.COL_CODE, ProductFamilyCsvResource.REQUIRED_COLUMNS));
         seed("product-category-storages.csv", stream -> productCategoryStorageCsvResource.importCsvStream(
                 stream, ProductCategoryStorageCsvResource.COL_EAN, ProductCategoryStorageCsvResource.REQUIRED_COLUMNS));
+        // VAT regimes are loaded BEFORE prices: a price attaches to the regime that carries its
+        // rate, so the referential must already hold the five regimes when the price feed runs.
+        seed("vat-rates.csv", stream -> vatRateCsvResource.importCsvStream(
+                stream, VatRateCsvResource.COL_NUMBER, VatRateCsvResource.REQUIRED_COLUMNS));
         seed("prices.csv", stream -> priceCsvResource.importCsvStream(
                 stream, PriceCsvResource.COL_EAN, PriceCsvResource.REQUIRED_COLUMNS));
         seed("offers.csv", stream -> offerCsvResource.importCsvStream(

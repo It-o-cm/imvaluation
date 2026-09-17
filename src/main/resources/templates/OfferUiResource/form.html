@@ -64,6 +64,28 @@
     </section>
 
     <section class="card">
+        <h2 class="card-title">Activation</h2>
+        <p class="card-sub">The engine only evaluates active offers inside their validity window; blank bounds leave the window open.</p>
+        <div class="field-grid">
+            <label class="field field-checkbox">
+                <input type="checkbox" name="active" value="true" {#if offer.active}checked{/if}>
+                <span class="field-label">Active</span>
+                <span class="field-hint">An inactive offer is kept but never applied.</span>
+            </label>
+            <label class="field">
+                <span class="field-label">Valid from</span>
+                <input type="datetime-local" name="validFrom" value="{offer.validFrom ?: ''}">
+                <span class="field-hint">Inclusive; blank means no start bound.</span>
+            </label>
+            <label class="field">
+                <span class="field-label">Valid to</span>
+                <input type="datetime-local" name="validTo" value="{offer.validTo ?: ''}">
+                <span class="field-hint">Exclusive; blank means no end bound.</span>
+            </label>
+        </div>
+    </section>
+
+    <section class="card">
         <div class="card-title-row">
             <h2 class="card-title">Specification</h2>
             <div class="mode-switch">

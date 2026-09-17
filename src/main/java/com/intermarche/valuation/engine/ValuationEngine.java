@@ -225,8 +225,8 @@ public class ValuationEngine {
     /**
      * Sorts the provided appliers and creates {@link AdvantageApplication} instances.
      * <p>
-     * This method uses an isolated {@link DiscountApplierEvaluator} to order
-     * appliers by efficiency score, then iterates through them to apply their
+     * This method orders appliers wave by wave (priority, then current sandbox
+     * score, then configuration code) and iterates through them to apply their
      * logic to the provided {@link BasketEvaluation} context.
      * <p>
      * Results (applications) are added directly to the evaluation object.
@@ -619,29 +619,6 @@ public class ValuationEngine {
             // Sort by efficiency score descending
             // High score = Most Efficient / Highest Priority
             appliers.sort(Comparator.comparingDouble(OfferApplier::getEfficiencyScore).reversed());
-        }
-    }
-
-    /**
-     * Inner class responsible for sorting {@link AdvantageApplier} instances.
-     * <p>
-     * This class encapsulates the sorting logic, allowing it to be modified
-     * without affecting the main engine logic.
-     * <p>
-     * Sorting is based on efficiency score in descending order
-     * (Higher score = processed first).
-     */
-    public static class DiscountApplierEvaluator {
-
-        /**
-         * Sorts the provided list of appliers in place.
-         *
-         * @param appliers The list of appliers to sort.
-         */
-        public void sort(List<AdvantageApplier> appliers) {
-            // Sort by efficiency score descending
-            // High score = Most Efficient / Highest Priority
-            appliers.sort(Comparator.comparingDouble(AdvantageApplier::getEfficiencyScore).reversed());
         }
     }
 

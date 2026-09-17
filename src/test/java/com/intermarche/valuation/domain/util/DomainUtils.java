@@ -4,6 +4,7 @@ import com.intermarche.valuation.domain.*;
 import com.intermarche.valuation.engine.Basket;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.HashSet;
 
 public class DomainUtils {
@@ -32,9 +33,52 @@ public class DomainUtils {
         price.priceUsage = usage;
         price.priceExcludingTax = priceExcludingTax;
         price.priceIncludingTax = priceIncludingTax;
-        price.vatRate = vatRate;
+        price.vat = resolveOrCreateVatRate(vatRate);
         price.persist();
         return price;
+    }
+
+    /**
+     * Clears and re-seeds the five standard VAT regimes (numbers 1..5), the referential the
+     * production seed loads before any price.
+     * <p>
+     * A price now attaches to the regime that carries its rate, so any test that imports or
+     * creates a price needs these regimes present. Callers invoke it inside a transaction, after
+     * the prices are cleared (a price holds a foreign key on its regime). It is self-healing:
+     * re-seeding restores the canonical rates even if a prior test corrected one.
+     */
+    public static void seedStandardVatRegimes() {
+        VatRate.deleteAll();
+        new VatRate(1, new BigDecimal("0.2000"), "Taux normal").persist();
+        new VatRate(2, new BigDecimal("0.0550"), "Taux réduit").persist();
+        new VatRate(3, new BigDecimal("0.1000"), "Taux intermédiaire").persist();
+        new VatRate(4, new BigDecimal("0.0210"), "Taux super-réduit").persist();
+        new VatRate(5, new BigDecimal("0.0000"), "Exonéré").persist();
+    }
+
+    /**
+     * Resolves the VAT regime that carries the given rate, creating and persisting it when the
+     * referential holds none yet.
+     * <p>
+     * The fixture keeps its historical {@code vatRate} parameter: a bare rate. It is turned into
+     * a regime so a persisted {@link Price} points at one exactly as production does. An existing
+     * regime with that rate is reused (a seeded referential is honoured); otherwise a fresh regime
+     * is minted with a rate-derived number offset past the seed range (1..5) to avoid any clash.
+     *
+     * @param vatRate The rate as a fraction, possibly null.
+     * @return The persisted regime carrying the rate, or null when the rate is null.
+     */
+    public static VatRate resolveOrCreateVatRate(BigDecimal vatRate) {
+        if (vatRate == null) {
+            return null;
+        }
+        VatRate regime = VatRate.findByRate(vatRate);
+        if (regime == null) {
+            int number = 1000 + vatRate.setScale(4, RoundingMode.HALF_UP).movePointRight(4).intValueExact();
+            regime = new VatRate(number, vatRate, null);
+            regime.persist();
+        }
+        return regime;
     }
 
     /**

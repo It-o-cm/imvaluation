@@ -161,7 +161,7 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
      * @param store    The store context.
      */
     private void processOffer(Offer offer, List<AdvantageApplier> appliers, Map<String, Integer> vignettes, Store store) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             JsonNode catalogNode = spec.get("catalog");
             List<VignetteRule> catalog = new ArrayList<>();
 

@@ -152,7 +152,7 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
             throw new IllegalStateException("Store address or coordinates missing for store " + store.code);
         }
         // Retrieve all "DELIVERY" type offers for this store
-        List<Offer> offers = Offer.findByStoreAndType(store, "DELIVERY");
+        List<Offer> offers = Offer.findInForceByStoreAndType(store, "DELIVERY", com.intermarche.valuation.domain.util.DateTimeProvider.now());
         // Constraint: Only one delivery offer allowed per store
         if (offers.size() > 1) {
             throw new IllegalStateException(String.format(
@@ -177,7 +177,7 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
      * @param basket   The basket context containing delivery address details.
      */
     private void processOffer(Offer offer, List<OfferApplier> appliers, Store store, Basket basket) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             BigDecimal vatRate = spec.get("vatRate").decimalValue();
             JsonNode tiersNode = spec.get("tiers");
             List<DeliveryTier> tiers = new ArrayList<>();

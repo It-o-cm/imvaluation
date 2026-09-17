@@ -304,6 +304,9 @@ public class OfferUiResource implements EngineTrait {
      * @param specification   The JSON specification produced by the schema-driven form.
      * @param storeCodes      The linked store codes, comma separated.
      * @param storeGroupCodes The linked store group codes, comma separated.
+     * @param active          The active flag; an unchecked checkbox posts nothing, meaning inactive.
+     * @param validFrom       The validity-window start (ISO local date-time), blank for open.
+     * @param validTo         The validity-window end (ISO local date-time), blank for open.
      * @return A redirection to the list screen, or the form again when validation fails.
      */
     @RolesAllowed(AppUser.ROLE_ADMIN)
@@ -316,11 +319,17 @@ public class OfferUiResource implements EngineTrait {
                          @FormParam("type") String type,
                          @FormParam("specification") String specification,
                          @FormParam("storeCodes") String storeCodes,
-                         @FormParam("storeGroupCodes") String storeGroupCodes) {
+                         @FormParam("storeGroupCodes") String storeGroupCodes,
+                         @FormParam("active") String active,
+                         @FormParam("validFrom") String validFrom,
+                         @FormParam("validTo") String validTo) {
         LOGGER.debug("Entering method save for code: " + code);
         Offer offer = new Offer();
         offer.code = code;
         String error = applyForm(offer, type, specification, storeCodes, storeGroupCodes, true);
+        if (error == null) {
+            error = applyActivation(offer, active, validFrom, validTo);
+        }
         if (error != null) {
             return renderFormWithError(offer, storeCodes, storeGroupCodes, error);
         }
@@ -337,6 +346,9 @@ public class OfferUiResource implements EngineTrait {
      * @param specification   The JSON specification produced by the schema-driven form.
      * @param storeCodes      The linked store codes, comma separated.
      * @param storeGroupCodes The linked store group codes, comma separated.
+     * @param active          The active flag; an unchecked checkbox posts nothing, meaning inactive.
+     * @param validFrom       The validity-window start (ISO local date-time), blank for open.
+     * @param validTo         The validity-window end (ISO local date-time), blank for open.
      * @return A redirection to the list screen, or the form again when validation fails.
      */
     @RolesAllowed(AppUser.ROLE_ADMIN)
@@ -349,7 +361,10 @@ public class OfferUiResource implements EngineTrait {
                            @FormParam("type") String type,
                            @FormParam("specification") String specification,
                            @FormParam("storeCodes") String storeCodes,
-                           @FormParam("storeGroupCodes") String storeGroupCodes) {
+                           @FormParam("storeGroupCodes") String storeGroupCodes,
+                           @FormParam("active") String active,
+                           @FormParam("validFrom") String validFrom,
+                           @FormParam("validTo") String validTo) {
         LOGGER.debug("Entering method update for id: " + id);
         Offer offer = Offer.findById(id);
         if (offer == null) {
@@ -357,6 +372,9 @@ public class OfferUiResource implements EngineTrait {
             return Response.status(Response.Status.NOT_FOUND).entity("Offer " + id + " not found").build();
         }
         String error = applyForm(offer, type, specification, storeCodes, storeGroupCodes, false);
+        if (error == null) {
+            error = applyActivation(offer, active, validFrom, validTo);
+        }
         if (error != null) {
             return renderFormWithError(offer, storeCodes, storeGroupCodes, error);
         }
@@ -497,6 +515,45 @@ public class OfferUiResource implements EngineTrait {
      * @param isNew           Whether the offer is being created.
      * @return An error message when validation fails, {@code null} on success.
      */
+    /**
+     * Applies the activation fields submitted by the form: the active checkbox (an
+     * unchecked box posts no value, meaning inactive) and the optional validity window,
+     * parsed from the datetime-local inputs; a blank bound is open.
+     *
+     * @param offer     The offer being created or updated.
+     * @param active    The posted checkbox value, null when unchecked.
+     * @param validFrom The posted window start, blank or null for open.
+     * @param validTo   The posted window end, blank or null for open.
+     * @return An error message when a date is unparseable or the window is inverted, null otherwise.
+     */
+    private String applyActivation(Offer offer, String active, String validFrom, String validTo) {
+        offer.active = active != null;
+        try {
+            offer.validFrom = parseFormDateTime(validFrom);
+            offer.validTo = parseFormDateTime(validTo);
+        } catch (java.time.format.DateTimeParseException e) {
+            return "Invalid validity date: " + e.getParsedString();
+        }
+        if (offer.validFrom != null && offer.validTo != null && !offer.validFrom.isBefore(offer.validTo)) {
+            return "The validity window is inverted: the start must precede the end.";
+        }
+        return null;
+    }
+
+    /**
+     * Parses a datetime-local form value into a LocalDateTime.
+     *
+     * @param value The posted value, possibly blank or null.
+     * @return The parsed date-time, or null when the value is blank or null.
+     * @throws java.time.format.DateTimeParseException when the value is not ISO local date-time.
+     */
+    private java.time.LocalDateTime parseFormDateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return java.time.LocalDateTime.parse(value.trim());
+    }
+
     private String applyForm(Offer offer, String type, String specification,
                              String storeCodes, String storeGroupCodes, boolean isNew) {
         if (offer.code == null || offer.code.isBlank()) {

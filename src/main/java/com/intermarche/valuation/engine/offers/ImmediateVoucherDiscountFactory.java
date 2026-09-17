@@ -123,7 +123,7 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
         List<AdvantageApplier> appliers = new ArrayList<>();
         Store store = basketEvaluation.getStore();
         // Retrieve all "IMMEDIATE_VOUCHER" type offers for this store
-        List<Offer> offers = Offer.findByStoreAndType(store, "IMMEDIATE_VOUCHER");
+        List<Offer> offers = Offer.findInForceByStoreAndType(store, "IMMEDIATE_VOUCHER", com.intermarche.valuation.domain.util.DateTimeProvider.now());
         // A product may now appear on several lines (distinct prices, or a manual-gesture
         // line kept separate), so more than one item can share an EAN. This index only needs
         // one representative item per EAN to test targeting and read a reference price, so
@@ -145,7 +145,7 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
      * @param store    The store context for the applier.
      */
     void processOffer(Offer offer, List<AdvantageApplier> appliers, Map<String, Basket.Item> basketItems, Store store) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             JsonNode classTarget = spec.get("targetOfferClass");
             Set<String> targetOfferClasses = getTargetOfferClassNames(classTarget);
             // Parse targetEans (List)

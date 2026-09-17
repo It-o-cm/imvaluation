@@ -55,6 +55,9 @@ public class PriceResourceTest {
         Product.deleteAll();
         StoreGroup.deleteAll();
         Store.deleteAll();
+        // A price now attaches to the regime carrying its rate, so the referential must hold the
+        // standard regimes before any price is created or updated.
+        DomainUtils.seedStandardVatRegimes();
 
         Product product = DomainUtils.createAndPersistProduct("PROD_01", "Product 01", ProductType.UNIT);
         Store store = DomainUtils.createAndPersistStore("STORE_01", 0.0, 0.0);
@@ -73,7 +76,7 @@ public class PriceResourceTest {
         price.startDateTime = start;
         price.priceExcludingTax = BigDecimal.TEN;
         price.priceIncludingTax = BigDecimal.valueOf(12.0);
-        price.vatRate = BigDecimal.valueOf(0.2);
+        price.vat = DomainUtils.resolveOrCreateVatRate(BigDecimal.valueOf(0.2));
         price.persist();
         return price;
     }
@@ -164,11 +167,37 @@ public class PriceResourceTest {
         input.priority = 1;
         input.startDateTime = LocalDateTime.now();
         input.priceExcludingTax = BigDecimal.ONE;
+        // A create now resolves the rate to a regime, so the happy path must name a seeded one.
+        input.vatRate = new BigDecimal("0.2000");
 
         Price created = resource.createPrice(input);
 
         assertNotNull(created.id);
         assertEquals(PriceUsage.BASE_FOR_DISCOUNT, created.priceUsage);
+    }
+
+    /**
+     * Tests that a create whose rate names no regime is rejected once the product, store and
+     * usage have passed, with a message naming the unknown rate.
+     */
+    @Test
+    @TestSecurity(user = "testAdmin", roles = {"ADMIN"})
+    void testCreatePrice_UnknownVatRate() {
+        setUp();
+        Product product = Product.findByEan("PROD_01");
+        Store store = Store.findByCode("STORE_01");
+
+        PriceResource.PriceRecord input = new PriceResource.PriceRecord();
+        input.productId = product.id;
+        input.storeId = store.id;
+        input.priceUsage = PriceUsage.BASE_FOR_DISCOUNT;
+        input.priority = 7;
+        input.startDateTime = LocalDateTime.now();
+        input.priceExcludingTax = BigDecimal.ONE;
+        input.vatRate = new BigDecimal("0.1500"); // no regime carries this rate
+
+        NoSuchElementException ex = assertThrows(NoSuchElementException.class, () -> resource.createPrice(input));
+        assertTrue(ex.getMessage().contains("Unknown VAT rate 0.1500"));
     }
 
     /**
@@ -436,10 +465,12 @@ public class PriceResourceTest {
         Price existing = (Price) Price.listAll().get(0);
 
         PriceResource.PriceRecord input = new PriceResource.PriceRecord();
-        input.vatRate = BigDecimal.valueOf(0.5);
+        // The input still carries a bare rate; it must name a regime in the referential. Here it
+        // switches the price to the intermediate regime (0.1000).
+        input.vatRate = new BigDecimal("0.1000");
 
         Price updated = resource.updatePrice(existing.id, input);
-        assertEquals(BigDecimal.valueOf(0.5), updated.vatRate);
+        assertEquals(new BigDecimal("0.1000"), updated.vatRate());
     }
 
     /**

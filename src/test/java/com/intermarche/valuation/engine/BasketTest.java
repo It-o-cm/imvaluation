@@ -114,10 +114,31 @@ public class BasketTest {
         assertNotNull(result);
         assertEquals(new BigDecimal("10.00"), result.priceExcludingTax);
         assertEquals(new BigDecimal("12.00"), result.priceIncludingTax);
-        assertEquals(new BigDecimal("0.20"), result.vatRate);
+        assertEquals(new BigDecimal("0.20"), result.vatRate());
 
         // Verify NO database lookup occurred
         mockedPrice.verify(() -> Price.findActivePriceAtDate(anyLong(), anyLong(), any(), any()), never());
+    }
+
+    /**
+     * Tests that the manual-pricing carrier still values a line after the VAT migration: the
+     * transient regime built in {@code getPrice} makes {@code vatRate()} read the line's rate
+     * through, so the amount snapshots it exactly as before.
+     */
+    @Test
+    void testManualTrioCarrier_Evaluates() {
+        Basket.Item item = new Basket.Item();
+        item.pricePerUnitExclTax = new BigDecimal("10.00");
+        item.pricePerUnitInclTax = new BigDecimal("12.00");
+        item.vatRate = new BigDecimal("0.20");
+        Store store = new Store();
+        store.id = 10L;
+        store.code = "STORE01";
+        Price carrier = item.getPrice(store, PriceUsage.DEFAULT);
+        AmountEvaluation amount = new AmountEvaluation(carrier);
+        assertEquals(new BigDecimal("10.00"), amount.amountExcludingTax);
+        assertEquals(new BigDecimal("12.00"), amount.amountIncludingTax);
+        assertEquals(new BigDecimal("0.2000"), amount.vatRate);
     }
 
     /**

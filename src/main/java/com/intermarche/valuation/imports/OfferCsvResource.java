@@ -28,7 +28,9 @@ import java.util.stream.Collectors;
  * <p>
  * Consumed columns (resolved by header name; unknown columns of the
  * shared feed are ignored): CODE (key), TYPE, SPECIFICATION, STORE_CODES,
- * STORE_GROUP_CODES.
+ * STORE_GROUP_CODES, and the optional activation columns VALID_FROM,
+ * VALID_TO (ISO local date-time; blank leaves the bound open) and ACTIVE
+ * (blank defaults to true).
  * <p>
  * Note: STORE_CODES and STORE_GROUP_CODES can contain multiple values separated by commas (e.g., "0101,0102").
  */
@@ -53,6 +55,15 @@ public class OfferCsvResource extends ImporterCsvResource {
     static final String COL_STORE_CODES = "STORE_CODES";
     /** Header name of the comma-separated target store group codes. */
     static final String COL_STORE_GROUP_CODES = "STORE_GROUP_CODES";
+
+    /** Header name of the optional validity-window start (inclusive). */
+    static final String COL_VALID_FROM = "VALID_FROM";
+
+    /** Header name of the optional validity-window end (exclusive). */
+    static final String COL_VALID_TO = "VALID_TO";
+
+    /** Header name of the optional active flag; blank defaults to true. */
+    static final String COL_ACTIVE = "ACTIVE";
 
     /** The columns this importer cannot work without. */
     static final List<String> REQUIRED_COLUMNS = List.of(
@@ -232,6 +243,9 @@ public class OfferCsvResource extends ImporterCsvResource {
         // Update Fields
         offer.type = safeGet(data, COL_TYPE);
         offer.specification = safeGet(data, COL_SPECIFICATION);
+        offer.validFrom = safeParseDateTime(data, COL_VALID_FROM);
+        offer.validTo = safeParseDateTime(data, COL_VALID_TO);
+        offer.active = parseActive(data);
         // Handle Target Linking
         // Validate: At least one target
         if (requestedStoreCodes.isEmpty() && requestedGroupCodes.isEmpty()) {
@@ -338,8 +352,29 @@ public class OfferCsvResource extends ImporterCsvResource {
         String groupCodes = groupCodeList.stream()
                 .sorted()
                 .collect(Collectors.joining("|"));
+        // Replicate Offer#getChecksum() exactly, activation fields included: getChecksum()
+        // now hashes active/validFrom/validTo, so omitting them here would make a byte-identical
+        // re-import mis-compare and report a spurious update.
         return Objects.hash(data.code, type, spec,
                 storeCodes,
-                groupCodes);
+                groupCodes,
+                parseActive(data),
+                safeParseDateTime(data, COL_VALID_FROM),
+                safeParseDateTime(data, COL_VALID_TO));
+    }
+
+    /**
+     * Parses the optional ACTIVE column: a blank or absent value defaults to true, so
+     * an offer is active unless explicitly deactivated by the feed.
+     *
+     * @param data The parsed line.
+     * @return The active flag carried by the line, true when the column is blank or absent.
+     */
+    private boolean parseActive(LineData data) {
+        String value = safeGet(data, COL_ACTIVE);
+        if (value == null || value.isBlank()) {
+            return true;
+        }
+        return Boolean.parseBoolean(value.trim());
     }
 }

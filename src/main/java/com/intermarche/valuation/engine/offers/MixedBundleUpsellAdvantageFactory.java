@@ -132,7 +132,7 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
      * @param store    The store context.
      */
     void processOffer(Offer offer, List<AdvantageApplier> appliers, Store store) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             JsonNode contentsNode = spec.get("contents");
             List<UpsellBundleComponent> components = new ArrayList<>();
 

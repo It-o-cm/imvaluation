@@ -177,6 +177,9 @@ public class OfferResource implements GraphQLTrait {
             offer.code = input.code;
             offer.type = input.type;
             offer.specification = input.specification;
+            if (input.active != null) offer.active = input.active;
+            offer.validFrom = input.validFrom;
+            offer.validTo = input.validTo;
             // Link Targets
             if (hasStores) {
                 Set<Store> stores = resolveStores(input.storeCodes);
@@ -219,6 +222,9 @@ public class OfferResource implements GraphQLTrait {
             // Apply Updates
             if (input.type != null) offer.type = input.type;
             if (input.specification != null) offer.specification = input.specification;
+            if (input.active != null) offer.active = input.active;
+            if (input.validFrom != null) offer.validFrom = input.validFrom;
+            if (input.validTo != null) offer.validTo = input.validTo;
             // Handle Store Relationship Updates
             if (input.storeCodes != null) {
                 offer.stores.clear();
@@ -316,6 +322,24 @@ public class OfferResource implements GraphQLTrait {
          * The JSON specification defining the offer rules.
          */
         public String specification;
+
+        /**
+         * Whether the offer is active; null leaves the flag unchanged on update and
+         * defaults to true on creation.
+         */
+        public Boolean active;
+
+        /**
+         * Start of the validity window (inclusive, ISO local date-time); null leaves the
+         * bound open (creation) or unchanged (update).
+         */
+        public java.time.LocalDateTime validFrom;
+
+        /**
+         * End of the validity window (exclusive, ISO local date-time); null leaves the
+         * bound open (creation) or unchanged (update).
+         */
+        public java.time.LocalDateTime validTo;
 
         /**
          * List of Store codes (business keys) to be linked to this offer.

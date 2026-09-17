@@ -1,4 +1,5 @@
 package com.intermarche.valuation.ui;
+import com.intermarche.valuation.domain.util.DomainUtils;
 
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Price;
@@ -108,7 +109,7 @@ public class ValuationUiResourceCoverageTest {
             price.priceUsage = PriceUsage.DEFAULT;
             price.priceExcludingTax = new BigDecimal("2.50");
             price.priceIncludingTax = new BigDecimal("3.00");
-            price.vatRate = new BigDecimal("0.2000");
+            price.vat = DomainUtils.resolveOrCreateVatRate(new BigDecimal("0.2000"));
             price.persist();
             // The engine also resolves a reference (BASE_FOR_DISCOUNT) price for every line.
             Price base = new Price();
@@ -117,7 +118,7 @@ public class ValuationUiResourceCoverageTest {
             base.priceUsage = PriceUsage.BASE_FOR_DISCOUNT;
             base.priceExcludingTax = new BigDecimal("2.75");
             base.priceIncludingTax = new BigDecimal("3.30");
-            base.vatRate = new BigDecimal("0.2000");
+            base.vat = DomainUtils.resolveOrCreateVatRate(new BigDecimal("0.2000"));
             base.persist();
         });
     }

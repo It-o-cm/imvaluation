@@ -136,7 +136,7 @@ public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, En
      * @param store    The store context.
      */
     private void processOffer(Offer offer, List<AdvantageApplier> appliers, Store store) {
-        this.processSpecification(OFFER_SCHEMA, offer.specification, (spec) -> {
+        this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
             int quantityToPay = spec.get("quantityToPay").asInt();
             int discountedQuantity = spec.get("discountedQuantity").asInt();
 

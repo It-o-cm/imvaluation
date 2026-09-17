@@ -56,7 +56,10 @@ public class AmountEvaluation {
     public AmountEvaluation(Price price) {
         this.amountExcludingTax = price.priceExcludingTax.setScale(2, RoundingMode.HALF_UP);
         this.amountIncludingTax = price.priceIncludingTax.setScale(2, RoundingMode.HALF_UP);
-        this.vatRate = price.vatRate.setScale(4, RoundingMode.HALF_UP);
+        // The rate is read through the regime the price names (Price#vatRate()); it is then
+        // SNAPSHOT into this evaluation's own field, exactly as before — a later change to the
+        // regime never rewrites an already computed line.
+        this.vatRate = price.vatRate().setScale(4, RoundingMode.HALF_UP);
     }
 
     /**
