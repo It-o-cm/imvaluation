@@ -42,8 +42,15 @@ public class VatRateCsvResource extends ImporterCsvResource {
 
     private static final Logger LOGGER = Logger.getLogger(VatRateCsvResource.class);
 
-    /** Header name of the natural key: the regime number. */
-    static final String COL_NUMBER = "NUMBER";
+    /**
+     * Header name of the natural key: the regime number.
+     *
+     * <p>Spelled {@code VAT_NUMBER} and not {@code NUMBER} because this file
+     * is no longer only a seed: the store node relays ITS vat-rates feed here
+     * verbatim, under the same header its own importer writes. One file, one
+     * spelling, on both sides of the boundary.
+     */
+    static final String COL_VAT_NUMBER = "VAT_NUMBER";
     /** Header name of the rate, as a fraction (0.0550). */
     static final String COL_RATE = "RATE";
     /** Header name of the human label (optional column). */
@@ -64,7 +71,7 @@ public class VatRateCsvResource extends ImporterCsvResource {
     @Produces(MediaType.APPLICATION_JSON)
     @RolesAllowed("ADMIN")
     public Response importVatRates(InputStream inputStream) {
-        return this.importCsvStream(inputStream, COL_NUMBER, REQUIRED_COLUMNS);
+        return this.importCsvStream(inputStream, COL_VAT_NUMBER, REQUIRED_COLUMNS);
     }
 
     /**

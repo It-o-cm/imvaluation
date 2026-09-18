@@ -173,15 +173,57 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
      * @return A map of EAN to {@link Product} entity.
      */
     private static Map<String, Product> getProductMap(Set<String> targetProductEans) {
-        // 3. Bulk Fetch Products (Children)
+        return productsByEan(targetProductEans);
+    }
+
+    /**
+     * Largest number of EANs put in one IN clause.
+     *
+     * <p>Modest on purpose: the point is not to be close to the driver's limit but to
+     * be safely under whatever limit the database of the day has.
+     */
+    private static final int EAN_BATCH = 500;
+
+    /**
+     * Loads products by EAN, in batches.
+     *
+     * <p>A single IN clause cannot carry a whole family. Everywhere else in these
+     * importers an IN clause holds the codes of a BATCH OF CSV LINES, which is bounded
+     * by construction; here it holds the EANs of ONE line, and a leaf of a real store
+     * hierarchy holds thousands of articles. Every value costs a bind parameter, and
+     * past a few hundred the statement is rejected outright. So the lookup is split
+     * and the results merged.
+     *
+     * @param eans the EANs to load, possibly empty
+     * @return a map from EAN to product, holding only the EANs that exist
+     */
+    private static Map<String, Product> productsByEan(Collection<String> eans) {
         Map<String, Product> productMap = new HashMap<>();
-        if (!targetProductEans.isEmpty()) {
-            List<Product> products = Product.list("ean IN ?1", targetProductEans);
-            for (Product p : products) {
-                productMap.put(p.ean, p);
+        List<String> batch = new ArrayList<>(EAN_BATCH);
+        for (String ean : eans) {
+            batch.add(ean);
+            if (batch.size() == EAN_BATCH) {
+                fetchBatch(productMap, batch);
+                batch.clear();
             }
         }
+        fetchBatch(productMap, batch);
         return productMap;
+    }
+
+    /**
+     * Adds one batch of products to the map.
+     *
+     * @param productMap the map being filled
+     * @param batch      the EANs of this batch; an empty one queries nothing
+     */
+    private static void fetchBatch(Map<String, Product> productMap, List<String> batch) {
+        if (batch.isEmpty()) {
+            return;
+        }
+        for (Product p : Product.<Product>list("ean IN ?1", batch)) {
+            productMap.put(p.ean, p);
+        }
     }
 
     /**
@@ -315,9 +357,7 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
         @SuppressWarnings("unchecked")
         Map<String, Product> productMap = (Map<String, Product>) entityMap.get(CTX_PRODUCTS);
         if (productMap == null && !requestedEans.isEmpty()) {
-            productMap = new HashMap<>();
-            List<Product> products = Product.list("ean IN ?1", requestedEans);
-            for (Product p : products) productMap.put(p.ean, p);
+            productMap = productsByEan(requestedEans);
         }
         return productMap;
     }
