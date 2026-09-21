@@ -127,7 +127,8 @@ public class OfferUiResource implements EngineTrait {
          * @return The template instance to render.
          */
         public static native TemplateInstance form(Offer offer, Set<String> types, String schemasJson,
-                                                   String storeCodes, String storeGroupCodes, String error);
+                                                   String specificationJson, String storeCodes,
+                                                   String storeGroupCodes, String error);
     }
 
     // --------------------------------------------------
@@ -232,20 +233,28 @@ public class OfferUiResource implements EngineTrait {
     }
 
     /**
-     * Strips the characters that would break the pipe-separated line format.
+     * Strips the characters that would break the pipe-separated line format and neutralises
+     * spreadsheet formula injection.
      * <p>
      * Specifications are JSON documents written by the editor and never contain pipes or
      * newlines, but a value imported from elsewhere might; replacing them keeps the export
-     * parseable rather than silently producing a corrupt file.
+     * parseable rather than silently producing a corrupt file. In addition, a cell whose first
+     * character is one a spreadsheet reads as a formula ({@code = + - @}, or a leading tab/CR) is
+     * prefixed with a single quote so opening the export in Excel/Sheets cannot execute an offer
+     * code that came from an untrusted feed (report §3).
      *
      * @param value The raw value, may be null.
-     * @return The value with separators neutralised, never null.
+     * @return The value with separators neutralised and formulas defused, never null.
      */
     private String sanitize(String value) {
         if (value == null) {
             return "";
         }
-        return value.replace("\r", " ").replace("\n", " ").replace("|", "/");
+        String cleaned = value.replace("\r", " ").replace("\n", " ").replace("|", "/");
+        if (!cleaned.isEmpty() && "=+-@\t".indexOf(cleaned.charAt(0)) >= 0) {
+            cleaned = "'" + cleaned;
+        }
+        return cleaned;
     }
 
     /**
@@ -262,7 +271,9 @@ public class OfferUiResource implements EngineTrait {
         LOGGER.debug("Entering method create");
         Offer offer = new Offer();
         offer.type = type;
-        return Templates.form(offer, schemaRegistry.getKnownTypes(), buildSchemasJson(), "", "", null);
+        return Templates.form(offer, schemaRegistry.getKnownTypes(),
+                HtmlSafeJson.forScript(buildSchemasJson()),
+                HtmlSafeJson.forScript(offer.specification), "", "", null);
     }
 
     /**
@@ -285,7 +296,8 @@ public class OfferUiResource implements EngineTrait {
         TemplateInstance template = Templates.form(
                 offer,
                 schemaRegistry.getKnownTypes(),
-                buildSchemasJson(),
+                HtmlSafeJson.forScript(buildSchemasJson()),
+                HtmlSafeJson.forScript(offer.specification),
                 joinStoreCodes(offer),
                 joinStoreGroupCodes(offer),
                 null);
@@ -554,6 +566,21 @@ public class OfferUiResource implements EngineTrait {
         return java.time.LocalDateTime.parse(value.trim());
     }
 
+    /**
+     * Applies the submitted form values to an offer after validating them.
+     * <p>
+     * Validation covers the mandatory fields, the uniqueness of the code on creation,
+     * the presence of at least one target, the existence of every referenced store and
+     * group, and finally the conformance of the specification to the registered schema.
+     *
+     * @param offer           The offer to populate.
+     * @param type            The submitted offer type.
+     * @param specification   The submitted JSON specification.
+     * @param storeCodes      The submitted store codes, comma separated.
+     * @param storeGroupCodes The submitted store group codes, comma separated.
+     * @param isNew           Whether the offer is being created.
+     * @return An error message when validation fails, {@code null} on success.
+     */
     private String applyForm(Offer offer, String type, String specification,
                              String storeCodes, String storeGroupCodes, boolean isNew) {
         if (offer.code == null || offer.code.isBlank()) {
@@ -669,7 +696,8 @@ public class OfferUiResource implements EngineTrait {
         TemplateInstance template = Templates.form(
                 offer,
                 schemaRegistry.getKnownTypes(),
-                buildSchemasJson(),
+                HtmlSafeJson.forScript(buildSchemasJson()),
+                HtmlSafeJson.forScript(offer.specification),
                 storeCodes == null ? "" : storeCodes,
                 storeGroupCodes == null ? "" : storeGroupCodes,
                 error);

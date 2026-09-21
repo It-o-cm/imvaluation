@@ -41,7 +41,7 @@ class StoreGroupTest {
         Store store = new Store();
         store.code = code;
         store.name = "Store " + code;
-        store.address = new Adresse();
+        store.address = new Address();
         store.persist();
         em.flush(); // CRITICAL: Forces ID generation for relationships
         return store;
@@ -88,7 +88,7 @@ class StoreGroupTest {
     }
 
     @Test
-    void getChecksum_shouldNotIncludeChildren() {
+    void getChecksum_shouldIncludeChildren() {
         StoreGroup parent = new StoreGroup();
         parent.code = "PARENT";
         parent.name = "Parent Group";
@@ -97,9 +97,10 @@ class StoreGroupTest {
         child.code = "CHILD";
         child.name = "Child Group";
         parent.storeGroups.add(child); // Add child to parent
-        // According to implementation, children are not part of the hash
+        // A4 (report §3): members are now part of the hash, so adding a child changes the checksum;
+        // a re-import that only alters membership is a real update, not a silent no-op.
         int checksum2 = parent.getChecksum();
-        assertEquals(checksum1, checksum2);
+        assertNotEquals(checksum1, checksum2);
     }
 
     // --------------------------------------------------

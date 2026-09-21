@@ -107,6 +107,23 @@ public abstract class OfferApplier {
     }
 
     /**
+     * Returns a stable key breaking ties between appliers of equal efficiency score (report C2).
+     * <p>
+     * The offer-applier sort orders by efficiency score descending; two appliers of equal score
+     * would otherwise keep whatever order their non-deterministic build produced, so the offer
+     * that consumes a shared line could differ between runs. The default key is the configuration
+     * code when the applier is born from a configuration row, otherwise the empty string; appliers
+     * built one-per-product (Basic valuation) override this to return their EAN. The key is never
+     * {@code null}, so it is a total order in the comparator.
+     *
+     * @return the stable tie-break key; never {@code null}.
+     */
+    public String getTieBreakKey() {
+        Offer configuration = getConfiguration();
+        return configuration != null && configuration.code != null ? configuration.code : "";
+    }
+
+    /**
      * Registers a discount applier to be used by the offer appliers created by this factory.
      * <p>
      * This method allows the factory to associate discount appliers with the offer appliers

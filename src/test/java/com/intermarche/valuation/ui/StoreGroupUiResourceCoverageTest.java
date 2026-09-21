@@ -1,6 +1,6 @@
 package com.intermarche.valuation.ui;
 
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Product;
@@ -90,7 +90,7 @@ public class StoreGroupUiResourceCoverageTest {
             Store store = new Store();
             store.code = code;
             store.name = "Store " + code;
-            store.address = new Adresse();
+            store.address = new Address();
             store.address.city = city;
             store.persist();
         });

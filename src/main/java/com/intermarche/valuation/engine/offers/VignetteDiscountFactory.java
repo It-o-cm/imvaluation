@@ -291,7 +291,16 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
             this.availableVignettes = availableVignettes;
             this.initialVignettes = Map.copyOf(availableVignettes);
             this.store = store;
-            this.productInCatalog = availableVignettes.keySet().stream().collect(Collectors.toMap(k -> k, Product::findByEan));
+            // An unknown EAN in the basket's vignettes map resolves to no product. Skip it rather
+            // than let Collectors.toMap reject the null value with an NPE (report H5): everywhere
+            // else an unknown product is ignored, and a bad vignette EAN is user input, not a 500.
+            this.productInCatalog = new java.util.LinkedHashMap<>();
+            for (String ean : availableVignettes.keySet()) {
+                Product product = Product.findByEan(ean);
+                if (product != null) {
+                    this.productInCatalog.put(ean, product);
+                }
+            }
         }
 
         /**
@@ -439,9 +448,9 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
             // Calculate unit discount
             AmountEvaluation unitDiscount = computeUnitDiscount(unitPriceHT, unitPriceTTC, totalProductPrice.vatRate, rule);
             // Scale to number of applications
-            BigDecimal totalHT = unitDiscount.amountExcludingTax.multiply(BigDecimal.valueOf(numberOfApplications)).setScale(2, RoundingMode.HALF_UP);
-            BigDecimal totalTTC = unitDiscount.amountIncludingTax.multiply(BigDecimal.valueOf(numberOfApplications)).setScale(2, RoundingMode.HALF_UP);
-            return new AmountEvaluation(totalHT, totalTTC, totalProductPrice.vatRate);
+            BigDecimal totalExclVat = unitDiscount.amountExcludingTax.multiply(BigDecimal.valueOf(numberOfApplications)).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal totalInclVat = unitDiscount.amountIncludingTax.multiply(BigDecimal.valueOf(numberOfApplications)).setScale(2, RoundingMode.HALF_UP);
+            return new AmountEvaluation(totalExclVat, totalInclVat, totalProductPrice.vatRate);
         }
 
         /**

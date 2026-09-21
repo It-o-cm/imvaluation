@@ -34,6 +34,11 @@ public class StoreGroupResource implements GraphQLTrait {
     // Queries (Retrieve) -> MANAGER only
     // --------------------------------------------------
 
+    /**
+     * Retrieves every store group stored in the database.
+     *
+     * @return The list of all StoreGroup entities.
+     */
     @Query
     @Description("Get the list of all store groups")
     @RolesAllowed("MANAGER")
@@ -44,6 +49,13 @@ public class StoreGroupResource implements GraphQLTrait {
         return result;
     }
 
+    /**
+     * Retrieves a single store group by its database identifier.
+     *
+     * @param id The identifier of the store group to retrieve.
+     * @return The matching StoreGroup entity.
+     * @throws NoSuchElementException if no group exists for the given id.
+     */
     @Query
     @Description("Get a store group by its ID")
     @RolesAllowed("MANAGER")
@@ -58,6 +70,13 @@ public class StoreGroupResource implements GraphQLTrait {
         return group;
     }
 
+    /**
+     * Retrieves a single store group by its business code.
+     *
+     * @param code The business code of the store group to retrieve.
+     * @return The matching StoreGroup entity.
+     * @throws NoSuchElementException if no group exists for the given code.
+     */
     @Query
     @Description("Get a store group by its code")
     @RolesAllowed("MANAGER")
@@ -206,6 +225,13 @@ public class StoreGroupResource implements GraphQLTrait {
         }, StoreGroupResource.class, "updateStoreGroup");
     }
 
+    /**
+     * Deletes a store group identified by its database identifier.
+     *
+     * @param id The identifier of the store group to delete.
+     * @return {@code true} if a group was deleted, {@code false} otherwise.
+     * @throws GraphQLException if a persistence error occurs during deletion.
+     */
     @Mutation
     @Description("Delete a store group by ID")
     @RolesAllowed("ADMIN")

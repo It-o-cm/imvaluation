@@ -30,8 +30,8 @@ import static org.mockito.Mockito.when;
 public class ValuationEngineCoverageTest {
 
     /**
-     * Covers the {@code catch} block of {@code createOfferApplications}: an offer applier
-     * that throws during {@code apply} is wrapped and re-thrown as a {@link RuntimeException}.
+     * Covers the {@code catch} block of {@code createOfferApplications}: a generic (non
+     * {@code ConfigurationException}) offer applier error propagates unwrapped (A2, report H1a).
      */
     @Test
     void createOfferApplicationsWrapsApplierException() {
@@ -63,13 +63,12 @@ public class ValuationEngineCoverageTest {
         ValuationEngine engine = new ValuationEngine();
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> engine.createOfferApplications(appliers, evaluation));
-        assertTrue(ex.getMessage().contains("Error applying offer logic"));
         assertTrue(ex.getMessage().contains("boom-offer"));
     }
 
     /**
-     * Covers the {@code catch} block of {@code createDiscountApplications}: a discount applier
-     * that throws during {@code apply} is wrapped and re-thrown as a {@link RuntimeException}.
+     * Covers the {@code catch} block of {@code createDiscountApplications}: a generic (non
+     * {@code ConfigurationException}) discount applier error propagates unwrapped (A2, report H1a).
      */
     @Test
     void createDiscountApplicationsWrapsApplierException() {
@@ -84,13 +83,12 @@ public class ValuationEngineCoverageTest {
         ValuationEngine engine = new ValuationEngine();
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> engine.createDiscountApplications(appliers, evaluation));
-        assertTrue(ex.getMessage().contains("Error applying discount logic"));
         assertTrue(ex.getMessage().contains("boom-discount"));
     }
 
     /**
-     * Covers the {@code catch} block of {@code createDiscountAppliers}: a factory that throws
-     * from {@code buildAppliers} is wrapped and re-thrown as a {@link RuntimeException}.
+     * Covers the {@code catch} block of {@code createDiscountAppliers}: a generic (non
+     * {@code ConfigurationException}) factory error propagates unwrapped (A2, report H1a).
      */
     @Test
     @SuppressWarnings("unchecked")
@@ -104,8 +102,27 @@ public class ValuationEngineCoverageTest {
         BasketEvaluation evaluation = mock(BasketEvaluation.class);
         RuntimeException ex = assertThrows(RuntimeException.class,
                 () -> engine.createDiscountAppliers(evaluation));
-        assertTrue(ex.getMessage().contains("Error building appliers from factory"));
         assertTrue(ex.getMessage().contains("build-boom"));
+    }
+
+    /**
+     * Covers the fail-closed branch (A2, report H1a): a factory whose {@code buildAppliers}
+     * throws a {@link ConfigurationException} is skipped rather than propagated, the skip is
+     * recorded on the evaluation, and the evaluation continues (here, with no appliers).
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void createDiscountAppliersSkipsConfigurationException() {
+        Instance<AdvantageApplierFactory> factories = mock(Instance.class);
+        AdvantageApplierFactory factory = mock(AdvantageApplierFactory.class);
+        when(factories.iterator()).thenReturn(List.of(factory).iterator());
+        when(factory.buildAppliers(any())).thenThrow(new ConfigurationException("bad-spec"));
+        ValuationEngine engine = new ValuationEngine();
+        engine.discountFactories = factories;
+        BasketEvaluation evaluation = mock(BasketEvaluation.class);
+        List<AdvantageApplier> appliers = engine.createDiscountAppliers(evaluation);
+        assertTrue(appliers.isEmpty(), "a corrupted configuration is skipped, not propagated");
+        org.mockito.Mockito.verify(evaluation).recordSkippedConfiguration(any());
     }
 
     /**

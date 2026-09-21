@@ -90,7 +90,7 @@ public class TieredInstrumentEndToEndTest {
         // VAT regimes before prices (mirrors the production seed order): a price attaches to the
         // regime carrying its rate.
         importCsv("/vat-rates/import", """
-                NUMBER|RATE|LABEL
+                VAT_NUMBER|RATE|LABEL
                 1|0.2000|Taux normal
                 2|0.0550|Taux réduit
                 3|0.1000|Taux intermédiaire

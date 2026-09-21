@@ -38,7 +38,7 @@ import java.util.Set;
  * eligible articles, channels) so the downstream systems need no second lookup.
  * <p>
  * The threshold mechanics are shared with the tiered discounts through {@link TierTable}:
- * highest-reached tiers, progressive brackets or a repeating step, on an assiette drawn
+ * highest-reached tiers, progressive brackets or a repeating step, on an base drawn
  * from the product-aware offer applications (a target EAN list or the whole merchandise
  * total). Amounts are granted in euros or in points ({@code unit}).
  * <p>
@@ -57,7 +57,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
      * included minus the tax excluded.
      * <p>
      * Shared so the {@code VAT_AMOUNT} grant award and the {@code VAT_REFUND_DISCOUNT}
-     * advantage agree to the cent on what the VAT of an assiette is worth; duplicating the
+     * advantage agree to the cent on what the VAT of an base is worth; duplicating the
      * formula is precisely what the specification forbids. A {@code null} amount, or one with
      * a missing component, contributes zero (a gift card at VAT 0 contributes 0).
      *
@@ -78,7 +78,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
     {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Instrument Grant Offer Specification",
-      "description": "Defines a voucher or coupon granted by the basket: tier mechanics on an assiette, an amount in euros or points, and echoed usage constraints.",
+      "description": "Defines a voucher or coupon granted by the basket: tier mechanics on an base, an amount in euros or points, and echoed usage constraints.",
       "type": "object",
       "required": ["scope", "metric", "mode"],
       "oneOf": [
@@ -89,14 +89,14 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         "scope": {
           "type": "string",
           "enum": ["ITEMS", "TICKET"],
-          "description": "ITEMS draws the assiette from the listed EANs; TICKET from the whole merchandise total.",
+          "description": "ITEMS draws the base from the listed EANs; TICKET from the whole merchandise total.",
           "x-label": "Scope"
         },
         "targetEans": {
           "type": "array",
           "minItems": 1,
           "items": { "type": "string" },
-          "description": "Products the assiette is drawn from. Required when the scope is ITEMS.",
+          "description": "Products the base is drawn from. Required when the scope is ITEMS.",
           "x-widget": "ean-list",
           "x-label": "Eligible products"
         },
@@ -204,7 +204,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             "type": {
               "type": "string",
               "enum": ["PERCENTAGE", "AMOUNT", "AMOUNT_PER_ITEM", "VAT_AMOUNT"],
-              "description": "PERCENTAGE of the assiette; AMOUNT flat (once, or per step in PER_MULTIPLE); AMOUNT_PER_ITEM per unit; VAT_AMOUNT grants the VAT of the assiette.",
+              "description": "PERCENTAGE of the base; AMOUNT flat (once, or per step in PER_MULTIPLE); AMOUNT_PER_ITEM per unit; VAT_AMOUNT grants the VAT of the base.",
               "x-label": "Award type"
             },
             "value": {
@@ -222,12 +222,12 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
     """;
 
     /**
-     * Scope of the assiette: a list of products or the whole merchandise total.
+     * Scope of the base: a list of products or the whole merchandise total.
      */
     public enum Scope {
-        /** The assiette is drawn from the products listed in {@code targetEans}. */
+        /** The base is drawn from the products listed in {@code targetEans}. */
         ITEMS,
-        /** The assiette is the merchandise total (product-aware offers only). */
+        /** The base is the merchandise total (product-aware offers only). */
         TICKET
     }
 
@@ -242,7 +242,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
     }
 
     /**
-     * How the tiers apply to the assiette.
+     * How the tiers apply to the base.
      */
     public enum Mode {
         /** The highest reached tier applies once. */
@@ -257,13 +257,13 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
      * Nature of the award granted by a tier.
      */
     public enum AwardType {
-        /** A percentage of the assiette (or of the slice in PROGRESSIVE mode). */
+        /** A percentage of the base (or of the slice in PROGRESSIVE mode). */
         PERCENTAGE,
         /** A flat amount: once in HIGHEST_REACHED, once per step in PER_MULTIPLE. */
         AMOUNT,
         /** An amount per targeted unit (per unit of the slice in PROGRESSIVE mode). */
         AMOUNT_PER_ITEM,
-        /** The VAT amount of the assiette (HIGHEST_REACHED mode only). */
+        /** The VAT amount of the base (HIGHEST_REACHED mode only). */
         VAT_AMOUNT
     }
 
@@ -420,7 +420,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
      * Validates the specification rules spanning several fields.
      *
      * @param offerCode  the offer code, for error messages.
-     * @param scope      the assiette scope.
+     * @param scope      the base scope.
      * @param metric    the metric dimension.
      * @param mode       the tier mode.
      * @param targetEans the parsed target EANs.
@@ -459,7 +459,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
     }
 
     /**
-     * One product's contribution to the assiette through one offer application.
+     * One product's contribution to the base through one offer application.
      *
      * @param quantity the covered quantity in standard units; zero in TICKET scope.
      * @param amount   the amount the application attributes to the product (or its whole
@@ -487,7 +487,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         private Offer configuration;
 
         /**
-         * The assiette scope.
+         * The base scope.
          */
         private final Scope scope;
 
@@ -535,7 +535,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
          * Creates the applier for one offer.
          *
          * @param code           the offer code.
-         * @param scope          the assiette scope.
+         * @param scope          the base scope.
          * @param metric        the metric dimension.
          * @param mode           the tier mode.
          * @param unit           the unit of the granted amount.
@@ -596,10 +596,10 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         /**
          * Computes the granted instrument for the current evaluation.
          * <p>
-         * The assiette is gathered from the product-aware offer applications, the tier
+         * The base is gathered from the product-aware offer applications, the tier
          * mode computes the granted amount, and a single informational application is
          * emitted when the amount is strictly positive. Nothing is capped: the RFP
-         * explicitly allows instruments larger than the assiette.
+         * explicitly allows instruments larger than the base.
          *
          * @param evaluation the evaluation context containing the applied offers.
          * @return zero or one {@link InstrumentGrantApplication}.
@@ -691,7 +691,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         }
 
         /**
-         * Gathers the contributions of the assiette from the product-aware applications.
+         * Gathers the contributions of the base from the product-aware applications.
          *
          * @param evaluation the evaluation context.
          * @return the contributions, empty when nothing is covered.
@@ -731,9 +731,9 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
          * Computes the value of one award applied once in HIGHEST_REACHED mode.
          *
          * @param award        the award to value.
-         * @param baseAmount   the monetary assiette, tax included.
-         * @param baseVat      the VAT amount of the assiette.
-         * @param baseQuantity the assiette in standard units.
+         * @param baseAmount   the monetary base, tax included.
+         * @param baseVat      the VAT amount of the base.
+         * @param baseQuantity the base in standard units.
          * @param times        how many times the award applies.
          * @return the raw granted value.
          */
@@ -748,10 +748,10 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         }
 
         /**
-         * Computes the average unit price of the assiette, used to value quantity slices.
+         * Computes the average unit price of the base, used to value quantity slices.
          *
-         * @param baseAmount   the monetary assiette, tax included.
-         * @param baseQuantity the assiette in standard units.
+         * @param baseAmount   the monetary base, tax included.
+         * @param baseQuantity the base in standard units.
          * @return the average unit price at four decimals, or zero when no unit exists.
          */
         private BigDecimal averageUnit(BigDecimal baseAmount, BigDecimal baseQuantity) {

@@ -253,7 +253,7 @@ public class DeliveryOfferFactoryTest {
      * Tests {@link DeliveryOfferFactory.DeliveryApplication#getItems()}.
      */
     @Test
-    void testDeliveryApplication_GetItems_ReturnsNull() {
+    void testDeliveryApplication_GetItems_ReturnsEmpty() {
         setUpDatabase();
         // Arrange: Create application manually
         DeliveryOfferFactory.DeliveryApplication app =
@@ -262,8 +262,9 @@ public class DeliveryOfferFactoryTest {
         // Act
         Collection<Basket.Item> items = app.getItems();
 
-        // Assert
-        assertNull(items, "Delivery application should return null for items");
+        // Assert: report §4 — a collection accessor returns an empty list, never null.
+        assertNotNull(items, "Delivery application should return an empty collection, not null");
+        assertTrue(items.isEmpty(), "Delivery consumes no items");
     }
 
     /**

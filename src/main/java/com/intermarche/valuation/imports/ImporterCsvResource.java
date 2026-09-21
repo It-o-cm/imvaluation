@@ -53,6 +53,11 @@ import java.util.stream.Collectors;
  * line in individual transactions — one bad row costs its own error entry,
  * never the batch. The per-line checksum comparison makes re-importing the
  * same file a no-op (updatedCount counts real changes only).
+ * <p>
+ * Quoting is NOT supported and a leading UTF-8 BOM is stripped from the header: fields are split
+ * on {@code |} with no escape mechanism, so a value must never itself contain a {@code |} — it
+ * would shift every following column of the line. A malformed date, an unknown boolean token or a
+ * short (truncated) line is rejected per line, never applied silently (report §3).
  */
 @RunOnVirtualThread
 public abstract class ImporterCsvResource {
@@ -98,28 +103,42 @@ public abstract class ImporterCsvResource {
             String line;
             int lineNumber = 0;
             Map<String, Integer> header = null;
+            int headerWidth = 0;
             List<LineData> parsedLines = new ArrayList<>(STAGE_1_SIZE);
             Set<String> targetCodes = new HashSet<>(STAGE_1_SIZE);
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
+                // Strip a leading UTF-8 BOM (U+FEFF), which trim() does not remove: left in place
+                // it would make the first header cell "<BOM>CODE", so the key column would not
+                // match and the whole file would be rejected with a misleading message (report §3).
+                if (line.startsWith("\uFEFF")) {
+                    line = line.substring(1);
+                }
                 line = line.trim();
                 if (line.isEmpty()) continue;
                 if (header == null) {
                     header = parseHeader(line);
+                    // Compare a short line against the number of header POSITIONS, not the count of
+                    // distinct names (report §3): a header like A|B|B|C has 3 distinct names but 4
+                    // positions, and a mapped index could otherwise exceed a short line's cells
+                    // without tripping the guard, reading a silently shifted value.
+                    headerWidth = header.values().stream().mapToInt(Integer::intValue).max().orElse(-1) + 1;
                     List<String> missing = missingColumns(header, keyColumn, requiredColumns);
                     if (!missing.isEmpty()) {
                         return Response.status(Response.Status.BAD_REQUEST)
                                 .entity("{\"error\":\"Missing required columns: "
-                                        + String.join(", ", missing) + "\"}")
+                                        + jsonEscape(String.join(", ", missing)) + "\"}")
                                 .build();
                     }
                     continue;
                 }
                 String[] parts = line.split("\\|", -1);
-                // A line with fewer cells than the header is a real anomaly
-                // (a truncated row), reported — never silently dropped.
-                if (parts.length < header.size()) {
-                    errors.add("Line " + lineNumber + " ignored (fewer cells than the header): " + line);
+                // A line with fewer cells than the header positions is a real anomaly (a truncated
+                // row), reported — never silently dropped. The raw line is not embedded in the
+                // message (report §3): an error report must not balloon with full payload lines.
+                if (parts.length < headerWidth) {
+                    errors.add("Line " + lineNumber + " ignored (fewer cells than the header: "
+                            + parts.length + " < " + headerWidth + ")");
                     continue;
                 }
                 LineData lineData = new LineData(lineNumber, header, parts, keyColumn);
@@ -256,18 +275,67 @@ public abstract class ImporterCsvResource {
 
     /**
      * Builds a JSON response string summarizing the import results.
+     * <p>
+     * Every error string is JSON-escaped (report H7): a quote, a backslash or a control character
+     * in a CSV cell or an underlying exception message would otherwise break the JSON and could
+     * inject false keys into the response.
      */
     private static StringBuilder buildAnswer(int[] counters, List<String> errors) {
         StringBuilder sb = new StringBuilder();
         sb.append("{\"createdCount\":").append(counters[0]);
         sb.append(", \"updatedCount\":").append(counters[1]);
         if (!errors.isEmpty()) {
-            sb.append(", \"errors\":[\"");
-            sb.append(String.join("\",\"", errors));
-            sb.append("\"]");
+            // Cap the reported errors (report §3): a fully poisoned chunk would otherwise return a
+            // response of hundreds of megabytes. Keep the first 100 and summarise the rest.
+            int cap = Math.min(errors.size(), 100);
+            sb.append(", \"errors\":[");
+            for (int i = 0; i < cap; i++) {
+                if (i > 0) {
+                    sb.append(',');
+                }
+                sb.append('"').append(jsonEscape(errors.get(i))).append('"');
+            }
+            if (errors.size() > cap) {
+                sb.append(",\"... and ").append(errors.size() - cap).append(" more\"");
+            }
+            sb.append("]");
         }
         sb.append("}");
         return sb;
+    }
+
+    /**
+     * Escapes a string for safe inclusion inside a JSON string literal (report H7).
+     * <p>
+     * Escapes the backslash, the double quote and the control characters (below U+0020) that a
+     * hand-built JSON answer would otherwise emit verbatim, breaking the document.
+     *
+     * @param value The raw value, may be null.
+     * @return The escaped value, or an empty string when null.
+     */
+    protected static String jsonEscape(String value) {
+        if (value == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(value.length() + 8);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.toString();
     }
 
     /**
@@ -470,17 +538,24 @@ public abstract class ImporterCsvResource {
     /**
      * Parses a Boolean column resolved by name.
      * <p>
-     * Returns {@code false} for an absent column, an empty cell or an
-     * unparseable value.
+     * Returns {@code false} for an absent column or an empty cell. A present token must be
+     * {@code true} or {@code false} (case-insensitive); any other value rejects the line (report
+     * §3): {@code Boolean.parseBoolean} would otherwise read {@code 1}, {@code Y} or {@code OUI} as
+     * {@code false} and silently deactivate the whole catalog when a feed changes its convention.
      *
      * @param data The parsed CSV line.
      * @param column The header name of the column.
-     * @return The Boolean value, or false on any missing/invalid input.
+     * @return The Boolean value, or false when the column is absent or blank.
+     * @throws IllegalArgumentException when the token is present but not {@code true}/{@code false}.
      */
     boolean safeParseBoolean(LineData data, String column) {
         String val = data.get(column);
         if (val == null || val.isEmpty()) return false;
-        return Boolean.parseBoolean(val);
+        String token = val.trim();
+        if (token.equalsIgnoreCase("true")) return true;
+        if (token.equalsIgnoreCase("false")) return false;
+        throw new IllegalArgumentException(
+                "Invalid boolean in column '" + column + "': '" + val + "' (expected true or false)");
     }
 
     /**
@@ -523,7 +598,10 @@ public abstract class ImporterCsvResource {
      *
      * @param data The parsed CSV line.
      * @param column The header name of the column.
-     * @return The LocalDateTime value, or null on any missing/invalid input.
+     * @return The LocalDateTime value, or null when the column is absent or blank (an open bound).
+     * @throws IllegalArgumentException when the column is PRESENT but unparseable (report H6b): a
+     *         malformed date must reject the line, not silently collapse into {@code null} — which
+     *         would open a validity window or change a price's natural key without any error.
      */
     LocalDateTime safeParseDateTime(LineData data, String column) {
         String val = data.get(column);
@@ -531,8 +609,8 @@ public abstract class ImporterCsvResource {
         try {
             return LocalDateTime.parse(val, DATE_FORMATTER);
         } catch (Exception e) {
-            LOGGER.warn("Invalid date format in column '" + column + "': " + val);
-            return null;
+            throw new IllegalArgumentException(
+                    "Invalid date in column '" + column + "': '" + val + "' (expected YYYY-MM-DDTHH:MM:SS)");
         }
     }
 

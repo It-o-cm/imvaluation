@@ -5,7 +5,7 @@ import com.intermarche.valuation.domain.StoreGroup;
 import com.intermarche.valuation.domain.ProductFamily;
 import com.intermarche.valuation.domain.ProductCategoryStorage;
 import com.intermarche.valuation.domain.Offer;
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
@@ -929,12 +929,12 @@ public class PriceCsvResourceTest {
     // --------------------------------------------------
 
     /**
-     * Creates a valid {@link Adresse} object for use in test data.
+     * Creates a valid {@link Address} object for use in test data.
      *
      * @return A new Address instance.
      */
-    private Adresse createTestAddress() {
-        Adresse a = new Adresse();
+    private Address createTestAddress() {
+        Address a = new Address();
         a.streetLine1 = "1 Test Street";
         a.city = "Paris";
         a.postalCode = "75000";

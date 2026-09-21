@@ -12,7 +12,7 @@ import java.util.Objects;
  * Uses public fields to comply with the project's Panache/Entity conventions.
  */
 @Embeddable
-public class Adresse {
+public class Address {
 
     // --------------------------------------------------
     // Address Fields
@@ -62,7 +62,7 @@ public class Adresse {
     /**
      * Default constructor required by JPA/Hibernate.
      */
-    public Adresse() {
+    public Address() {
     }
 
     /**
@@ -76,7 +76,7 @@ public class Adresse {
      * @param latitude    Latitude
      * @param longitude   Longitude
      */
-    public Adresse(String streetLine1, String streetLine2, String postalCode, String city, String country, Double latitude, Double longitude) {
+    public Address(String streetLine1, String streetLine2, String postalCode, String city, String country, Double latitude, Double longitude) {
         this.streetLine1 = streetLine1;
         this.streetLine2 = streetLine2;
         this.postalCode = postalCode;
@@ -91,25 +91,45 @@ public class Adresse {
     // --------------------------------------------------
     // Important for Value Objects: they should be compared by content.
 
+    /**
+     * Compares this address with another object for content equality.
+     * <p>
+     * Two addresses are equal when all their fields are equal, as befits a value object.
+     *
+     * @param o The object to compare with.
+     * @return {@code true} if the other object is an Address with identical field values.
+     */
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        Adresse adresse = (Adresse) o;
-        return Objects.equals(streetLine1, adresse.streetLine1) &&
-                Objects.equals(streetLine2, adresse.streetLine2) &&
-                Objects.equals(postalCode, adresse.postalCode) &&
-                Objects.equals(city, adresse.city) &&
-                Objects.equals(country, adresse.country) &&
-                Objects.equals(latitude, adresse.latitude) &&
-                Objects.equals(longitude, adresse.longitude);
+        Address other = (Address) o;
+        return Objects.equals(streetLine1, other.streetLine1) &&
+                Objects.equals(streetLine2, other.streetLine2) &&
+                Objects.equals(postalCode, other.postalCode) &&
+                Objects.equals(city, other.city) &&
+                Objects.equals(country, other.country) &&
+                Objects.equals(latitude, other.latitude) &&
+                Objects.equals(longitude, other.longitude);
     }
 
+    /**
+     * Computes a hash code consistent with {@link #equals(Object)}.
+     *
+     * @return A hash code derived from all address fields.
+     */
     @Override
     public int hashCode() {
         return Objects.hash(streetLine1, streetLine2, postalCode, city, country, latitude, longitude);
     }
 
+    /**
+     * Computes a content-based checksum for this address.
+     * <p>
+     * Derived from all address fields, it is used to detect changes to the address content.
+     *
+     * @return The checksum computed from all address fields.
+     */
     public int getChecksum() {
         int checksum = Objects.hash(
             streetLine1,

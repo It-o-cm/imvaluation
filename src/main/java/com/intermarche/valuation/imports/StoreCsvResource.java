@@ -1,6 +1,6 @@
 package com.intermarche.valuation.imports;
 
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Store;
 import io.quarkus.hibernate.orm.panache.Panache;
 import io.smallrye.common.annotation.RunOnVirtualThread;
@@ -21,7 +21,7 @@ import java.util.*;
  * REST Endpoint for bulk importing or updating Stores from a CSV file stream.
  * <p>
  * This class extends {@link ImporterCsvResource} to handle specific logic for {@link Store} entities.
- * It manages the embedded {@link Adresse} object and leverages the base class for the staged transaction management (1000 -> 100 -> 10 -> 1).
+ * It manages the embedded {@link Address} object and leverages the base class for the staged transaction management (1000 -> 100 -> 10 -> 1).
  * <p>
  * Consumed columns (resolved by header name; unknown columns of the
  * shared feed are ignored): CODE (key), NAME, STREET_LINE1, STREET_LINE2,
@@ -106,7 +106,7 @@ public class StoreCsvResource extends ImporterCsvResource {
      * <p>
      * This method is called by the generic staging algorithm for each line.
      * It retrieves the Store from the provided map.
-     * If the store is new, it initializes the embedded {@link Adresse}.
+     * If the store is new, it initializes the embedded {@link Address}.
      *
      * @param data       The parsed CSV line data.
      * @param entityMap  The map of existing stores (Key: Code, Value: Store).
@@ -157,7 +157,7 @@ public class StoreCsvResource extends ImporterCsvResource {
         store.name = safeGet(data, COL_NAME);
         // Ensure Address object exists
         if (store.address == null) {
-            store.address = new Adresse();
+            store.address = new Address();
         }
         store.address.streetLine1 = safeGet(data, COL_STREET_LINE1);
         store.address.streetLine2 = safeGet(data, COL_STREET_LINE2);
@@ -171,7 +171,7 @@ public class StoreCsvResource extends ImporterCsvResource {
     /**
      * Computes the checksum for the incoming CSV data.
      * <p>
-     * Replicates {@link Store#getChecksum()} and {@link Adresse#getChecksum()} logic.
+     * Replicates {@link Store#getChecksum()} and {@link Address#getChecksum()} logic.
      *
      * @param data The parsed CSV line data.
      * @return The integer hash of the incoming data.

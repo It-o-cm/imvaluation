@@ -201,7 +201,7 @@ public class AmountEvaluation {
         // 3. Calculation based on ProductType
         BigDecimal qty = BigDecimal.valueOf(quantity);
         // --- Logic for Weighted or Volume Products ---
-        // Requirement: "La quantité est donnée en kg".
+        // Requirement: the quantity is given in kilograms.
         if (product.productType == ProductType.WEIGHT) {
             // Check for Reference Weight presence
             if (product.referenceWeight == null || product.referenceWeight.compareTo(BigDecimal.ZERO) <= 0) {
@@ -211,10 +211,10 @@ public class AmountEvaluation {
                         product.name, product.ean, product.productType
                 ));
             }
-            BigDecimal refWeight = product.referenceWeight; // En Kg
-            // Ratio = Quantité Achetée (Kg) / Poids de Référence (Kg)
+            BigDecimal refWeight = product.referenceWeight; // in kg
+            // Ratio = purchased quantity (kg) / reference weight (kg)
             BigDecimal ratio = qty.divide(refWeight, 6, RoundingMode.HALF_UP);
-            // Prix Final = Prix de l'unité de référence * Ratio
+            // Final price = reference-unit price * ratio
             return new AmountEvaluation(price).multiply(ratio);
         }
         else if (product.productType == ProductType.VOLUME) {
@@ -226,10 +226,10 @@ public class AmountEvaluation {
                         product.name, product.ean, product.productType
                 ));
             }
-            BigDecimal refVolume = product.referenceVolume; // En Kg
-            // Ratio = Quantité Achetée (Kg) / Poids de Référence (Kg)
+            BigDecimal refVolume = product.referenceVolume; // in reference volume units
+            // Ratio = purchased quantity / reference volume
             BigDecimal ratio = qty.divide(refVolume, 6, RoundingMode.HALF_UP);
-            // Prix Final = Prix de l'unité de référence * Ratio
+            // Final price = reference-unit price * ratio
             return new AmountEvaluation(price).multiply(ratio);
         }
         // --- Logic for Standard Unit Products ---

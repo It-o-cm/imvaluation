@@ -1,6 +1,6 @@
 package com.intermarche.valuation.ui;
 
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.ProductFamily;
 import com.intermarche.valuation.domain.ProductType;
@@ -87,7 +87,7 @@ public class LookupResourceCoverageTest {
             store.code = code;
             store.name = name;
             if (city != null) {
-                Adresse address = new Adresse();
+                Address address = new Address();
                 address.city = city;
                 store.address = address;
             }

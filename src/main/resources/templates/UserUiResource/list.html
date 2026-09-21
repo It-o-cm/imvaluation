@@ -85,7 +85,7 @@
             <a class="btn btn-small" href="/ui/users/{user.id}">Edit</a>
             {#if user.username != currentUser}
             <form method="post" action="/ui/users/{user.id}/delete"
-                  onsubmit="return confirm('Delete account {user.username} ?');">
+                  data-confirm="Delete account {user.username} ?">
                 <button class="btn btn-small btn-danger" type="submit">Delete</button>
             </form>
             {/if}

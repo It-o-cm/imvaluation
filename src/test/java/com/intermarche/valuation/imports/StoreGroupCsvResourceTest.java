@@ -5,7 +5,7 @@ import com.intermarche.valuation.domain.ProductCategoryStorage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Offer;
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
 import io.quarkus.test.junit.QuarkusTest;
@@ -241,7 +241,7 @@ public class StoreGroupCsvResourceTest {
             Store s = new Store();
             s.code = "S001";
             s.name = "Store 1";
-            s.address = new Adresse();
+            s.address = new Address();
             s.address.city = "Paris";
             s.persist();
             return true;
@@ -367,7 +367,7 @@ public class StoreGroupCsvResourceTest {
             Store store = new Store();
             store.code = validStoreCode;
             store.name = "Store Valide";
-            store.address = new Adresse();
+            store.address = new Address();
             store.address.city = "Paris";
             store.persist();
             return true;

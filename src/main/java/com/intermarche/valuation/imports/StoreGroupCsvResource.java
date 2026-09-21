@@ -169,18 +169,63 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
      */
     @Override
     protected void processLineLogic(LineData data, Map<String, Object> entityMap, int[] counters) {
-        // Step 1: Get or Create the StoreGroup (The Parent/Current Entity)
-        StoreGroup group = getOrCreateStoreGroup(data, entityMap, counters);
-
-        // Step 2: Link Stores
         @SuppressWarnings("unchecked")
         Map<String, Store> storeMap = (Map<String, Store>) entityMap.get(CTX_STORES);
-        linkStores(data, storeMap, group);
-
-        // Step 3: Link Sub-Groups
         @SuppressWarnings("unchecked")
         Map<String, StoreGroup> childGroupMap = (Map<String, StoreGroup>) entityMap.get(CTX_CHILD_GROUPS);
-        linkSubGroups(data, childGroupMap, group);
+        @SuppressWarnings("unchecked")
+        Map<String, StoreGroup> groupMap = (Map<String, StoreGroup>) entityMap.get(CTX_GROUPS);
+
+        String groupName = safeGet(data, COL_NAME);
+        List<String> requestedStoreCodes = sortedCodes(safeGet(data, COL_STORE_CODES));
+        List<String> requestedSubCodes = sortedCodes(safeGet(data, COL_STORE_GROUP_CODES));
+        // A4 (report §3): the checksum includes the (sorted) member codes, so a re-import that only
+        // changes membership is detected as a real update rather than a silent no-op.
+        int incomingChecksum = computeChecksum(data.code, groupName, requestedStoreCodes, requestedSubCodes);
+
+        StoreGroup group = groupMap.get(data.code);
+        if (group == null) {
+            group = StoreGroup.find("code", data.code).firstResult();
+        }
+        if (group == null) {
+            // CREATE
+            group = new StoreGroup();
+            group.code = data.code;
+            group.name = groupName;
+            replaceStores(requestedStoreCodes, storeMap, group);
+            replaceSubGroups(requestedSubCodes, childGroupMap, group);
+            Panache.getEntityManager().persist(group);
+            counters[0]++;
+            groupMap.put(data.code, group);
+        } else if (group.checksum != incomingChecksum) {
+            // UPDATE — re-attach the (possibly detached) instance so the changes are flushed, then
+            // REPLACE the members (A4): a member dropped from the feed is removed from the group.
+            group = StoreGroup.findById(group.id);
+            group.name = groupName;
+            replaceStores(requestedStoreCodes, storeMap, group);
+            replaceSubGroups(requestedSubCodes, childGroupMap, group);
+            counters[1]++;
+        }
+    }
+
+    /**
+     * Splits a semicolon-separated code list into a sorted, de-duplicated, trimmed list.
+     * <p>
+     * Sorting makes the membership checksum order-independent, matching {@link StoreGroup#getChecksum()}.
+     *
+     * @param raw the raw semicolon-separated cell, may be null.
+     * @return the sorted distinct non-empty codes; never null.
+     */
+    private static List<String> sortedCodes(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return new ArrayList<>();
+        }
+        return java.util.Arrays.stream(raw.split(";"))
+                .map(String::trim)
+                .filter(c -> !c.isEmpty())
+                .distinct()
+                .sorted()
+                .collect(java.util.stream.Collectors.toList());
     }
 
     // --------------------------------------------------
@@ -198,80 +243,44 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
      * @param counters  The counters array to update.
      * @return The managed StoreGroup entity.
      */
-    StoreGroup getOrCreateStoreGroup(LineData data, Map<String, Object> entityMap, int[] counters) {
-        @SuppressWarnings("unchecked")
-        Map<String, StoreGroup> groupMap = (Map<String, StoreGroup>) entityMap.get(CTX_GROUPS);
-
-        StoreGroup group = groupMap.get(data.code);
-
-        // If not in map, check DB (might have been created earlier in this transaction/chunk)
-        if (group == null) {
-            group = StoreGroup.find("code", data.code).firstResult();
-        }
-
-        String groupName = safeGet(data, COL_NAME);
-
-        if (group == null) {
-            // CREATE
-            group = new StoreGroup();
-            group.code = data.code;
-            group.name = groupName;
-            Panache.getEntityManager().persist(group);
-            counters[0]++; // Created
-            // Optional: Add to map so subsequent lines in this chunk see it
-            groupMap.put(data.code, group);
-        } else {
-            // UPDATE (Check Checksum)
-            int incomingChecksum = computeChecksum(data.code, groupName);
-            if (group.checksum != incomingChecksum) {
-                // Re-attach to be safe, though Panache usually handles it
-                group = StoreGroup.findById(group.id);
-                group.name = groupName;
-                counters[1]++; // Updated
-            }
-        }
-        return group;
-    }
-
     /**
-     * Links Stores to the parent StoreGroup.
+     * Replaces the group's stores with exactly the requested set (A4 replace semantics).
+     * <p>
+     * Clears the current stores and re-adds the requested ones, so a store dropped from the feed
+     * leaves the group.
      *
-     * @param data     The parsed CSV line data.
-     * @param storeMap The map of available stores.
-     * @param group    The parent StoreGroup entity.
+     * @param requestedCodes The sorted requested store codes.
+     * @param storeMap       The map of available stores.
+     * @param group          The parent StoreGroup entity.
+     * @throws IllegalArgumentException if a requested store code is not found.
      */
-    void linkStores(LineData data, Map<String, Store> storeMap, StoreGroup group) {
-        String[] requestedCodes = parseSemicolonCodes(safeGet(data, COL_STORE_CODES));
+    void replaceStores(List<String> requestedCodes, Map<String, Store> storeMap, StoreGroup group) {
+        group.stores.clear();
         for (String sCode : requestedCodes) {
-            Store s = storeMap.get(sCode.trim());
-            if (s != null) {
-                if (!group.stores.contains(s)) {
-                    group.stores.add(s);
-                }
-            } else {
+            Store s = storeMap.get(sCode);
+            if (s == null) {
                 throw new IllegalArgumentException("Store '" + sCode + "' not found.");
             }
+            group.stores.add(s);
         }
     }
 
     /**
-     * Links Sub-Groups to the parent StoreGroup.
+     * Replaces the group's sub-groups with exactly the requested set (A4 replace semantics).
      *
-     * @param data           The parsed CSV line data.
+     * @param requestedCodes The sorted requested sub-group codes.
      * @param childGroupMap  The map of available child groups.
      * @param group          The parent StoreGroup entity.
+     * @throws IllegalArgumentException if a requested sub-group code is not found.
      */
-    void linkSubGroups(LineData data, Map<String, StoreGroup> childGroupMap, StoreGroup group) {
-        String[] requestedCodes = parseSemicolonCodes(safeGet(data, COL_STORE_GROUP_CODES));
+    void replaceSubGroups(List<String> requestedCodes, Map<String, StoreGroup> childGroupMap, StoreGroup group) {
+        group.storeGroups.clear();
         for (String gCode : requestedCodes) {
-            StoreGroup child = childGroupMap.get(gCode.trim());
-            if (child != null) {
-                if (!group.storeGroups.contains(child)) {
-                    group.storeGroups.add(child);
-                }
-            } else {
+            StoreGroup child = childGroupMap.get(gCode);
+            if (child == null) {
                 throw new IllegalArgumentException("StoreGroup '" + gCode + "' not found. Check CSV order (Parent must be defined before Child).");
             }
+            group.storeGroups.add(child);
         }
     }
 
@@ -356,13 +365,19 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
     }
 
     /**
-     * Computes the checksum for the incoming CSV data.
+     * Computes the checksum for the incoming CSV data (A4, report §3).
+     * <p>
+     * Mirrors {@link StoreGroup#getChecksum()} exactly — code, name and the sorted member codes —
+     * so a membership change is detected and applied instead of being a silent no-op. The member
+     * code lists must already be sorted (see {@link #sortedCodes(String)}).
      *
-     * @param code The group code.
-     * @param name The group name.
+     * @param code           The group code.
+     * @param name           The group name.
+     * @param storeCodes     The sorted requested store codes.
+     * @param subGroupCodes  The sorted requested sub-group codes.
      * @return The integer hash of the incoming data.
      */
-    int computeChecksum(String code, String name) {
-        return Objects.hash(code, name);
+    int computeChecksum(String code, String name, List<String> storeCodes, List<String> subGroupCodes) {
+        return Objects.hash(code, name, storeCodes, subGroupCodes);
     }
 }

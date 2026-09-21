@@ -84,7 +84,10 @@ public class ValuationTraceService {
     public void purgeExpired() {
         try {
             ValuationTraceConfig config = ValuationTraceConfig.current();
-            LocalDateTime threshold = LocalDateTime.now().minusDays(config.retentionDays);
+            // Report §4: the retention threshold is taken from DateTimeProvider, not
+            // LocalDateTime.now(), so a test can freeze the clock and assert what a purge removes.
+            LocalDateTime threshold = com.intermarche.valuation.domain.util.DateTimeProvider.now()
+                    .minusDays(config.retentionDays);
             long deleted = ValuationTrace.deleteOlderThan(threshold);
             if (deleted > 0) {
                 LOGGER.info("Purged " + deleted + " valuation trace(s) older than " + threshold);

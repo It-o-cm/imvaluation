@@ -88,6 +88,17 @@ public class BasketEvaluation {
     private AmountEvaluation totalPrice;
 
     /**
+     * The configurations skipped during this evaluation, fail-closed (A2, report H1).
+     * <p>
+     * A configuration whose specification, trigger or arbitration block cannot be honoured is
+     * skipped rather than failing the whole valuation: each such skip is logged as an error and
+     * appended here so the resource can record it in the {@link com.intermarche.valuation.domain.ValuationTrace}.
+     * Ignored in the JSON response: it is audit context, not part of the till contract.
+     */
+    @JsonIgnore
+    private final List<String> skippedConfigurations = new ArrayList<>();
+
+    /**
      * Memoized trigger evaluation, one entry per configuration (spec §3.3).
      * <p>
      * The trigger of a configuration is evaluated once per arbitration, against the current
@@ -124,8 +135,12 @@ public class BasketEvaluation {
     public BasketEvaluation(Basket basket) {
         this.basket = basket;
         this.toEvaluate = new HashMap<>();
-        this.offers = new HashSet<>();
-        this.advantages = new HashSet<>();
+        // Insertion-ordered so the evaluation is deterministic (report C2): every downstream
+        // consumer that iterates the applied offers/advantages (VAT breakdown, residue-on-last
+        // distributions, the available-offers view feeding bases and triggers) sees them in
+        // the stable order in which the engine applied them, never in identity-hash order.
+        this.offers = new LinkedHashSet<>();
+        this.advantages = new LinkedHashSet<>();
         // Resolve Store from Basket storeCode
         if (this.basket != null && this.basket.storeCode != null) {
             this.store = Store.findByCode(this.basket.storeCode);
@@ -571,6 +586,30 @@ public class BasketEvaluation {
     }
 
     /**
+     * Records a configuration skipped fail-closed during this evaluation (A2, report H1).
+     *
+     * @param message the human-readable reason the configuration was skipped; ignored when null.
+     */
+    public void recordSkippedConfiguration(String message) {
+        if (message != null) {
+            skippedConfigurations.add(message);
+        }
+    }
+
+    /**
+     * Returns the configurations skipped fail-closed during this evaluation (A2, report H1).
+     * <p>
+     * Empty when every configuration was honoured. The resource records these in the valuation
+     * trace so a skipped offer is auditable even though the evaluation itself succeeded.
+     *
+     * @return the skip messages, in the order they occurred; never null.
+     */
+    @JsonIgnore
+    public List<String> getSkippedConfigurations() {
+        return skippedConfigurations;
+    }
+
+    /**
      * Returns the amounts due per real VAT rate.
      * <p>
      * Derived from the applied offers and discounts on every call rather than stored, so it
@@ -645,7 +684,7 @@ public class BasketEvaluation {
      * Returns the offer applications available to the arbitration: every applied offer minus
      * the carriers consumed so far (spec §4.4).
      * <p>
-     * This is the view an advantage builds its assiette from and a trigger takes its measures
+     * This is the view an advantage builds its base from and a trigger takes its measures
      * on, so a consumed carrier leaves both. It is deliberately distinct from
      * {@link #getOffers()}, which is the response payload and must keep showing the consumed
      * lines — the customer still bought them; they are only withdrawn from the calculations of

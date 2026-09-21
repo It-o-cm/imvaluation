@@ -8,6 +8,7 @@ import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.util.DateTimeProvider;
+import com.intermarche.valuation.engine.NetAmounts;
 import com.intermarche.valuation.engine.AdvantageApplication;
 import com.intermarche.valuation.engine.AdvantageApplier;
 import com.intermarche.valuation.engine.AdvantageApplierFactory;
@@ -43,7 +44,7 @@ import java.util.Set;
  * an award per tier:
  * <ul>
  *   <li>{@code HIGHEST_REACHED} — the highest reached tier applies once on the whole
- *       assiette ("5% from 50€, 10% from 100€");</li>
+ *       base ("5% from 50€, 10% from 100€");</li>
  *   <li>{@code PROGRESSIVE} — marginal brackets, each tier's award applies to its own
  *       slice ("5% on the first 50€, 10% on the next 50€");</li>
  *   <li>{@code PER_MULTIPLE} — a repeating step ("1€ for every 50€ spent").</li>
@@ -170,7 +171,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
             "type": {
               "type": "string",
               "enum": ["PERCENTAGE", "AMOUNT", "AMOUNT_PER_ITEM", "ITEM_FREE", "NEW_PRICE"],
-              "description": "PERCENTAGE of the assiette; AMOUNT flat (once, or per step in PER_MULTIPLE); AMOUNT_PER_ITEM per unit; ITEM_FREE offers items; NEW_PRICE replaces the unit price.",
+              "description": "PERCENTAGE of the base; AMOUNT flat (once, or per step in PER_MULTIPLE); AMOUNT_PER_ITEM per unit; ITEM_FREE offers items; NEW_PRICE replaces the unit price.",
               "x-label": "Award type"
             },
             "value": {
@@ -220,10 +221,10 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
     }
 
     /**
-     * How the tiers apply to the assiette.
+     * How the tiers apply to the base.
      */
     public enum Mode {
-        /** The highest reached tier applies once on the whole assiette. */
+        /** The highest reached tier applies once on the whole base. */
         HIGHEST_REACHED,
         /** Marginal brackets: each tier's award applies to its own slice. */
         PROGRESSIVE,
@@ -235,7 +236,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
      * Nature of the award granted by a tier.
      */
     public enum AwardType {
-        /** A percentage of the assiette (or of the slice in PROGRESSIVE mode). */
+        /** A percentage of the base (or of the slice in PROGRESSIVE mode). */
         PERCENTAGE,
         /** A flat amount: once in HIGHEST_REACHED, once per step in PER_MULTIPLE. */
         AMOUNT,
@@ -453,7 +454,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
     }
 
     /**
-     * One product's contribution to the assiette through one offer application.
+     * One product's contribution to the base through one offer application.
      *
      * @param application the product-aware application covering the product.
      * @param product     the targeted product; null in TICKET scope.
@@ -632,10 +633,10 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
         /**
          * Applies the tiered discount to the evaluation.
          * <p>
-         * The assiette is gathered from the product-aware offer applications (the amounts
+         * The base is gathered from the product-aware offer applications (the amounts
          * they attribute to the targeted products, or their whole amounts in TICKET
          * scope), the tier mode computes the total discount, the total is capped at the
-         * assiette, then split into one application per targeted offer application,
+         * base, then split into one application per targeted offer application,
          * pro-rata of their contributions, the rounding residual going to the last one.
          *
          * @param evaluation the evaluation context containing the applied offers.
@@ -669,7 +670,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
         /**
          * Resolves and distributes the discount for one homogeneous set of contributions.
          * <p>
-         * This is the whole-assiette computation of the default behaviour; {@link #apply} calls
+         * This is the whole-base computation of the default behaviour; {@link #apply} calls
          * it once over every contribution when {@code perProduct} is false (bit for bit the
          * current behaviour), or once per distinct target EAN when it is true.
          *
@@ -681,9 +682,15 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                                 List<Contribution> contributions) {
             BigDecimal baseAmount = BigDecimal.ZERO;
             BigDecimal baseQuantity = BigDecimal.ZERO;
+            // A3 (report H2a): the cap is taken on the base net of the advantages already retained,
+            // so the award can never exceed what these lines are still worth. Tier selection stays on
+            // the gross base — which tier is reached is not a cap.
+            BigDecimal netBaseAmount = BigDecimal.ZERO;
             for (Contribution contribution : contributions) {
                 baseAmount = baseAmount.add(contribution.amount().amountIncludingTax);
                 baseQuantity = baseQuantity.add(BigDecimal.valueOf(contribution.quantity()));
+                netBaseAmount = netBaseAmount.add(contribution.amount().amountIncludingTax
+                        .multiply(NetAmounts.netFactor(evaluation, contribution.application())));
             }
             if (baseAmount.signum() <= 0) {
                 return;
@@ -694,8 +701,8 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                 return;
             }
             BigDecimal total = result.totalTtc().setScale(2, RoundingMode.HALF_UP);
-            if (total.compareTo(baseAmount) > 0) {
-                total = baseAmount;
+            if (total.compareTo(netBaseAmount) > 0) {
+                total = netBaseAmount;
             }
             if (total.signum() <= 0) {
                 return;
@@ -713,7 +720,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
         }
 
         /**
-         * Gathers the contributions of the targeted products to the assiette.
+         * Gathers the contributions of the targeted products to the base.
          *
          * @param evaluation the evaluation context.
          * @return the contributions, empty when nothing is covered.
@@ -753,10 +760,10 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
          * Computes the raw total discount according to the tier mode.
          *
          * @param evaluation    the evaluation context (store, for unit price lookups).
-         * @param contributions the assiette contributions.
+         * @param contributions the base contributions.
          * @param base          the compared value (amount or quantity per the metric).
-         * @param baseAmount    the monetary assiette, tax included.
-         * @param baseQuantity  the assiette in standard units.
+         * @param baseAmount    the monetary base, tax included.
+         * @param baseQuantity  the base in standard units.
          * @return the raw total and its display detail, or null when no tier applies.
          */
         private Result computeTotalDiscount(BasketEvaluation evaluation, List<Contribution> contributions,
@@ -819,9 +826,9 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
          *
          * @param evaluation    the evaluation context (store, for unit price lookups).
          * @param award         the award to value.
-         * @param contributions the assiette contributions.
-         * @param baseAmount    the monetary assiette, tax included.
-         * @param baseQuantity  the assiette in standard units.
+         * @param contributions the base contributions.
+         * @param baseAmount    the monetary base, tax included.
+         * @param baseQuantity  the base in standard units.
          * @param times         how many times the award applies.
          * @return the raw discount value, or null when nothing can be valued.
          */
@@ -844,7 +851,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
          * from what is available; units of a product without a price row are skipped.
          *
          * @param evaluation    the evaluation context (store).
-         * @param contributions the assiette contributions.
+         * @param contributions the base contributions.
          * @param award         the ITEM_FREE award.
          * @param count         how many items to offer.
          * @return the summed unit prices, or null when no unit can be valued.
@@ -887,7 +894,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
          * Values a NEW_PRICE award: the summed per-unit differences with the new price.
          *
          * @param evaluation    the evaluation context (store).
-         * @param contributions the assiette contributions.
+         * @param contributions the base contributions.
          * @param newPrice      the new unit price, tax included.
          * @return the summed differences (never negative per unit), or null when no unit
          *         can be valued.
@@ -937,9 +944,9 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
          * Splits the capped total into one application per targeted offer application.
          *
          * @param applications  the list receiving the applications.
-         * @param contributions the assiette contributions.
+         * @param contributions the base contributions.
          * @param total         the capped total discount, tax included.
-         * @param baseAmount    the monetary assiette, tax included.
+         * @param baseAmount    the monetary base, tax included.
          * @param detail        the display detail of the applied resolution.
          */
         private void distribute(List<AdvantageApplication> applications, List<Contribution> contributions,
@@ -980,10 +987,10 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
         }
 
         /**
-         * Computes the average unit price of the assiette, used to value quantity slices.
+         * Computes the average unit price of the base, used to value quantity slices.
          *
-         * @param baseAmount   the monetary assiette, tax included.
-         * @param baseQuantity the assiette in standard units.
+         * @param baseAmount   the monetary base, tax included.
+         * @param baseQuantity the base in standard units.
          * @return the average unit price at four decimals, or zero when no unit exists.
          */
         private BigDecimal averageUnit(BigDecimal baseAmount, BigDecimal baseQuantity) {

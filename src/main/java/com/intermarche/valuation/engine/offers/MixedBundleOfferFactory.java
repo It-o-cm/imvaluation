@@ -480,7 +480,7 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
          */
         @Override
         public AmountEvaluation getAmount() {
-            BigDecimal totalTTC = bundlePriceUnit != null
+            BigDecimal totalInclVat = bundlePriceUnit != null
                     ? computeFixedPriceTotal()
                     : computeDiscountedTotal();
             // The VAT rate is derived from the covered products rather than declared on the
@@ -490,8 +490,8 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
             // implied by their prices, which is the honest figure for a multi-rate bundle.
             BigDecimal effectiveVatRate = deriveVatRate();
             BigDecimal divisor = BigDecimal.ONE.add(effectiveVatRate);
-            BigDecimal totalHT = totalTTC.divide(divisor, 2, RoundingMode.HALF_UP);
-            return new AmountEvaluation(totalHT, totalTTC, effectiveVatRate);
+            BigDecimal totalExclVat = totalInclVat.divide(divisor, 2, RoundingMode.HALF_UP);
+            return new AmountEvaluation(totalExclVat, totalInclVat, effectiveVatRate);
         }
 
         /**
@@ -538,15 +538,15 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
         private BigDecimal computeDiscountedTotal() {
             Basket.Item[] allItems = coveredItems.toArray(new Basket.Item[0]);
             AmountEvaluation reference = AmountEvaluation.getAmount(allItems, store, PriceUsage.BASE_FOR_DISCOUNT);
-            BigDecimal referenceTTC = reference.amountIncludingTax;
+            BigDecimal referenceInclVat = reference.amountIncludingTax;
             BigDecimal reduction;
             if ("PERCENTAGE".equals(discountType)) {
-                reduction = referenceTTC.multiply(discountValue)
+                reduction = referenceInclVat.multiply(discountValue)
                         .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
             } else {
                 reduction = discountValue.multiply(BigDecimal.valueOf(bundleCount));
             }
-            BigDecimal total = referenceTTC.subtract(reduction).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal total = referenceInclVat.subtract(reduction).setScale(2, RoundingMode.HALF_UP);
             // A discount larger than the reference price must not turn the line negative.
             return total.max(BigDecimal.ZERO);
         }

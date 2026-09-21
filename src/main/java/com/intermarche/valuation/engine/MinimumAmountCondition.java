@@ -185,37 +185,10 @@ public final class MinimumAmountCondition implements TriggerCondition {
                 continue;
             }
             contributors.add(app);
-            total = total.add(matched.multiply(netFactor(evaluation, app)));
+            // A3 (report H2): net each contributing application by the advantages already retained
+            // against it, through the shared helper (this factor formerly lived here, duplicated).
+            total = total.add(matched.multiply(NetAmounts.netFactor(evaluation, app)));
         }
         return total.signum() < 0 ? BigDecimal.ZERO : total;
-    }
-
-    /**
-     * Computes the net factor of an offer application: the share of its amount left once the
-     * advantages retained against it are removed. A factor below zero is clamped to zero.
-     *
-     * @param evaluation the evaluation context.
-     * @param app        the offer application to net.
-     * @return the net factor in {@code [0, 1]}, or one when the application has no amount.
-     */
-    private static BigDecimal netFactor(BasketEvaluation evaluation, OfferApplication app) {
-        AmountEvaluation amount = app.getAmount();
-        if (amount == null || amount.amountIncludingTax == null || amount.amountIncludingTax.signum() <= 0) {
-            return BigDecimal.ONE;
-        }
-        BigDecimal gross = amount.amountIncludingTax;
-        BigDecimal discounts = BigDecimal.ZERO;
-        if (evaluation.getAdvantages() != null) {
-            for (AdvantageApplication advantage : evaluation.getAdvantages()) {
-                if (advantage instanceof DiscountApplication discount
-                        && discount.getOfferApplication() == app
-                        && discount.getDiscountAmount() != null
-                        && discount.getDiscountAmount().amountIncludingTax != null) {
-                    discounts = discounts.add(discount.getDiscountAmount().amountIncludingTax);
-                }
-            }
-        }
-        BigDecimal factor = gross.subtract(discounts).divide(gross, 6, java.math.RoundingMode.HALF_UP);
-        return factor.signum() < 0 ? BigDecimal.ZERO : factor;
     }
 }

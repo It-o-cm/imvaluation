@@ -1,6 +1,6 @@
 package com.intermarche.valuation.imports;
 
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Store;
@@ -113,7 +113,7 @@ public class OfferCsvResourceTest {
             s.code = "S001";
             s.name = "Store 1";
             // ADDED: Assign address to the store
-            s.address = new Adresse();
+            s.address = new Address();
             s.address.streetLine1 = "1 Test Street";
             s.address.city = "Paris";
             s.address.postalCode = "75000";
@@ -171,7 +171,7 @@ public class OfferCsvResourceTest {
             s.code = "S001";
             s.name = "Store 1";
             // ADDED: Assign address to the store
-            s.address = new Adresse();
+            s.address = new Address();
             s.address.streetLine1 = "1 Test Street";
             s.address.city = "Paris";
             s.address.postalCode = "75000";
@@ -222,7 +222,7 @@ public class OfferCsvResourceTest {
             s.code = "S001";
             s.name = "Store 1";
             // ADDED: Assign address to the store
-            s.address = new Adresse();
+            s.address = new Address();
             s.address.streetLine1 = "1 Test Street";
             s.address.city = "Paris";
             s.address.postalCode = "75000";
@@ -332,7 +332,7 @@ public class OfferCsvResourceTest {
             s.code = "S001";
             s.name = "Store 1";
             // ADDED: Assign address to the store
-            s.address = new Adresse();
+            s.address = new Address();
             s.address.streetLine1 = "1 Test Street";
             s.address.city = "Paris";
             s.address.postalCode = "75000";

@@ -356,121 +356,18 @@ describe('init', () => {
   });
 });
 
-describe('initImport', () => {
-  /**
-   * Builds the import toolbar markup.
-   *
-   * @param {object} present Which of trigger/input/form to include.
-   * @returns {{trigger: HTMLElement, input: HTMLElement, form: HTMLElement}} The nodes.
-   */
-  function buildImport(present) {
-    if (present.form !== false) {
-      const form = document.createElement('form');
-      form.id = 'import-form';
-      document.body.appendChild(form);
-    }
-    if (present.trigger !== false) {
-      const trigger = document.createElement('button');
-      trigger.id = 'import-trigger';
-      document.body.appendChild(trigger);
-    }
-    if (present.input !== false) {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.id = 'import-file';
-      document.body.appendChild(input);
-    }
-    return {
-      trigger: document.getElementById('import-trigger'),
-      input: document.getElementById('import-file'),
-      form: document.getElementById('import-form'),
-    };
-  }
-
-  /**
-   * A missing trigger takes the first arm of the guard and returns without wiring.
-   */
-  it('returns when the trigger is missing', () => {
-    buildImport({ trigger: false });
-    expect(() => lf.initImport()).not.toThrow();
-  });
-
-  /**
-   * A missing file input takes the second arm of the guard.
-   */
-  it('returns when the file input is missing', () => {
-    buildImport({ input: false });
-    expect(() => lf.initImport()).not.toThrow();
-  });
-
-  /**
-   * A missing form takes the third arm of the guard.
-   */
-  it('returns when the form is missing', () => {
-    buildImport({ form: false });
-    expect(() => lf.initImport()).not.toThrow();
-  });
-
-  /**
-   * The trigger opens the hidden file input.
-   */
-  it('clicks the file input when the trigger is pressed', () => {
-    const { trigger, input } = buildImport({});
-    const clickSpy = vi.spyOn(input, 'click').mockImplementation(() => {});
-    lf.initImport();
-    fire(trigger, 'click');
-    expect(clickSpy).toHaveBeenCalledTimes(1);
-  });
-
-  /**
-   * Choosing a file submits the form.
-   */
-  it('submits the form when a file is chosen', () => {
-    const { input, form } = buildImport({});
-    form.submit = vi.fn();
-    Object.defineProperty(input, 'files', { value: { length: 1 }, configurable: true });
-    lf.initImport();
-    fire(input, 'change');
-    expect(form.submit).toHaveBeenCalledTimes(1);
-  });
-
-  /**
-   * An empty selection (files present, length 0) does not submit.
-   */
-  it('does not submit when the selection is empty', () => {
-    const { input, form } = buildImport({});
-    form.submit = vi.fn();
-    Object.defineProperty(input, 'files', { value: { length: 0 }, configurable: true });
-    lf.initImport();
-    fire(input, 'change');
-    expect(form.submit).not.toHaveBeenCalled();
-  });
-
-  /**
-   * A null files property takes the left arm of the guard and does not submit.
-   */
-  it('does not submit when files is null', () => {
-    const { input, form } = buildImport({});
-    form.submit = vi.fn();
-    Object.defineProperty(input, 'files', { value: null, configurable: true });
-    lf.initImport();
-    fire(input, 'change');
-    expect(form.submit).not.toHaveBeenCalled();
-  });
-});
-
 describe('boot dispatch', () => {
   /**
    * Re-evaluating the module while the document is still loading takes the "loading" arm of
-   * both IIFEs and registers a DOMContentLoaded listener for each. A cache-busted re-import
-   * is used so a second boot happens; Istanbul attributes its coverage to the real path.
+   * the IIFE and registers a DOMContentLoaded listener. A cache-busted re-import is used so
+   * a second boot happens; Istanbul attributes its coverage to the real path.
    */
   it('registers DOMContentLoaded when the document is loading', async () => {
     const spy = vi.spyOn(document, 'addEventListener');
     Object.defineProperty(document, 'readyState', { configurable: true, get: () => 'loading' });
     await loadScript(PATH, { bust: 'loading' });
     const domReady = spy.mock.calls.filter((call) => call[0] === 'DOMContentLoaded');
-    expect(domReady.length).toBeGreaterThanOrEqual(2);
+    expect(domReady.length).toBeGreaterThanOrEqual(1);
     spy.mockRestore();
     delete document.readyState;
   });

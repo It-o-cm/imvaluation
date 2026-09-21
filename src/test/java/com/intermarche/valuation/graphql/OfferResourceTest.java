@@ -358,6 +358,43 @@ public class OfferResourceTest {
     }
 
     /**
+     * Tests that a specification violating its type's factory schema is rejected (report C3),
+     * matching the validation the UI path already performed. A malformed TIERED_DISCOUNT spec is
+     * refused rather than persisted through the API.
+     */
+    @Test
+    @TestSecurity(user = "testAdmin", roles = {"ADMIN"})
+    void testCreateOffer_InvalidSpecification_Rejected() {
+        setUp();
+        OfferResource.OfferRecord input = new OfferResource.OfferRecord();
+        input.code = "OFFER_BAD_SPEC";
+        input.type = "TIERED_DISCOUNT";
+        input.specification = "{ \"garbage\": true }";
+        input.storeCodes = List.of("STORE_01");
+        assertThrows(GraphQLException.class, () -> resource.createOffer(input));
+    }
+
+    /**
+     * Tests that a specification conforming to its type's factory schema is accepted through the
+     * API (report C3): the added validation refuses only the malformed ones.
+     */
+    @Test
+    @TestSecurity(user = "testAdmin", roles = {"ADMIN"})
+    void testCreateOffer_ValidSpecification_Succeeds() throws GraphQLException {
+        setUp();
+        OfferResource.OfferRecord input = new OfferResource.OfferRecord();
+        input.code = "OFFER_GOOD_SPEC";
+        input.type = "TIERED_DISCOUNT";
+        input.specification = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", "
+                + "\"mode\": \"HIGHEST_REACHED\", \"tiers\": [ { \"threshold\": 0, "
+                + "\"award\": { \"type\": \"PERCENTAGE\", \"value\": 10 } } ] }";
+        input.storeCodes = List.of("STORE_01");
+        Offer created = resource.createOffer(input);
+        assertNotNull(created.id);
+        assertEquals("OFFER_GOOD_SPEC", created.code);
+    }
+
+    /**
      * Tests creation failure due to non-existent Store.
      */
     @Test

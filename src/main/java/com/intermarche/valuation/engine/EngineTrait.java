@@ -131,9 +131,9 @@ public interface EngineTrait {
      */
     default Collection<Offer> getOffers(BasketEvaluation basketEvaluation, String type) {
         java.time.LocalDateTime at = DateTimeProvider.now();
-        Set<Offer> offers = new HashSet<>(Offer.findInForceByStoreAndType(basketEvaluation.getStore(), type, at));
+        Set<Offer> offers = new LinkedHashSet<>(Offer.findInForceByStoreAndType(basketEvaluation.getStore(), type, at));
         offers.addAll(Offer.findInForceByStoreGroupsAndType(basketEvaluation.getStoreGroups(), type, at));
-        return offers;
+        return sortedByCode(offers);
     }
 
     /**
@@ -149,9 +149,29 @@ public interface EngineTrait {
      */
     default Collection<Offer> getOffers(BasketEvaluation basketEvaluation, Collection<String> eans, String type) {
         java.time.LocalDateTime at = DateTimeProvider.now();
-        Set<Offer> offers = new HashSet<>(Offer.findInForceByEansAndStoreAndType(eans, basketEvaluation.getStore(), type, at));
+        Set<Offer> offers = new LinkedHashSet<>(Offer.findInForceByEansAndStoreAndType(eans, basketEvaluation.getStore(), type, at));
         offers.addAll(Offer.findInForceByEansAndStoreGroupsAndType(eans, basketEvaluation.getStoreGroups(), type, at));
-        return offers;
+        return sortedByCode(offers);
+    }
+
+    /**
+     * Returns the offers in a deterministic order: by configuration {@code code} ascending,
+     * {@code null} codes last (report C2).
+     * <p>
+     * The two in-force queries merge into a set whose iteration order is not guaranteed by the
+     * database, so the appliers built from these configurations — and therefore every tie-break
+     * that later depends on their build order — would otherwise vary between runs and between
+     * nodes. Sorting on the naturally-unique offer code removes that source of nondeterminism at
+     * the source.
+     *
+     * @param offers the merged, de-duplicated offers.
+     * @return a new list of the offers, ordered by code.
+     */
+    private List<Offer> sortedByCode(Collection<Offer> offers) {
+        List<Offer> sorted = new ArrayList<>(offers);
+        sorted.sort(Comparator.comparing((Offer o) -> o.code,
+                Comparator.nullsLast(Comparator.naturalOrder())));
+        return sorted;
     }
 
     /**
@@ -184,9 +204,9 @@ public interface EngineTrait {
             String prefix = "Error validating offer: ";
             String message = e.getMessage();
             if (message != null && message.startsWith(prefix)) {
-                throw new IllegalArgumentException(prefix + "[" + offer.code + "] " + message.substring(prefix.length()), e);
+                throw new ConfigurationException(prefix + "[" + offer.code + "] " + message.substring(prefix.length()), e);
             }
-            throw new IllegalArgumentException("[" + offer.code + "] " + message, e);
+            throw new ConfigurationException("[" + offer.code + "] " + message, e);
         }
     }
 
@@ -215,10 +235,10 @@ public interface EngineTrait {
             } else {
                 // Print errors for debugging
                 String message = errors.stream().map(err -> err.getMessage()).collect(Collectors.joining(", "));
-                throw new IllegalArgumentException("Error validating offer: "+message);
+                throw new ConfigurationException("Error validating offer: "+message);
             }
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Error parsing offer.", e);
+            throw new ConfigurationException("Error parsing offer.", e);
         }
     }
 

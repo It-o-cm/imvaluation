@@ -69,7 +69,7 @@ public class Store extends BaseEntity {
             @AttributeOverride(name = "latitude", column = @Column(name = "address_latitude")),
             @AttributeOverride(name = "longitude", column = @Column(name = "address_longitude"))
     })
-    public Adresse address;
+    public Address address;
 
     // --------------------------------------------------
     // Panache Active Record Queries
@@ -114,7 +114,7 @@ public class Store extends BaseEntity {
         // same value the importer computes from blank address columns. Without this, a null
         // address contributed 0 while blank columns contribute the hash of empty fields, and
         // a strictly identical re-import of an address-less store produced a needless update.
-        int addressChecksum = (address == null ? new Adresse() : address).getChecksum();
+        int addressChecksum = (address == null ? new Address() : address).getChecksum();
         int checksum = Objects.hash(code, name, addressChecksum);
         return checksum;
     }

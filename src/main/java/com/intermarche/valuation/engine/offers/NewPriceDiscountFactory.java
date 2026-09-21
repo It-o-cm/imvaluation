@@ -8,6 +8,7 @@ import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.util.DateTimeProvider;
+import com.intermarche.valuation.engine.NetAmounts;
 import com.intermarche.valuation.engine.AdvantageApplication;
 import com.intermarche.valuation.engine.AdvantageApplier;
 import com.intermarche.valuation.engine.AdvantageApplierFactory;
@@ -342,9 +343,12 @@ public class NewPriceDiscountFactory implements AdvantageApplierFactory, EngineT
                     }
                     // The base is the line's CURRENT amount: the new price fixes the outcome, so
                     // a discount already retained against this line reduces the base a competing
-                    // new price sees (spec §3, "le second voit la base au premier nouveau prix").
-                    BigDecimal factor = netFactor(evaluation, app);
-                    BigDecimal currentTtc = amount.amountIncludingTax.multiply(factor).setScale(2, RoundingMode.HALF_UP);
+                    // new price sees (spec §3: the second new price sees the base already at the
+                    // first new price).
+                    // A3 (report H2c): net per-product — a discount retained against another product
+                    // of a multi-product application must not reduce this product's base.
+                    BigDecimal currentTtc = NetAmounts.netProductTtc(evaluation, app, product.ean,
+                            amount.amountIncludingTax).setScale(2, RoundingMode.HALF_UP);
                     BigDecimal outcomeTtc = newPrice.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
                     BigDecimal discountTtc = currentTtc.subtract(outcomeTtc);
                     if (discountTtc.signum() <= 0) {
@@ -358,45 +362,13 @@ public class NewPriceDiscountFactory implements AdvantageApplierFactory, EngineT
             }
             return applications;
         }
-
-        /**
-         * Computes the net factor of an offer application: the share of its tax-included amount
-         * left once the discounts already retained against it are removed, clamped to
-         * {@code [0, 1]}.
-         * <p>
-         * Applied to the line's gross amount, it yields the current base a competing new price
-         * must fix its outcome against. An application without a positive amount is left whole.
-         *
-         * @param evaluation the evaluation context.
-         * @param app        the offer application to net.
-         * @return the net factor, one when the application carries no amount.
-         */
-        private BigDecimal netFactor(BasketEvaluation evaluation, OfferApplication app) {
-            AmountEvaluation gross = app.getAmount();
-            if (gross == null || gross.amountIncludingTax == null || gross.amountIncludingTax.signum() <= 0) {
-                return BigDecimal.ONE;
-            }
-            BigDecimal discounts = BigDecimal.ZERO;
-            if (evaluation.getAdvantages() != null) {
-                for (AdvantageApplication advantage : evaluation.getAdvantages()) {
-                    if (advantage instanceof DiscountApplication discount
-                            && discount.getOfferApplication() == app
-                            && discount.getDiscountAmount() != null
-                            && discount.getDiscountAmount().amountIncludingTax != null) {
-                        discounts = discounts.add(discount.getDiscountAmount().amountIncludingTax);
-                    }
-                }
-            }
-            BigDecimal factor = gross.amountIncludingTax.subtract(discounts)
-                    .divide(gross.amountIncludingTax, 6, RoundingMode.HALF_UP);
-            return factor.signum() < 0 ? BigDecimal.ZERO : factor;
-        }
     }
 
     /**
      * The application of a new-price discount on one targeted offer application.
      */
-    public static class NewPriceDiscountApplication implements DiscountApplication {
+    public static class NewPriceDiscountApplication implements DiscountApplication,
+            com.intermarche.valuation.engine.ProductScopedDiscount {
 
         /**
          * The application moment restituted in the response (spec §3.6), set by the arbitration.
@@ -497,6 +469,16 @@ public class NewPriceDiscountFactory implements AdvantageApplierFactory, EngineT
         @Override
         public AmountEvaluation getDiscountAmount() {
             return discountAmount;
+        }
+
+        /**
+         * Returns the EAN of the product line this new price reduced (A3, report H2c).
+         *
+         * @return the discounted product EAN.
+         */
+        @Override
+        public String discountedEan() {
+            return ean;
         }
     }
 }

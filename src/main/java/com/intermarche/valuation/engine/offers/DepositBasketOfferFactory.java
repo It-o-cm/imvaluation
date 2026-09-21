@@ -300,11 +300,11 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
         @Override
         public AmountEvaluation getAmount() {
             // Total TTC = Count * PricePerBasket
-            BigDecimal totalTTC = basketPriceUnit.multiply(BigDecimal.valueOf(basketCount)).setScale(2, RoundingMode.HALF_UP);
+            BigDecimal totalInclVat = basketPriceUnit.multiply(BigDecimal.valueOf(basketCount)).setScale(2, RoundingMode.HALF_UP);
             // HT = TTC / (1 + TVA)
             BigDecimal divisor = BigDecimal.ONE.add(vatRate);
-            BigDecimal totalHT = totalTTC.divide(divisor, 2, RoundingMode.HALF_UP);
-            return new AmountEvaluation(totalHT, totalTTC, vatRate);
+            BigDecimal totalExclVat = totalInclVat.divide(divisor, 2, RoundingMode.HALF_UP);
+            return new AmountEvaluation(totalExclVat, totalInclVat, vatRate);
         }
 
         /**

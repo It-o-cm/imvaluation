@@ -219,6 +219,9 @@ public class Basket {
     }
     """;
 
+    /**
+     * Default constructor used by the JSON deserializer.
+     */
     public Basket() {}
 
     /**
@@ -558,6 +561,9 @@ public class Basket {
      */
     public static class Address {
 
+        /**
+         * Default constructor used by the JSON deserializer.
+         */
         public Address() {}
 
         /**

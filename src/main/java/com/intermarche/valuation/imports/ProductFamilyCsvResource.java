@@ -251,21 +251,23 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
         Map<String, ProductFamily> subFamilyMap = retrieveSubProductFamilies(entityMap, requestedSubCodes);
         // 4. Business Logic (Create/Update)
         boolean isNew = (family == null);
+        int incomingChecksum = computeIncomingChecksum(data);
         if (isNew) {
             family = new ProductFamily();
             family.code = data.code;
-        }
-        prepareProductFamily(data, family, requestedEans, productMap);
-        linkSubFamilies(family, requestedSubCodes, subFamilyMap);
-        // 5. Persist or Update
-        int incomingChecksum = computeIncomingChecksum(data);
-        if (isNew) {
+            prepareProductFamily(data, family, requestedEans, productMap);
+            linkSubFamilies(family, requestedSubCodes, subFamilyMap);
             counters[0]++;
             Panache.getEntityManager().persist(family);
-        } else {
-            if (family.checksum != incomingChecksum) {
-                counters[1]++;
-            }
+        } else if (family.checksum != incomingChecksum) {
+            // Report C4: the staged fallback clears the persistence context between retries, so the
+            // pre-fetched family is detached. Re-attach it with findById — the pattern the other
+            // importers use — before mutating, so the update is actually flushed instead of being
+            // applied to a throw-away detached instance and lost.
+            family = ProductFamily.findById(family.id);
+            prepareProductFamily(data, family, requestedEans, productMap);
+            linkSubFamilies(family, requestedSubCodes, subFamilyMap);
+            counters[1]++;
         }
     }
 

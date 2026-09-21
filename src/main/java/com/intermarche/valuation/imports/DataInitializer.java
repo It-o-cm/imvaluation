@@ -10,6 +10,7 @@ import jakarta.ws.rs.core.Response;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
+import java.io.IOException;
 import java.io.InputStream;
 
 /**
@@ -121,25 +122,50 @@ public class DataInitializer {
             return;
         }
         LOGGER.info("Empty database: seeding the reference data from the embedded CSV files.");
-        seed("stores.csv", stream -> storeCsvResource.importCsvStream(
-                stream, StoreCsvResource.COL_CODE, StoreCsvResource.REQUIRED_COLUMNS));
-        seed("store-groups.csv", stream -> storeGroupCsvResource.importCsvStream(
-                stream, StoreGroupCsvResource.COL_CODE, StoreGroupCsvResource.REQUIRED_COLUMNS));
-        seed("products.csv", stream -> productCsvResource.importCsvStream(
-                stream, ProductCsvResource.COL_EAN, ProductCsvResource.REQUIRED_COLUMNS));
-        seed("product-families.csv", stream -> productFamilyCsvResource.importCsvStream(
-                stream, ProductFamilyCsvResource.COL_CODE, ProductFamilyCsvResource.REQUIRED_COLUMNS));
-        seed("product-category-storages.csv", stream -> productCategoryStorageCsvResource.importCsvStream(
-                stream, ProductCategoryStorageCsvResource.COL_EAN, ProductCategoryStorageCsvResource.REQUIRED_COLUMNS));
-        // VAT regimes are loaded BEFORE prices: a price attaches to the regime that carries its
-        // rate, so the referential must already hold the five regimes when the price feed runs.
-        seed("vat-rates.csv", stream -> vatRateCsvResource.importCsvStream(
-                stream, VatRateCsvResource.COL_VAT_NUMBER, VatRateCsvResource.REQUIRED_COLUMNS));
-        seed("prices.csv", stream -> priceCsvResource.importCsvStream(
-                stream, PriceCsvResource.COL_EAN, PriceCsvResource.REQUIRED_COLUMNS));
-        seed("offers.csv", stream -> offerCsvResource.importCsvStream(
-                stream, OfferCsvResource.COL_CODE, OfferCsvResource.REQUIRED_COLUMNS));
-        LOGGER.info("Reference data seed completed.");
+        try {
+            seed("stores.csv", stream -> storeCsvResource.importCsvStream(
+                    stream, StoreCsvResource.COL_CODE, StoreCsvResource.REQUIRED_COLUMNS));
+            seed("store-groups.csv", stream -> storeGroupCsvResource.importCsvStream(
+                    stream, StoreGroupCsvResource.COL_CODE, StoreGroupCsvResource.REQUIRED_COLUMNS));
+            seed("products.csv", stream -> productCsvResource.importCsvStream(
+                    stream, ProductCsvResource.COL_EAN, ProductCsvResource.REQUIRED_COLUMNS));
+            seed("product-families.csv", stream -> productFamilyCsvResource.importCsvStream(
+                    stream, ProductFamilyCsvResource.COL_CODE, ProductFamilyCsvResource.REQUIRED_COLUMNS));
+            seed("product-category-storages.csv", stream -> productCategoryStorageCsvResource.importCsvStream(
+                    stream, ProductCategoryStorageCsvResource.COL_EAN, ProductCategoryStorageCsvResource.REQUIRED_COLUMNS));
+            // VAT regimes are loaded BEFORE prices: a price attaches to the regime that carries its
+            // rate, so the referential must already hold the five regimes when the price feed runs.
+            seed("vat-rates.csv", stream -> vatRateCsvResource.importCsvStream(
+                    stream, VatRateCsvResource.COL_VAT_NUMBER, VatRateCsvResource.REQUIRED_COLUMNS));
+            seed("prices.csv", stream -> priceCsvResource.importCsvStream(
+                    stream, PriceCsvResource.COL_EAN, PriceCsvResource.REQUIRED_COLUMNS));
+            seed("offers.csv", stream -> offerCsvResource.importCsvStream(
+                    stream, OfferCsvResource.COL_CODE, OfferCsvResource.REQUIRED_COLUMNS));
+            LOGGER.info("Reference data seed completed.");
+        } catch (Exception e) {
+            // Report §3: a partial seed must not survive. The guard on the next boot is
+            // Store.count() > 0, so a run that seeds stores then fails a later file would lock in a
+            // permanently partial database. Wipe everything so the next startup re-seeds cleanly.
+            LOGGER.error("Reference data seed failed; wiping the partial seed so the next startup retries.", e);
+            wipeSeededData();
+        }
+    }
+
+    /**
+     * Deletes every seeded reference row, in reverse dependency order, so a failed seed leaves no
+     * partial state behind (report §3). Runs in its own transaction, like the seed itself.
+     */
+    private void wipeSeededData() {
+        QuarkusTransaction.requiringNew().run(() -> {
+            com.intermarche.valuation.domain.Offer.deleteAll();
+            com.intermarche.valuation.domain.Price.deleteAll();
+            com.intermarche.valuation.domain.ProductCategoryStorage.deleteAll();
+            com.intermarche.valuation.domain.ProductFamily.deleteAll();
+            com.intermarche.valuation.domain.VatRate.deleteAll();
+            com.intermarche.valuation.domain.Product.deleteAll();
+            com.intermarche.valuation.domain.StoreGroup.deleteAll();
+            Store.deleteAll();
+        });
     }
 
     /**
@@ -156,30 +182,30 @@ public class DataInitializer {
     }
 
     /**
-     * Runs one embedded CSV file through the matching importer and logs the outcome.
+     * Runs one embedded CSV file through the matching importer, failing the whole seed on any
+     * problem (report §3).
      * <p>
-     * A missing file or a non-200 response is logged as an error but does not prevent the
-     * remaining files from loading: a partially seeded development database is more useful
-     * than none, and the importers already isolate faulty lines themselves.
+     * A missing file or a non-200 response throws, so {@link #onStart} can wipe the partial seed:
+     * a half-loaded referential must not be locked in by the {@code Store.count() > 0} guard.
      *
      * @param fileName The name of the CSV file under the seed folder.
      * @param importer The importer invocation to feed with the file content.
+     * @throws IOException           if the file cannot be read.
+     * @throws IllegalStateException if the file is missing or the import returns a non-200 status.
      */
-    private void seed(String fileName, java.util.function.Function<InputStream, Response> importer) {
+    private void seed(String fileName, java.util.function.Function<InputStream, Response> importer)
+            throws IOException {
         try (InputStream stream = DataInitializer.class.getResourceAsStream(SEED_FOLDER + fileName)) {
             if (stream == null) {
-                LOGGER.errorf("Seed file not found on the classpath: %s%s", SEED_FOLDER, fileName);
-                return;
+                throw new IllegalStateException("Seed file not found on the classpath: " + SEED_FOLDER + fileName);
             }
             Response response = importer.apply(stream);
             if (response.getStatus() == 200) {
                 LOGGER.infof("Seeded %s: %s", fileName, response.getEntity());
             } else {
-                LOGGER.errorf("Seed of %s failed with status %d: %s",
-                        fileName, response.getStatus(), response.getEntity());
+                throw new IllegalStateException("Seed of " + fileName + " failed with status "
+                        + response.getStatus() + ": " + response.getEntity());
             }
-        } catch (Exception e) {
-            LOGGER.errorf(e, "Seed of %s failed", fileName);
         }
     }
 }

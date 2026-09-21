@@ -1,6 +1,6 @@
 package com.intermarche.valuation.ui;
 
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.AppUser;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
@@ -111,7 +111,7 @@ class StoreGroupUiResourceTest {
      */
     private Store storeWithCity(String code, String city) {
         Store store = store(code);
-        Adresse address = new Adresse();
+        Address address = new Address();
         address.city = city;
         store.address = address;
         return store;

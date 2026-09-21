@@ -83,15 +83,16 @@ public class PasswordChangeFilterCoverageTest {
     }
 
     /**
-     * Tests that a request authenticated with a Basic header is treated as an API call and
-     * left untouched (non-browser short-circuit).
+     * Tests that a Basic-authenticated (API) request from an account owing a password change — the
+     * bootstrap admin at its initial password — is denied with 403 rather than passed through
+     * (report H4): the confinement now covers the API, not only the browser.
      */
     @Test
-    void testBasicHeader_passesThrough() {
+    void testBasicHeader_pendingChangeIsDeniedWith403() {
         given().auth().preemptive().basic("admin", "admin").accept("text/html")
                 .redirects().follow(false)
                 .when().get("/ui/offers")
-                .then().statusCode(200);
+                .then().statusCode(403);
     }
 
     /**

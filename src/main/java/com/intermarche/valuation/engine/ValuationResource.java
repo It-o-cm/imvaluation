@@ -129,8 +129,15 @@ public class ValuationResource implements EngineTrait {
             throw new WebApplicationException(message, 422);
         }
 
+        // Fail-closed configurations (A2, report H1) still let the evaluation succeed; record the
+        // skips in the trace so they are auditable even on a 200.
+        String skips = evaluation.getSkippedConfigurations().isEmpty() ? null
+                : "Skipped configurations: " + String.join(" | ", evaluation.getSkippedConfigurations());
+        if (skips != null) {
+            LOGGER.warn(skips);
+        }
         traceService.record(requestPayload, basket, evaluation, 200,
-                ValuationTrace.STATUS_SUCCESS, null,
+                ValuationTrace.STATUS_SUCCESS, skips,
                 System.currentTimeMillis() - startedAt);
         return Response.ok(evaluation).build();
     }

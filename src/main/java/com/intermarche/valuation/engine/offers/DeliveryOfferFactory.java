@@ -7,6 +7,7 @@ import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.engine.*;
 import jakarta.enterprise.context.ApplicationScoped;
+import org.jboss.logging.Logger;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -38,6 +39,12 @@ import java.util.List;
  */
 @ApplicationScoped
 public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
+
+    /**
+     * Logger for this factory (report §4): a delivery distance beyond every tier is a WARN, not a
+     * line written to {@code System.err} from a class that carried no logger.
+     */
+    private static final Logger LOGGER = Logger.getLogger(DeliveryOfferFactory.class);
 
     /**
      * The offer type discriminator handled by this factory.
@@ -199,17 +206,17 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
      */
     private static class DeliveryTier {
         double maxDistance; // in km
-        BigDecimal priceTTC;
+        BigDecimal priceInclVat;
 
         /**
          * Constructs a new DeliveryTier.
          *
          * @param maxDistance The maximum distance for this tier.
-         * @param priceTTC    The price including tax.
+         * @param priceInclVat    The price including tax.
          */
-        DeliveryTier(double maxDistance, BigDecimal priceTTC) {
+        DeliveryTier(double maxDistance, BigDecimal priceInclVat) {
             this.maxDistance = maxDistance;
-            this.priceTTC = priceTTC;
+            this.priceInclVat = priceInclVat;
         }
     }
 
@@ -264,6 +271,13 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
             return configuration;
         }
 
+        /**
+         * Applies the delivery offer: prices delivery from the tier matching the store-to-address
+         * distance, or produces nothing (with a WARN) when the distance exceeds every tier.
+         *
+         * @param evaluation The evaluation context.
+         * @return A single delivery application, or an empty list when no tier matches.
+         */
         @Override
         public Collection<OfferApplication> apply(BasketEvaluation evaluation) {
             List<OfferApplication> applications = new ArrayList<>();
@@ -275,7 +289,7 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
             BigDecimal deliveryPrice = null;
             for (DeliveryTier tier : tiers) {
                 if (distanceKm <= tier.maxDistance) {
-                    deliveryPrice = tier.priceTTC;
+                    deliveryPrice = tier.priceInclVat;
                     break; // Stop at first matching tier (tiers are sorted)
                 }
             }
@@ -283,7 +297,7 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
             if (deliveryPrice != null) {
                 applications.add(new DeliveryApplication(offerCode, deliveryPrice, vatRate, distanceKm));
             } else {
-                System.err.println("Delivery distance " + distanceKm + " km exceeds all defined tiers for offer " + offerCode);
+                LOGGER.warnf("Delivery distance %s km exceeds all defined tiers for offer %s", distanceKm, offerCode);
             }
             return applications;
         }
@@ -325,7 +339,7 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
      */
     public static class DeliveryApplication implements OfferApplication {
         private final String offerCode;
-        private final BigDecimal priceTTC;
+        private final BigDecimal priceInclVat;
         private final BigDecimal vatRate;
         private final double distanceKm;
 
@@ -333,13 +347,13 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
          * Constructs a new DeliveryApplication.
          *
          * @param offerCode  The offer code.
-         * @param priceTTC   The price including tax.
+         * @param priceInclVat   The price including tax.
          * @param vatRate    The VAT rate.
          * @param distanceKm The calculated distance.
          */
-        public DeliveryApplication(String offerCode, BigDecimal priceTTC, BigDecimal vatRate, double distanceKm) {
+        public DeliveryApplication(String offerCode, BigDecimal priceInclVat, BigDecimal vatRate, double distanceKm) {
             this.offerCode = offerCode;
-            this.priceTTC = priceTTC;
+            this.priceInclVat = priceInclVat;
             this.vatRate = vatRate;
             this.distanceKm = distanceKm;
         }
@@ -353,20 +367,19 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
         public AmountEvaluation getAmount() {
             // HT = TTC / (1 + TVA)
             BigDecimal divisor = BigDecimal.ONE.add(vatRate);
-            BigDecimal priceHT = priceTTC.divide(divisor, 2, RoundingMode.HALF_UP);
-            return new AmountEvaluation(priceHT, priceTTC, vatRate);
+            BigDecimal priceExclVat = priceInclVat.divide(divisor, 2, RoundingMode.HALF_UP);
+            return new AmountEvaluation(priceExclVat, priceInclVat, vatRate);
         }
 
         /**
-         * Delivery is a service, not a physical item.
-         * Returns null as no items are consumed from the inventory.
+         * Delivery is a service, not a physical item, so it consumes nothing from the basket.
          *
-         * @return null.
+         * @return an empty list (report §4: never null).
          */
         @Override
         @JsonIgnore
         public Collection<Basket.Item> getItems() {
-            return null;
+            return List.of();
         }
 
         /**
@@ -387,7 +400,7 @@ public class DeliveryOfferFactory implements OfferApplierFactory, EngineTrait {
          */
         @Override
         public String getType() {
-            return "Delivery: " + offerCode + " (" + String.format("%.2f", distanceKm) + " km) for " + priceTTC + "€";
+            return "Delivery: " + offerCode + " (" + String.format("%.2f", distanceKm) + " km) for " + priceInclVat + "€";
         }
 
     }

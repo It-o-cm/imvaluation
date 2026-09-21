@@ -304,7 +304,7 @@ public class ValuationUiResource {
                 request = trace.requestPayload;
             }
         }
-        return Templates.test(schemasJson(), request, null, null);
+        return Templates.test(HtmlSafeJson.forScript(schemasJson()), HtmlSafeJson.forScript(request), null, null);
     }
 
     /**
@@ -323,7 +323,7 @@ public class ValuationUiResource {
     public Response submitTest(@FormParam("request") String requestJson) {
         LOGGER.debug("Entering method submitTest");
         if (requestJson == null || requestJson.isBlank()) {
-            return Response.ok(Templates.test(schemasJson(), "{}", null,
+            return Response.ok(Templates.test(HtmlSafeJson.forScript(schemasJson()), HtmlSafeJson.forScript("{}"), null,
                     "The basket is empty.")).build();
         }
         try {
@@ -331,14 +331,14 @@ public class ValuationUiResource {
             Response result = valuationResource.calculate(basket);
             String response = MAPPER.writerWithDefaultPrettyPrinter()
                     .writeValueAsString(result.getEntity());
-            return Response.ok(Templates.test(schemasJson(), requestJson, response, null)).build();
+            return Response.ok(Templates.test(HtmlSafeJson.forScript(schemasJson()), HtmlSafeJson.forScript(requestJson), response, null)).build();
         } catch (WebApplicationException e) {
             String message = e.getMessage() == null ? "The valuation was refused." : e.getMessage();
-            return Response.ok(Templates.test(schemasJson(), requestJson, null,
+            return Response.ok(Templates.test(HtmlSafeJson.forScript(schemasJson()), HtmlSafeJson.forScript(requestJson), null,
                     "HTTP " + e.getResponse().getStatus() + " \u2014 " + message)).build();
         } catch (Exception e) {
             LOGGER.error("Test valuation failed", e);
-            return Response.ok(Templates.test(schemasJson(), requestJson, null,
+            return Response.ok(Templates.test(HtmlSafeJson.forScript(schemasJson()), HtmlSafeJson.forScript(requestJson), null,
                     e.getMessage())).build();
         }
     }

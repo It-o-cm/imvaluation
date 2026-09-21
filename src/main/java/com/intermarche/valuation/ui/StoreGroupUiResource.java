@@ -83,7 +83,7 @@ public class StoreGroupUiResource {
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance workbench(@Context SecurityContext securityContext) {
         LOGGER.debug("Entering method workbench");
-        return Templates.workbench(buildModelJson(), canWrite(securityContext));
+        return Templates.workbench(HtmlSafeJson.forScript(buildModelJson()), canWrite(securityContext));
     }
 
     // --------------------------------------------------

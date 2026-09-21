@@ -66,6 +66,16 @@ public class AuthUiResource {
     PasswordResetService passwordReset;
 
     /**
+     * The public base URL the reset link is built from (report H3).
+     * <p>
+     * Read from configuration, never from the request Host header: a {@code Host} an attacker
+     * controls would otherwise mint a legitimate-looking reset mail pointing the token at the
+     * attacker's site. The property is required in production and defaulted only for dev/test.
+     */
+    @org.eclipse.microprofile.config.inject.ConfigProperty(name = "valuation.public-base-url")
+    String publicBaseUrl;
+
+    /**
      * Type-safe declarations of the Qute templates used by this resource.
      */
     @CheckedTemplate
@@ -171,8 +181,7 @@ public class AuthUiResource {
      * account, the request always redirects to the same confirmation, so the page cannot
      * be used to tell which addresses have accounts.
      *
-     * @param email   The e-mail address typed on the form.
-     * @param uriInfo The request URI, used to build the link with the host that served it.
+     * @param email The e-mail address typed on the form.
      * @return A redirection back to the request page with the confirmation shown.
      */
     @POST
@@ -180,9 +189,10 @@ public class AuthUiResource {
     @PermitAll
     @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
     @Produces(MediaType.TEXT_HTML)
-    public Response requestReset(@FormParam("email") String email, @Context UriInfo uriInfo) {
-        String baseUrl = Objects.toString(uriInfo.getBaseUri(), "");
-        passwordReset.requestReset(email, baseUrl);
+    public Response requestReset(@FormParam("email") String email) {
+        // H3: the link is built from the configured public base URL, never from the request Host,
+        // so a forged Host header cannot redirect the token to an attacker-controlled site.
+        passwordReset.requestReset(email, publicBaseUrl);
         return Response.seeOther(URI.create("/ui/forgot?sent=true")).build();
     }
 

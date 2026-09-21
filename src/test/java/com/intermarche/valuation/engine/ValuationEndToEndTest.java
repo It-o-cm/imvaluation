@@ -122,7 +122,7 @@ public class ValuationEndToEndTest {
         // VAT regimes are imported before prices: a price attaches to the regime carrying its
         // rate, so the referential must already hold them (mirrors the production seed order).
         importCsv("/vat-rates/import", """
-                NUMBER|RATE|LABEL
+                VAT_NUMBER|RATE|LABEL
                 1|0.2000|Taux normal
                 2|0.0550|Taux réduit
                 3|0.1000|Taux intermédiaire
@@ -545,6 +545,46 @@ public class ValuationEndToEndTest {
                 .body("{ \"storeCode\": \"0101\", \"items\": [] }")
                 .when().post("/valuation")
                 .then().statusCode(greaterThanOrEqualTo(400));
+    }
+
+    /**
+     * Determinism acceptance (report C2): the same rich basket, evaluated fifty times in one
+     * JVM, yields fifty byte-identical JSON responses.
+     * <p>
+     * The basket is built to exercise every source of former non-determinism at once — several
+     * standard lines, an N+M split, a mixed bundle, home delivery with a deposit basket and a
+     * free-delivery threshold, vignettes and the meal-voucher family — so that any residue in
+     * the applied-offers order, the residue-on-last distributions, the per-ticket cap or the
+     * gift election would surface as a differing byte somewhere in the payload. Fifty runs share
+     * one process and one database, so a difference can only come from iteration order inside the
+     * engine, which is exactly what the ordered collections and the stable tie-breaks removed.
+     */
+    @Test
+    @Order(17)
+    @DisplayName("17 - The same basket evaluates to a byte-identical response fifty times")
+    void deterministicAcrossFiftyRuns() {
+        String basket = """
+                { "storeCode": "0101", "deliveryMode": "HOME_DELIVERY",
+                  "deliveryAddress": { "streetLine1": "12 Rue du Test", "postalCode": "59113",
+                                       "city": "Seclin", "country": "France",
+                                       "latitude": 50.540, "longitude": 3.030 },
+                  "instructions": ["Deposit basket"],
+                  "vignettes": { "3300000000031": 5 },
+                  "items": [
+                    { "lineId": "L1", "produceEan": "3300000000001", "quantity": 5 },
+                    { "lineId": "L2", "produceEan": "3300000000004", "quantity": 2 },
+                    { "lineId": "L3", "produceEan": "3300000000013", "quantity": 2 },
+                    { "lineId": "L4", "produceEan": "3300000000007", "quantity": 3 },
+                    { "lineId": "L5", "produceEan": "3300000000020", "quantity": 1 },
+                    { "lineId": "L6", "produceEan": "3300000000031", "quantity": 1 },
+                    { "lineId": "L7", "produceEan": "3300000000032", "quantity": 2 } ] }
+                """;
+        String reference = evaluate(basket).asString();
+        for (int run = 2; run <= 50; run++) {
+            String body = evaluate(basket).asString();
+            assertEquals(reference, body,
+                    "run " + run + " diverged from the first response: the evaluation is not deterministic");
+        }
     }
 
     // --------------------------------------------------

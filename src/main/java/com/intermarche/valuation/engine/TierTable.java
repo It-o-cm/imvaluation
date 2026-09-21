@@ -106,7 +106,7 @@ public final class TierTable<A> {
      * Resolves the highest tier reached by the given base ("highest reached" semantics).
      * <p>
      * The result is the tier with the greatest threshold lower than or equal to the base;
-     * its award applies once, on whatever assiette the caller chooses. A base below the
+     * its award applies once, on whatever base the caller chooses. A base below the
      * first threshold reaches no tier.
      *
      * @param base the compared value (amount or quantity).

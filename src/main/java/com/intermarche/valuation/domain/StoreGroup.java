@@ -277,13 +277,21 @@ public class StoreGroup extends BaseEntity {
     }
 
     /**
-     * Calculates a checksum based on the group's code and name.
+     * Calculates a checksum based on the group's code, name and members (A4, report §3).
+     * <p>
+     * The member store codes and sub-group codes are included, each sorted for an order-independent
+     * hash: without them, a re-import that only adds or removes members is a silent no-op, so a
+     * removed store would never leave the group. Sorting keeps the checksum stable regardless of the
+     * feed's ordering.
      *
      * @return Checksum integer value.
      */
     @Override
     public int getChecksum() {
-        // Excluding children from checksum for performance and stability.
-        return Objects.hash(code, name);
+        java.util.List<String> storeCodes = stores.stream()
+                .map(s -> s.code).sorted().collect(java.util.stream.Collectors.toList());
+        java.util.List<String> childCodes = storeGroups.stream()
+                .map(g -> g.code).sorted().collect(java.util.stream.Collectors.toList());
+        return Objects.hash(code, name, storeCodes, childCodes);
     }
 }

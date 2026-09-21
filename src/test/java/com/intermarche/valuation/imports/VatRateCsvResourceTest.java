@@ -1,6 +1,6 @@
 package com.intermarche.valuation.imports;
 
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.ProductType;
@@ -104,7 +104,7 @@ public class VatRateCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testImportNewRegimes_Created() {
-        importVatRates("NUMBER|RATE|LABEL\n10|0.1500|Fifteen\n11|0.0800|Eight")
+        importVatRates("VAT_NUMBER|RATE|LABEL\n10|0.1500|Fifteen\n11|0.0800|Eight")
                 .statusCode(200)
                 .body(containsString("\"createdCount\":2"))
                 .body(containsString("\"updatedCount\":0"));
@@ -124,7 +124,7 @@ public class VatRateCsvResourceTest {
             new VatRate(10, new BigDecimal("0.1500"), "Fifteen").persist();
             return null;
         });
-        importVatRates("NUMBER|RATE|LABEL\n10|0.1600|Sixteen")
+        importVatRates("VAT_NUMBER|RATE|LABEL\n10|0.1600|Sixteen")
                 .statusCode(200)
                 .body(containsString("\"createdCount\":0"))
                 .body(containsString("\"updatedCount\":1"));
@@ -139,7 +139,7 @@ public class VatRateCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testReimportUnchangedRegime_NoUpdate() {
-        String csv = "NUMBER|RATE|LABEL\n10|0.1500|Fifteen";
+        String csv = "VAT_NUMBER|RATE|LABEL\n10|0.1500|Fifteen";
         importVatRates(csv).statusCode(200).body(containsString("\"createdCount\":1"));
         importVatRates(csv).statusCode(200)
                 .body(containsString("\"createdCount\":0"))
@@ -164,7 +164,7 @@ public class VatRateCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testInvalidNumber_Rejected() {
-        importVatRates("NUMBER|RATE|LABEL\nabc|0.1500|X")
+        importVatRates("VAT_NUMBER|RATE|LABEL\nabc|0.1500|X")
                 .statusCode(200)
                 .body(containsString("\"createdCount\":0"))
                 .body(containsString("Invalid VAT number: abc"));
@@ -176,7 +176,7 @@ public class VatRateCsvResourceTest {
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testMissingRateValue_Rejected() {
-        importVatRates("NUMBER|RATE|LABEL\n10||X")
+        importVatRates("VAT_NUMBER|RATE|LABEL\n10||X")
                 .statusCode(200)
                 .body(containsString("\"createdCount\":0"))
                 .body(containsString("Invalid VAT rate for number 10"));
@@ -190,7 +190,7 @@ public class VatRateCsvResourceTest {
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testReimportUnchangedPrices_ZeroUpdated() {
         seedStoreAndProduct();
-        importVatRates("NUMBER|RATE|LABEL\n1|0.2000|Taux normal").statusCode(200);
+        importVatRates("VAT_NUMBER|RATE|LABEL\n1|0.2000|Taux normal").statusCode(200);
         String priceCsv = "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                 + "EAN1|S1|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|";
         importPrices(priceCsv).statusCode(200).body(containsString("\"createdCount\":1"));
@@ -208,14 +208,14 @@ public class VatRateCsvResourceTest {
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testRateCorrectionDoesNotRewritePriceRows() {
         seedStoreAndProduct();
-        importVatRates("NUMBER|RATE|LABEL\n1|0.2000|Taux normal").statusCode(200);
+        importVatRates("VAT_NUMBER|RATE|LABEL\n1|0.2000|Taux normal").statusCode(200);
         importPrices("EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                 + "EAN1|S1|10.00|12.00|0.2000|DEFAULT|0|2023-01-01T00:00:00|")
                 .statusCode(200).body(containsString("\"createdCount\":1"));
         Integer checksumBefore = withTransaction(() ->
                 Price.find("product.ean = ?1", "EAN1").<Price>firstResult().checksum);
         // Correct the regime's legal rate on the SAME number.
-        importVatRates("NUMBER|RATE|LABEL\n1|0.2100|Taux normal")
+        importVatRates("VAT_NUMBER|RATE|LABEL\n1|0.2100|Taux normal")
                 .statusCode(200).body(containsString("\"updatedCount\":1"));
         withTransaction(() -> {
             Price price = Price.find("product.ean = ?1", "EAN1").firstResult();
@@ -252,8 +252,8 @@ public class VatRateCsvResourceTest {
      *
      * @return the address.
      */
-    private Adresse testAddress() {
-        Adresse address = new Adresse();
+    private Address testAddress() {
+        Address address = new Address();
         address.streetLine1 = "1 Test Street";
         address.city = "Paris";
         address.postalCode = "75000";

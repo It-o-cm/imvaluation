@@ -26,12 +26,12 @@ public class StoreTest {
     EntityManager em;
 
     /**
-     * Creates a valid {@link Adresse} entity for testing.
+     * Creates a valid {@link Address} entity for testing.
      *
-     * @return A valid {@link Adresse} instance.
+     * @return A valid {@link Address} instance.
      */
-    private Adresse createAdresse() {
-        Adresse adresse = new Adresse();
+    private Address createAdresse() {
+        Address adresse = new Address();
         adresse.streetLine1 = "10 Avenue des Champs";
         adresse.city = "Paris";
         adresse.postalCode = "75008";

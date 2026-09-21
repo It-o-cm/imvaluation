@@ -71,7 +71,7 @@ class PriceTest {
         Store store = new Store();
         store.code = code;
         store.name = "Store " + code;
-        store.address = new Adresse(); // Assumes Adresse is an Embeddable class
+        store.address = new Address(); // Assumes Address is an Embeddable class
         store.persist();
         return store;
     }

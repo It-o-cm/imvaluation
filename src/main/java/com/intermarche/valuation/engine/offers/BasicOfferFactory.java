@@ -94,6 +94,20 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
         }
 
         /**
+         * Returns this applier's product EAN as its stable tie-break key (report C2).
+         * <p>
+         * The Basic valuation builds one applier per product with no configuration code, so the
+         * default empty key would leave two products' appliers tied; the EAN gives the sort a
+         * deterministic order among them.
+         *
+         * @return the product EAN.
+         */
+        @Override
+        public String getTieBreakKey() {
+            return product.ean;
+        }
+
+        /**
          * Applies the applier to the given basket evaluation.
          * <p>
          * Attempts to pick the quantity of its specific product EAN from the evaluation context.
@@ -114,11 +128,15 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
             // one price; each slice is mono-price and becomes its own standard line, so a
             // product priced two ways yields two applications rather than a blended one.
             List<Basket.Item> slices = evaluation.pick(remaining, product.ean);
-            Price price = this.getDiscountAppliers().isEmpty() ? this.defaultPrice : this.refPrice;
+            // A1 (report C1): value the line at the DEFAULT price during the valuation, whatever
+            // discount appliers are registered. The switch to the reference price
+            // (BASE_FOR_DISCOUNT) is deferred to a post-arbitration re-pricing step in the engine,
+            // which touches only the lines that end up carrying an actually-retained discount — so
+            // a discarded advantage never leaves the customer paying the (higher) reference price.
             List<OfferApplication> applications = new ArrayList<>();
             for (Basket.Item slice : slices) {
                 evaluation.addAvailableToUpcell(slice);
-                applications.add(new BasicApplication(slice, store, product, price));
+                applications.add(new BasicApplication(slice, store, product, this.defaultPrice, this.refPrice));
             }
             return applications;
         }
@@ -142,26 +160,73 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
      * The price calculation is performed on-demand via {@link #getAmount()} and returns
      * a {@link AmountEvaluation}.
      */
-    public static class BasicApplication implements ProductAwareOfferApplication {
+    public static class BasicApplication implements ProductAwareOfferApplication,
+            com.intermarche.valuation.engine.RepriceableApplication {
 
         private final Basket.Item item;
         private final Store store;
         private final Product product;
-        private final Price price;
+        /**
+         * The price currently used to value this line. Starts at the default price and is
+         * switched to the reference price by {@link #repriceToReference()} once the arbitration
+         * has retained a discount on this line (A1, report C1). Not final for that reason.
+         */
+        private Price price;
+        /**
+         * The reference price ({@code BASE_FOR_DISCOUNT}) this line switches to when it carries
+         * a retained discount, or {@code null} when the product has no reference price row.
+         */
+        private final Price referencePrice;
 
         /**
          * Constructs a basic application holding an item and store context.
          *
-         * @param item    The basket item to price.
-         * @param store   The store context to find applicable prices.
-         * @param product The product being priced.
-         * @param price   The price entity to use.
+         * @param item           The basket item to price.
+         * @param store          The store context to find applicable prices.
+         * @param product        The product being priced.
+         * @param price          The default price entity to value the line with.
+         * @param referencePrice The reference price to switch to when a discount is retained,
+         *                       or {@code null} when none exists.
          */
-        public BasicApplication(Basket.Item item, Store store, Product product, Price price) {
+        public BasicApplication(Basket.Item item, Store store, Product product, Price price, Price referencePrice) {
             this.item = item;
             this.store = store;
             this.product = product;
             this.price = price;
+            this.referencePrice = referencePrice;
+        }
+
+        /**
+         * Constructs a basic application with no reference price: the line is valued at the given
+         * price and {@link #repriceToReference()} is a no-op.
+         *
+         * @param item    The basket item to price.
+         * @param store   The store context to find applicable prices.
+         * @param product The product being priced.
+         * @param price   The price entity to value the line with.
+         */
+        public BasicApplication(Basket.Item item, Store store, Product product, Price price) {
+            this(item, store, product, price, null);
+        }
+
+        /**
+         * Switches this line from the default price to the reference price (A1, report C1).
+         * <p>
+         * Called by the engine's post-arbitration re-pricing step for the lines that end up
+         * carrying at least one actually-retained discount, so the discount is measured against
+         * the reference price rather than the default one. A no-op when no reference price exists
+         * or the line already sits on it; {@link #getAmount()} recomputes lazily from the price
+         * field, so the offer amount and its valued items follow automatically.
+         *
+         * @return {@code true} when the price was switched, {@code false} otherwise.
+         */
+        @Override
+        public boolean repriceToReference() {
+            if (referencePrice != null && referencePrice != price) {
+                this.price = referencePrice;
+                return true;
+            }
+            return false;
         }
 
         /**

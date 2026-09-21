@@ -1,6 +1,6 @@
 package com.intermarche.valuation.ui;
 
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.ProductFamily;
 import com.intermarche.valuation.domain.Store;
@@ -80,7 +80,7 @@ class LookupResourceTest {
         store.code = code;
         store.name = name;
         if (city != null) {
-            Adresse address = new Adresse();
+            Address address = new Address();
             address.city = city;
             store.address = address;
         }
@@ -99,7 +99,7 @@ class LookupResourceTest {
         Store store = new Store();
         store.code = code;
         store.name = name;
-        Adresse address = new Adresse();
+        Address address = new Address();
         address.city = city;
         store.address = address;
         return store;

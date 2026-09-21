@@ -6,6 +6,7 @@ import com.intermarche.valuation.domain.Offer;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -14,6 +15,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,6 +28,12 @@ import java.util.Set;
  */
 @ApplicationScoped
 public class ValuationEngine {
+
+    /**
+     * Logger for fail-closed skips (A2, report H1): a configuration that cannot be honoured is
+     * logged as an error and the evaluation continues, rather than failing the whole request.
+     */
+    private static final Logger LOGGER = Logger.getLogger(ValuationEngine.class);
 
     /**
      * List of all factories registered in the application.
@@ -89,15 +97,15 @@ public class ValuationEngine {
      * @return The final total price as an {@link AmountEvaluation}.
      */
     private static AmountEvaluation calculateAmountEvaluation(BasketEvaluation evaluation) {
-        BigDecimal totalHT = BigDecimal.ZERO;
-        BigDecimal totalTTC = BigDecimal.ZERO;
+        BigDecimal totalExclVat = BigDecimal.ZERO;
+        BigDecimal totalInclVat = BigDecimal.ZERO;
         // Sum up all Offer Prices (Products, Delivery, Bundles, etc.)
         if (evaluation.getOffers() != null) {
             for (OfferApplication app : evaluation.getOffers()) {
                 AmountEvaluation price = app.getAmount();
                 if (price != null) {
-                    totalHT = totalHT.add(price.amountExcludingTax);
-                    totalTTC = totalTTC.add(price.amountIncludingTax);
+                    totalExclVat = totalExclVat.add(price.amountExcludingTax);
+                    totalInclVat = totalInclVat.add(price.amountIncludingTax);
                 }
             }
         }
@@ -111,8 +119,8 @@ public class ValuationEngine {
                         // getDiscountAmount() returns a positive amount to deduct; every
                         // DiscountApplication follows that contract, so the sign lives here
                         // in the subtraction, not in the stored value.
-                        totalHT = totalHT.subtract(price.amountExcludingTax);
-                        totalTTC = totalTTC.subtract(price.amountIncludingTax);
+                        totalExclVat = totalExclVat.subtract(price.amountExcludingTax);
+                        totalInclVat = totalInclVat.subtract(price.amountIncludingTax);
                     }
                 }
             }
@@ -120,8 +128,8 @@ public class ValuationEngine {
         // Create the final PriceEvaluation and set it in the context
         // VAT Rate is set to 0 as it's a mix of different rates
         AmountEvaluation finalPrice = new AmountEvaluation(
-                totalHT.setScale(2, RoundingMode.HALF_UP),
-                totalTTC.setScale(2, RoundingMode.HALF_UP),
+                totalExclVat.setScale(2, RoundingMode.HALF_UP),
+                totalInclVat.setScale(2, RoundingMode.HALF_UP),
                 BigDecimal.ZERO
         );
         return finalPrice;
@@ -164,9 +172,13 @@ public class ValuationEngine {
                         }
                         appliers.addAll(builtAppliers);
                     }
-                } catch (Exception e) {
-                    // Log error but continue with other factories
-                    throw new RuntimeException("Error building appliers from factory: " + e.getMessage(), e);
+                } catch (ConfigurationException e) {
+                    // Fail-closed per configuration (A2, report H1a): a stored specification this
+                    // factory cannot build is skipped and recorded, the evaluation continues with
+                    // the others — never a 500 for every basket of the store. Request-level errors
+                    // (a malformed basket line, an unknown product) are not ConfigurationException
+                    // and propagate, so the caller is still told its request was rejected.
+                    skip(basketEvaluation, "Offer factory " + factory.getClass().getSimpleName(), e);
                 }
             }
         }
@@ -204,7 +216,12 @@ public class ValuationEngine {
             // offer-side trigger against a provisional Basic valuation of the basket.
             Offer configuration = applier.getConfiguration();
             if (configuration != null) {
-                ArbitrationConfig config = parseArbitrationConfig(configuration);
+                ArbitrationConfig config = parseArbitrationConfig(configuration, evaluation);
+                // Fail-closed (A2, report H1b): a configuration whose trigger/arbitration block
+                // could not be parsed is skipped, not silently treated as always-on.
+                if (!config.valid()) {
+                    continue;
+                }
                 if (!evaluation.triggerResult(configuration, config.trigger()).satisfied()) {
                     continue;
                 }
@@ -215,9 +232,10 @@ public class ValuationEngine {
                 if (applications != null) {
                     evaluation.getOffers().addAll(applications);
                 }
-            } catch (Exception e) {
-                // Log error but continue with other appliers
-                throw new RuntimeException("Error applying offer logic: " + e.getMessage(), e);
+            } catch (ConfigurationException e) {
+                // Fail-closed (A2, report H1a): a stored-spec problem skips this offer and continues;
+                // a genuine runtime error is not ConfigurationException and propagates.
+                skip(evaluation, "Offer " + (configuration != null ? configuration.code : applier.getClass().getSimpleName()), e);
             }
         }
     }
@@ -240,16 +258,132 @@ public class ValuationEngine {
         // today — activation by data, never by code.
         Map<AdvantageApplier, ArbitrationConfig> configs = new IdentityHashMap<>();
         for (AdvantageApplier applier : appliers) {
-            configs.put(applier, parseArbitrationConfig(applier.getConfiguration()));
+            configs.put(applier, parseArbitrationConfig(applier.getConfiguration(), evaluation));
         }
         boolean closed = isBasketClosed(evaluation.getBasket());
         ArbitrationState state = new ArbitrationState();
+        // Per-applier record of the applications actually retained, in application order, so the
+        // A1 re-pricing step can recompute the discounts that land on a re-priced line.
+        Map<AdvantageApplier, List<AdvantageApplication>> applied = new LinkedHashMap<>();
         // Two waves (spec §4.2): AT_TRIGGER first, always; AT_TOTAL second, only on a closed
         // basket. Wave membership takes precedence over every other ordering criterion.
-        arbitrateWave("AT_TRIGGER", appliers, configs, evaluation, state);
+        arbitrateWave("AT_TRIGGER", appliers, configs, evaluation, state, applied);
         if (closed) {
-            arbitrateWave("AT_TOTAL", appliers, configs, evaluation, state);
+            arbitrateWave("AT_TOTAL", appliers, configs, evaluation, state, applied);
         }
+        // A1 (report C1): the standard lines were valued at the DEFAULT price during the
+        // arbitration; now switch the lines carrying an actually-retained discount to the
+        // reference price and recompute those discounts on that base.
+        repriceRetainedDiscountLines(evaluation, configs, applied);
+    }
+
+    /**
+     * Re-prices the standard lines carrying a retained discount and recomputes those discounts on
+     * the reference base (A1, report C1).
+     * <p>
+     * Standard lines are valued at the DEFAULT price throughout the arbitration, so a discarded
+     * advantage never costs the customer the higher reference price. Once the arbitration has
+     * settled, the lines that ended up carrying at least one retained {@link DiscountApplication}
+     * are switched to their reference price; the discounts that target such a line are then
+     * recomputed against the new base by re-running their (pure, non-consuming) applier and
+     * swapping in the fresh applications. Discounts frozen at apply-time otherwise keep their
+     * default-base amount, which would understate the reduction on the reference price.
+     *
+     * @param evaluation the evaluation whose retained discounts are being finalised.
+     * @param configs    the parsed arbitration parameters, per applier.
+     * @param applied    the applications retained per applier, in application order.
+     */
+    private void repriceRetainedDiscountLines(BasketEvaluation evaluation,
+                                              Map<AdvantageApplier, ArbitrationConfig> configs,
+                                              Map<AdvantageApplier, List<AdvantageApplication>> applied) {
+        // 1. Switch to the reference price every standard line that carries a retained discount.
+        Set<OfferApplication> repricedTargets = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (AdvantageApplication advantage : evaluation.getAdvantages()) {
+            if (!(advantage instanceof DiscountApplication)) {
+                continue;
+            }
+            OfferApplication target = advantage.getOfferApplication();
+            if (target instanceof RepriceableApplication && !repricedTargets.contains(target)
+                    && ((RepriceableApplication) target).repriceToReference()) {
+                repricedTargets.add(target);
+            }
+        }
+        if (repricedTargets.isEmpty()) {
+            return;
+        }
+        // 2. Select, in application order, the pure discount appliers (every retained application
+        // is a DiscountApplication) that actually target a re-priced line. They read the live
+        // offer amounts and consume nothing, so re-running them on the re-priced evaluation
+        // re-derives their amounts on the reference base.
+        List<Map.Entry<AdvantageApplier, List<AdvantageApplication>>> toRecompute = new ArrayList<>();
+        for (Map.Entry<AdvantageApplier, List<AdvantageApplication>> entry : applied.entrySet()) {
+            if (isPureDiscount(entry.getValue()) && targetsRepricedLine(entry.getValue(), repricedTargets)) {
+                toRecompute.add(entry);
+            }
+        }
+        // 3. Withdraw their pass-1 (default-base) applications up front, so an applier whose base
+        // nets out prior discounts does not see the stale amount it is about to replace.
+        for (Map.Entry<AdvantageApplier, List<AdvantageApplication>> entry : toRecompute) {
+            evaluation.getAdvantages().removeAll(entry.getValue());
+        }
+        // 4. Re-run them in application order, so an applier that nets out earlier discounts sees
+        // their recomputed (reference-base) amounts, exactly as in the first pass.
+        for (Map.Entry<AdvantageApplier, List<AdvantageApplication>> entry : toRecompute) {
+            AdvantageApplier applier = entry.getKey();
+            List<AdvantageApplication> previous = entry.getValue();
+            Collection<AdvantageApplication> recomputed;
+            try {
+                recomputed = applier.apply(evaluation);
+            } catch (Exception e) {
+                // A failure here restores the pass-1 applications rather than dropping a retained
+                // advantage.
+                evaluation.getAdvantages().addAll(previous);
+                continue;
+            }
+            List<AdvantageApplication> kept = (recomputed == null || recomputed.isEmpty())
+                    ? List.of() : capApplications(recomputed, configs.get(applier));
+            if (kept.isEmpty()) {
+                evaluation.getAdvantages().addAll(previous);
+                continue;
+            }
+            for (AdvantageApplication application : kept) {
+                application.setApplicationMoment(configs.get(applier).applicationMoment());
+            }
+            evaluation.getAdvantages().addAll(kept);
+        }
+    }
+
+    /**
+     * Tells whether every retained application of an applier is a {@link DiscountApplication} —
+     * a pure reduction that reads the offers and consumes nothing, hence safe to re-run.
+     *
+     * @param applications the applier's retained applications.
+     * @return {@code true} when they are all discount applications.
+     */
+    private static boolean isPureDiscount(List<AdvantageApplication> applications) {
+        for (AdvantageApplication application : applications) {
+            if (!(application instanceof DiscountApplication)) {
+                return false;
+            }
+        }
+        return !applications.isEmpty();
+    }
+
+    /**
+     * Tells whether any of an applier's retained applications targets a re-priced line.
+     *
+     * @param applications    the applier's retained applications.
+     * @param repricedTargets the offer applications that were switched to their reference price.
+     * @return {@code true} when at least one application lands on a re-priced line.
+     */
+    private static boolean targetsRepricedLine(List<AdvantageApplication> applications,
+                                               Set<OfferApplication> repricedTargets) {
+        for (AdvantageApplication application : applications) {
+            if (repricedTargets.contains(application.getOfferApplication())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -267,10 +401,12 @@ public class ValuationEngine {
      * @param configs    the parsed arbitration parameters, per applier.
      * @param evaluation the evaluation context.
      * @param state      the running arbitration state (cumul, exclusion groups, settled set).
+     * @param applied    collects, per applier, the applications actually retained (A1 re-pricing).
      */
     private void arbitrateWave(String wave, List<AdvantageApplier> appliers,
                                Map<AdvantageApplier, ArbitrationConfig> configs,
-                               BasketEvaluation evaluation, ArbitrationState state) {
+                               BasketEvaluation evaluation, ArbitrationState state,
+                               Map<AdvantageApplier, List<AdvantageApplication>> applied) {
         while (true) {
             List<AdvantageApplier> candidates = new ArrayList<>();
             for (AdvantageApplier applier : appliers) {
@@ -289,7 +425,7 @@ public class ValuationEngine {
                     .thenComparing(a -> configs.get(a).code()));
             AdvantageApplier applier = candidates.get(0);
             state.settled.add(applier);
-            applyIfEligible(applier, configs.get(applier), evaluation, state);
+            applyIfEligible(applier, configs.get(applier), evaluation, state, applied);
         }
     }
 
@@ -297,7 +433,7 @@ public class ValuationEngine {
      * Applies one advantage if it passes the full application conjunction of spec §4.2, and
      * records its effects.
      * <p>
-     * The conjunction: trigger satisfied (memoized), assiette non-empty (the applier produces
+     * The conjunction: trigger satisfied (memoized), base non-empty (the applier produces
      * at least one application), cumulable compatible with the advantages already applied, no
      * exclusion group already consumed, and the per-ticket / per-line limits not reached. On
      * success the applications are recorded with their application moment, the exclusion
@@ -309,10 +445,17 @@ public class ValuationEngine {
      * @param config     its arbitration parameters.
      * @param evaluation the evaluation context.
      * @param state      the running arbitration state.
+     * @param applied    collects, per applier, the applications actually retained (A1 re-pricing).
      * @return {@code true} when the advantage was applied.
      */
     private boolean applyIfEligible(AdvantageApplier applier, ArbitrationConfig config,
-                                    BasketEvaluation evaluation, ArbitrationState state) {
+                                    BasketEvaluation evaluation, ArbitrationState state,
+                                    Map<AdvantageApplier, List<AdvantageApplication>> applied) {
+        // Fail-closed (A2, report H1b): an advantage whose trigger/arbitration block could not be
+        // parsed is skipped, never granted as if it were unconditional.
+        if (!config.valid()) {
+            return false;
+        }
         TriggerResult trigger = evaluation.triggerResult(applier.getConfiguration(), config.trigger());
         if (!trigger.satisfied()) {
             return false;
@@ -328,8 +471,12 @@ public class ValuationEngine {
         Collection<AdvantageApplication> produced;
         try {
             produced = applier.apply(evaluation);
-        } catch (Exception e) {
-            throw new RuntimeException("Error applying discount logic: " + e.getMessage(), e);
+        } catch (ConfigurationException e) {
+            // Fail-closed (A2, report H1a): a stored-spec problem skips this advantage and continues
+            // the arbitration; a genuine runtime error is not ConfigurationException and propagates.
+            Offer configuration = applier.getConfiguration();
+            skip(evaluation, "Advantage " + (configuration != null ? configuration.code : applier.getClass().getSimpleName()), e);
+            return false;
         }
         if (produced == null || produced.isEmpty()) {
             return false;
@@ -342,6 +489,7 @@ public class ValuationEngine {
             application.setApplicationMoment(config.applicationMoment());
         }
         evaluation.getAdvantages().addAll(kept);
+        applied.put(applier, kept);
         if (!config.cumulable()) {
             state.nonCumulableApplied = true;
         }
@@ -405,13 +553,16 @@ public class ValuationEngine {
      * and per targeted offer application for the line. There is no repeatable-mechanic
      * re-invocation model to bound instead, so the count is what is capped.
      *
-     * @param offer the configuration row, or {@code null}.
-     * @return the parsed arbitration parameters.
+     * @param offer      the configuration row, or {@code null}.
+     * @param evaluation the evaluation, used to record a fail-closed skip on parse failure.
+     * @return the parsed arbitration parameters; {@link ArbitrationConfig#valid()} is
+     *         {@code false} when the block could not be parsed and the configuration must be
+     *         skipped (A2, report H1b).
      */
-    ArbitrationConfig parseArbitrationConfig(Offer offer) {
+    ArbitrationConfig parseArbitrationConfig(Offer offer, BasketEvaluation evaluation) {
         if (offer == null) {
             return new ArbitrationConfig(Trigger.ALWAYS, "AT_TOTAL", 500, true,
-                    List.of(), null, null, false, "");
+                    List.of(), null, null, false, "", true);
         }
         String code = offer.code == null ? "" : offer.code;
         try {
@@ -449,10 +600,14 @@ public class ValuationEngine {
                 }
             }
             return new ArbitrationConfig(trigger, moment, priority, cumulable,
-                    List.copyOf(groups), maxTicket, maxLine, consumes, code);
+                    List.copyOf(groups), maxTicket, maxLine, consumes, code, true);
         } catch (Exception e) {
+            // Fail-closed (A2, report H1b): an unparseable trigger/arbitration block no longer
+            // falls back on Trigger.ALWAYS (fail-open on money); the configuration is marked
+            // invalid so its offer/advantage is skipped, and the skip is logged and recorded.
+            skip(evaluation, "Configuration " + code, e);
             return new ArbitrationConfig(Trigger.ALWAYS, "AT_TOTAL", 500, true,
-                    List.of(), null, null, false, code);
+                    List.of(), null, null, false, code, false);
         }
     }
 
@@ -482,11 +637,13 @@ public class ValuationEngine {
      * @param maxApplicationsPerLine   the per-line application cap, or {@code null} for none.
      * @param consumesContributors     whether the trigger contributors become consumed carriers.
      * @param code                     the configuration code, the stable ordering tiebreaker.
+     * @param valid                    whether the block parsed; a {@code false} configuration is
+     *                                 skipped fail-closed (A2, report H1b).
      */
     record ArbitrationConfig(Trigger trigger, String applicationMoment, int priority,
                              boolean cumulable, List<String> exclusionGroups,
                              Integer maxApplicationsPerTicket, Integer maxApplicationsPerLine,
-                             boolean consumesContributors, String code) {
+                             boolean consumesContributors, String code, boolean valid) {
     }
 
     /**
@@ -536,13 +693,30 @@ public class ValuationEngine {
                     if (builtAppliers != null) {
                         appliers.addAll(builtAppliers);
                     }
-                } catch (Exception e) {
-                    // Log error but continue with other factories
-                    throw new RuntimeException("Error building appliers from factory: " + e.getMessage(), e);
+                } catch (ConfigurationException e) {
+                    // Fail-closed per configuration (A2, report H1a): skip the faulty specification
+                    // and continue; request-level errors are not ConfigurationException and propagate.
+                    skip(basketEvaluation, "Advantage factory " + factory.getClass().getSimpleName(), e);
                 }
             }
         }
         return appliers;
+    }
+
+    /**
+     * Skips a configuration fail-closed (A2, report H1): logs the reason as an error and records it
+     * on the evaluation so the resource can trace it, without interrupting the valuation.
+     *
+     * @param evaluation the evaluation to record the skip on.
+     * @param what       a short description of what was skipped.
+     * @param cause      the error that caused the skip.
+     */
+    private static void skip(BasketEvaluation evaluation, String what, Throwable cause) {
+        String message = what + " skipped: " + cause.getMessage();
+        LOGGER.error(message, cause);
+        if (evaluation != null) {
+            evaluation.recordSkippedConfiguration(message);
+        }
     }
 
     // --------------------------------------------------
@@ -616,9 +790,12 @@ public class ValuationEngine {
          * @param appliers The list of appliers to sort.
          */
         public void sort(List<OfferApplier> appliers, BasketEvaluation evaluation) {
-            // Sort by efficiency score descending
-            // High score = Most Efficient / Highest Priority
-            appliers.sort(Comparator.comparingDouble(OfferApplier::getEfficiencyScore).reversed());
+            // Sort by efficiency score descending (high score = most efficient / highest
+            // priority), then by a stable tie-break key so appliers of equal score keep a
+            // deterministic order between runs and nodes (report C2), mirroring the advantage
+            // wave's code tie-break.
+            appliers.sort(Comparator.comparingDouble(OfferApplier::getEfficiencyScore).reversed()
+                    .thenComparing(OfferApplier::getTieBreakKey));
         }
     }
 

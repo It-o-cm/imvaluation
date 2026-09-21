@@ -1,6 +1,6 @@
 package com.intermarche.valuation.graphql;
 
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Store;
 import io.smallrye.common.annotation.RunOnVirtualThread;
 import jakarta.annotation.security.RolesAllowed;
@@ -123,7 +123,7 @@ public class StoreResource implements GraphQLTrait {
             store.code = input.code;
             store.name = input.name;
             // Map Address fields
-            Adresse address = new Adresse();
+            Address address = new Address();
             address.streetLine1 = input.streetLine1;
             address.streetLine2 = input.streetLine2;
             address.postalCode = input.postalCode;
@@ -177,7 +177,7 @@ public class StoreResource implements GraphQLTrait {
             // Apply Updates
             if (input.code != null) store.code = input.code;
             if (input.name != null) store.name = input.name;
-            if (store.address == null) store.address = new Adresse();
+            if (store.address == null) store.address = new Address();
             if (input.streetLine1 != null) store.address.streetLine1 = input.streetLine1;
             if (input.streetLine2 != null) store.address.streetLine2 = input.streetLine2;
             if (input.postalCode != null) store.address.postalCode = input.postalCode;
@@ -213,7 +213,7 @@ public class StoreResource implements GraphQLTrait {
     /**
      * Input record type for GraphQL Store mutations.
      * <p>
-     * Contains all fields corresponding to the {@link Store} entity and its embedded {@link Adresse}.
+     * Contains all fields corresponding to the {@link Store} entity and its embedded {@link Address}.
      * All fields are mutable and nullable to support partial updates.
      */
     @Input

@@ -6,6 +6,7 @@ import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.engine.NetAmounts;
 import com.intermarche.valuation.engine.AdvantageApplication;
 import com.intermarche.valuation.engine.AdvantageApplier;
 import com.intermarche.valuation.engine.AdvantageApplierFactory;
@@ -32,9 +33,9 @@ import java.util.Set;
 
 /**
  * Factory for the "VAT_REFUND_DISCOUNT" advantage type: an ordinary discount whose amount is
- * the VAT of an assiette (spec §4).
+ * the VAT of an base (spec §4).
  * <p>
- * "Remise = TVA" is a plain discount whose amount is derived from the VAT: on the assiette,
+ * "Remise = TVA" is a plain discount whose amount is derived from the VAT: on the base,
  * at the current amounts, the discount equals {@code Σ(TTC − HT)}. The VAT value is computed
  * by the single shared helper {@link InstrumentGrantFactory#vatAmount(AmountEvaluation)} — the
  * one place that knows what "value of the VAT" means — so this type and the {@code VAT_AMOUNT}
@@ -45,11 +46,11 @@ import java.util.Set;
  * (GB-01-05-32) takes the whole valued ticket and forbids {@code targetEans};
  * {@code ITEMS} (GB-01-05-33) takes the listed lines and requires {@code targetEans}. The
  * total is distributed as one {@link DiscountApplication} per targeted offer application,
- * pro-rata of the tax-included assiette, the rounding residue landing on the last one — the
+ * pro-rata of the tax-included base, the rounding residue landing on the last one — the
  * same rule as {@code TIERED_DISCOUNT}.
  * <p>
  * The fiscal VAT breakdown is untouched: it is recomputed from the final net amounts, so a
- * 120.00 TTC / 20 % assiette yields a 20.00 discount, 100.00 paid, and a fiscal VAT of 16.67
+ * 120.00 TTC / 20 % base yields a 20.00 discount, 100.00 paid, and a fiscal VAT of 16.67
  * — no special case anywhere in this type.
  */
 @ApplicationScoped
@@ -67,7 +68,7 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
     {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "VAT Refund Discount Offer Specification",
-      "description": "An ordinary discount whose amount equals the VAT of the assiette at the current amounts.",
+      "description": "An ordinary discount whose amount equals the VAT of the base at the current amounts.",
       "type": "object",
       "required": ["scope"],
       "properties": {
@@ -81,7 +82,7 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
           "type": "array",
           "minItems": 1,
           "items": { "type": "string", "minLength": 1 },
-          "description": "Products the assiette is drawn from. Required when the scope is ITEMS, forbidden for TICKET.",
+          "description": "Products the base is drawn from. Required when the scope is ITEMS, forbidden for TICKET.",
           "x-widget": "ean-list",
           "x-label": "Eligible products"
         }
@@ -91,12 +92,12 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
     """;
 
     /**
-     * Scope of the assiette: the whole ticket or a list of products.
+     * Scope of the base: the whole ticket or a list of products.
      */
     public enum Scope {
-        /** The assiette is every available valued line. */
+        /** The base is every available valued line. */
         TICKET,
-        /** The assiette is the available valued lines whose EAN is targeted. */
+        /** The base is the available valued lines whose EAN is targeted. */
         ITEMS
     }
 
@@ -176,10 +177,10 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
     }
 
     /**
-     * One targeted contribution to the assiette: an offer application and the amount it brings.
+     * One targeted contribution to the base: an offer application and the amount it brings.
      *
      * @param application the offer application carrying the contribution.
-     * @param amount      the amount attributed to the assiette (the whole application in TICKET
+     * @param amount      the amount attributed to the base (the whole application in TICKET
      *                    scope, the product's part in ITEMS scope).
      */
     private record Contribution(ProductAwareOfferApplication application, AmountEvaluation amount) {
@@ -204,7 +205,7 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
         private Offer configuration;
 
         /**
-         * The assiette scope.
+         * The base scope.
          */
         private final Scope scope;
 
@@ -214,7 +215,7 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
         private final List<Product> targetProducts;
 
         /**
-         * The sandbox efficiency score: the VAT of the assiette on the current basket, at the
+         * The sandbox efficiency score: the VAT of the base on the current basket, at the
          * reference price. Higher is arbitrated first.
          */
         private final double efficiencyScore;
@@ -223,7 +224,7 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
          * Creates the applier and computes its sandbox efficiency score.
          *
          * @param code           the offer code.
-         * @param scope          the assiette scope.
+         * @param scope          the base scope.
          * @param targetProducts the targeted products; empty in TICKET scope.
          * @param basket         the basket, scanned for the sandbox score; may be null.
          * @param store          the store, for reference price lookups; may be null.
@@ -243,7 +244,7 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
          *
          * @param basket the basket to scan; may be null.
          * @param store  the store for the reference price lookups; may be null.
-         * @return the summed VAT of the assiette, never negative; zero when nothing is valued.
+         * @return the summed VAT of the base, never negative; zero when nothing is valued.
          */
         private double computeSandboxScore(Basket basket, Store store) {
             if (basket == null || basket.items == null || store == null) {
@@ -263,7 +264,7 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
                     total = total.add(InstrumentGrantFactory.vatAmount(amount));
                 } catch (RuntimeException e) {
                     // A line that cannot be priced at build time does not contribute to the
-                    // score; the real assiette is computed later against the applied offers.
+                    // score; the real base is computed later against the applied offers.
                 }
             }
             return total.doubleValue();
@@ -298,7 +299,7 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
         /**
          * Returns the sandbox efficiency score of this applier.
          *
-         * @return the VAT of the assiette on the current basket at the reference price.
+         * @return the VAT of the base on the current basket at the reference price.
          */
         @Override
         public double getEfficiencyScore() {
@@ -318,13 +319,13 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
         /**
          * Applies the VAT-refund discount to the evaluation.
          * <p>
-         * The assiette is gathered from the available offer applications, the total discount is
-         * the summed VAT of the assiette, then split into one application per targeted offer
-         * application, pro-rata of the tax-included assiette, the rounding residue going to the
+         * The base is gathered from the available offer applications, the total discount is
+         * the summed VAT of the base, then split into one application per targeted offer
+         * application, pro-rata of the tax-included base, the rounding residue going to the
          * last one.
          *
          * @param evaluation the evaluation context containing the applied offers.
-         * @return the discount applications, empty when the assiette carries no VAT.
+         * @return the discount applications, empty when the base carries no VAT.
          */
         @Override
         public Collection<AdvantageApplication> apply(BasketEvaluation evaluation) {
@@ -351,7 +352,7 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
         }
 
         /**
-         * Gathers the contributions of the assiette from the available offer applications.
+         * Gathers the contributions of the base from the available offer applications.
          *
          * @param evaluation the evaluation context.
          * @return the contributions, empty when nothing is covered.
@@ -366,7 +367,14 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
                     continue;
                 }
                 if (scope == Scope.TICKET) {
-                    AmountEvaluation amount = productAwareApp.getAmount();
+                    AmountEvaluation gross = productAwareApp.getAmount();
+                    if (gross == null || gross.amountIncludingTax == null
+                            || gross.amountIncludingTax.signum() <= 0) {
+                        continue;
+                    }
+                    // A3 (report H2b): the refunded VAT is measured on the amount net of the
+                    // advantages already retained, not on the gross line — no double advantage.
+                    AmountEvaluation amount = NetAmounts.net(evaluation, productAwareApp, gross);
                     if (amount != null && amount.amountIncludingTax != null
                             && amount.amountIncludingTax.signum() > 0) {
                         contributions.add(new Contribution(productAwareApp, amount));
@@ -378,12 +386,20 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
                     if (quantity <= 0) {
                         continue;
                     }
-                    AmountEvaluation amount = productAwareApp.getProductAmount(product);
-                    if (amount == null || amount.amountIncludingTax == null
-                            || amount.amountIncludingTax.signum() <= 0) {
+                    AmountEvaluation gross = productAwareApp.getProductAmount(product);
+                    if (gross == null || gross.amountIncludingTax == null
+                            || gross.amountIncludingTax.signum() <= 0) {
                         continue;
                     }
-                    contributions.add(new Contribution(productAwareApp, amount));
+                    // A3 (report H2b): net this product tranche per-product before measuring its VAT.
+                    BigDecimal rate = gross.vatRate == null ? BigDecimal.ZERO : gross.vatRate;
+                    BigDecimal netTtc = NetAmounts.netProductTtc(evaluation, productAwareApp,
+                            product.ean, gross.amountIncludingTax);
+                    if (netTtc.signum() <= 0) {
+                        continue;
+                    }
+                    BigDecimal netHt = netTtc.divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
+                    contributions.add(new Contribution(productAwareApp, new AmountEvaluation(netHt, netTtc, rate)));
                 }
             }
             return contributions;
@@ -393,13 +409,13 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
          * Splits the total discount into one application per targeted offer application.
          * <p>
          * Each application receives a tax-included share pro-rata of its contribution to the
-         * assiette; the last one absorbs the rounding residue. The tax-excluded share is rebuilt
+         * base; the last one absorbs the rounding residue. The tax-excluded share is rebuilt
          * at the group's implied rate.
          *
          * @param applications  the list receiving the applications.
-         * @param contributions the assiette contributions.
-         * @param total         the total discount, tax included, capped at the assiette.
-         * @param baseTtc       the tax-included assiette.
+         * @param contributions the base contributions.
+         * @param total         the total discount, tax included, capped at the base.
+         * @param baseTtc       the tax-included base.
          */
         private void distribute(List<AdvantageApplication> applications, List<Contribution> contributions,
                                 BigDecimal total, BigDecimal baseTtc) {

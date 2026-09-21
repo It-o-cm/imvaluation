@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.engine.NetAmounts;
 import com.intermarche.valuation.engine.AdvantageApplication;
 import com.intermarche.valuation.engine.AdvantageApplier;
 import com.intermarche.valuation.engine.AdvantageApplierFactory;
@@ -30,14 +31,14 @@ import java.util.Map;
  * Factory for the "TICKET_DISCOUNT" advantage type: a percentage or a flat amount on the whole
  * ticket (spec §5).
  * <p>
- * The assiette is every available valued line. A {@code PERCENTAGE} award (0 &lt; v ≤ 100)
- * takes that share of the assiette; an {@code AMOUNT} award takes a flat amount, capped at the
- * assiette so the ticket never goes negative. Combined with a {@code MINIMUM_AMOUNT} scope
+ * The base is every available valued line. A {@code PERCENTAGE} award (0 &lt; v ≤ 100)
+ * takes that share of the base; an {@code AMOUNT} award takes a flat amount, capped at the
+ * base so the ticket never goes negative. Combined with a {@code MINIMUM_AMOUNT} scope
  * {@code TICKET} trigger this is the canonical "5€ off from 50€" of the C1+C2 arbitration
  * (GM-06-04-16 / GM-06-04-17).
  * <p>
  * The total is distributed as one {@link DiscountApplication} per targeted offer application,
- * pro-rata of the tax-included assiette, the rounding residue landing on the last one — the
+ * pro-rata of the tax-included base, the rounding residue landing on the last one — the
  * same rule as {@code TIERED_DISCOUNT}. Like every discount, declaring itself applicable
  * switches the standard lines to the reference price.
  */
@@ -63,7 +64,7 @@ public class TicketDiscountFactory implements AdvantageApplierFactory, EngineTra
         "discountType": {
           "type": "string",
           "enum": ["PERCENTAGE", "AMOUNT"],
-          "description": "PERCENTAGE of the assiette, or a flat AMOUNT capped at the assiette.",
+          "description": "PERCENTAGE of the base, or a flat AMOUNT capped at the base.",
           "x-label": "Discount type"
         },
         "value": {
@@ -83,9 +84,9 @@ public class TicketDiscountFactory implements AdvantageApplierFactory, EngineTra
      * Nature of the ticket discount.
      */
     public enum DiscountType {
-        /** A percentage of the assiette (0 &lt; v ≤ 100). */
+        /** A percentage of the base (0 &lt; v ≤ 100). */
         PERCENTAGE,
-        /** A flat amount, capped at the assiette. */
+        /** A flat amount, capped at the base. */
         AMOUNT
     }
 
@@ -152,10 +153,10 @@ public class TicketDiscountFactory implements AdvantageApplierFactory, EngineTra
     }
 
     /**
-     * One contribution to the assiette: an offer application and its amount.
+     * One contribution to the base: an offer application and its amount.
      *
      * @param application the offer application carrying the contribution.
-     * @param amount      the amount it brings to the assiette.
+     * @param amount      the amount it brings to the base.
      */
     private record Contribution(ProductAwareOfferApplication application, AmountEvaluation amount) {
     }
@@ -223,34 +224,34 @@ public class TicketDiscountFactory implements AdvantageApplierFactory, EngineTra
             if (basket == null || basket.items == null || store == null) {
                 return 0.0;
             }
-            BigDecimal assiette = BigDecimal.ZERO;
+            BigDecimal base = BigDecimal.ZERO;
             for (Basket.Item item : basket.items) {
                 try {
                     AmountEvaluation amount = AmountEvaluation.getAmount(item, store, PriceUsage.BASE_FOR_DISCOUNT);
                     if (amount.amountIncludingTax != null) {
-                        assiette = assiette.add(amount.amountIncludingTax);
+                        base = base.add(amount.amountIncludingTax);
                     }
                 } catch (RuntimeException e) {
                     // Unpriced line: excluded from the sandbox estimate only.
                 }
             }
-            return rawDiscount(assiette).doubleValue();
+            return rawDiscount(base).doubleValue();
         }
 
         /**
-         * Computes the raw discount for a given assiette, before rounding and capping.
+         * Computes the raw discount for a given base, before rounding and capping.
          *
-         * @param assiette the tax-included assiette.
-         * @return the discount: the percentage of the assiette, or the flat amount capped at it.
+         * @param base the tax-included base.
+         * @return the discount: the percentage of the base, or the flat amount capped at it.
          */
-        private BigDecimal rawDiscount(BigDecimal assiette) {
-            if (assiette.signum() <= 0) {
+        private BigDecimal rawDiscount(BigDecimal base) {
+            if (base.signum() <= 0) {
                 return BigDecimal.ZERO;
             }
             if (discountType == DiscountType.PERCENTAGE) {
-                return assiette.multiply(value.divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP));
+                return base.multiply(value.divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP));
             }
-            return value.min(assiette);
+            return value.min(base);
         }
 
         /**
@@ -290,13 +291,13 @@ public class TicketDiscountFactory implements AdvantageApplierFactory, EngineTra
         /**
          * Applies the ticket discount to the evaluation.
          * <p>
-         * The assiette is every available offer application; the total is the percentage of that
-         * assiette or the flat amount capped at it, then split into one application per targeted
-         * offer application, pro-rata of the tax-included assiette, the rounding residue going to
+         * The base is every available offer application; the total is the percentage of that
+         * base or the flat amount capped at it, then split into one application per targeted
+         * offer application, pro-rata of the tax-included base, the rounding residue going to
          * the last one.
          *
          * @param evaluation the evaluation context containing the applied offers.
-         * @return the discount applications, empty when the assiette is empty.
+         * @return the discount applications, empty when the base is empty.
          */
         @Override
         public Collection<AdvantageApplication> apply(BasketEvaluation evaluation) {
@@ -324,7 +325,7 @@ public class TicketDiscountFactory implements AdvantageApplierFactory, EngineTra
         }
 
         /**
-         * Gathers the contributions of the assiette from the available offer applications.
+         * Gathers the contributions of the base from the available offer applications.
          *
          * @param evaluation the evaluation context.
          * @return the contributions, empty when nothing is covered.
@@ -338,7 +339,15 @@ public class TicketDiscountFactory implements AdvantageApplierFactory, EngineTra
                 if (!(app instanceof ProductAwareOfferApplication productAwareApp)) {
                     continue;
                 }
-                AmountEvaluation amount = productAwareApp.getAmount();
+                AmountEvaluation gross = productAwareApp.getAmount();
+                if (gross == null || gross.amountIncludingTax == null
+                        || gross.amountIncludingTax.signum() <= 0) {
+                    continue;
+                }
+                // A3 (report H2a): the base is net of the advantages already retained against
+                // this line, so the cap can never exceed what the ticket is still worth and the
+                // total can never go negative.
+                AmountEvaluation amount = NetAmounts.net(evaluation, productAwareApp, gross);
                 if (amount != null && amount.amountIncludingTax != null
                         && amount.amountIncludingTax.signum() > 0) {
                     contributions.add(new Contribution(productAwareApp, amount));
@@ -351,9 +360,9 @@ public class TicketDiscountFactory implements AdvantageApplierFactory, EngineTra
          * Splits the total discount into one application per targeted offer application.
          *
          * @param applications  the list receiving the applications.
-         * @param contributions the assiette contributions.
-         * @param total         the total discount, tax included, capped at the assiette.
-         * @param baseTtc       the tax-included assiette.
+         * @param contributions the base contributions.
+         * @param total         the total discount, tax included, capped at the base.
+         * @param baseTtc       the tax-included base.
          */
         private void distribute(List<AdvantageApplication> applications, List<Contribution> contributions,
                                 BigDecimal total, BigDecimal baseTtc) {

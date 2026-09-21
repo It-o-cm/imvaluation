@@ -173,7 +173,13 @@ public class Offer extends BaseEntity {
             JsonNode rootNode = mapper.readTree(this.specification);
             Set<String> extractedEans = new HashSet<>();
             extractEansRecursively(rootNode, extractedEans);
-            this.eans.addAll(extractedEans);
+            // Deterministic order (report §3): the extracted EANs are sorted before populating the
+            // @OrderColumn-indexed collection. A HashSet iteration order would otherwise write a
+            // different offer_eans index layout on every rebuild, marking the collection dirty on
+            // each update and churning the join table for no real change.
+            List<String> sortedEans = new ArrayList<>(extractedEans);
+            java.util.Collections.sort(sortedEans);
+            this.eans.addAll(sortedEans);
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Failed to parse specification for Offer " + this.code + ": " + e.getMessage());
         }

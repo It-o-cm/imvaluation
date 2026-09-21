@@ -8,10 +8,21 @@ package com.intermarche.valuation.graphql;
  */
 public class AlreadyExistsException extends RuntimeException {
 
+    /**
+     * Constructs the exception with a detail message.
+     *
+     * @param message The detail message describing the conflict.
+     */
     public AlreadyExistsException(String message) {
         super(message);
     }
 
+    /**
+     * Constructs the exception with a detail message and an underlying cause.
+     *
+     * @param message The detail message describing the conflict.
+     * @param cause   The underlying cause of this exception.
+     */
     public AlreadyExistsException(String message, Throwable cause) {
         super(message, cause);
     }

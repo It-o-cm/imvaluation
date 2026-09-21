@@ -15,8 +15,12 @@ import java.util.stream.Collectors;
  *   <li>A list of other {@link ProductFamily} entities (Sub-families).</li>
  * </ul>
  * <p>
- * <b>Multiple Parents:</b> A family (or a product) can belong to multiple parent families.
- * This requires traversing the structure as a Directed Acyclic Graph (DAG).
+ * <b>Single parent (report §3):</b> a sub-family belongs to at most one parent family. The
+ * mapping enforces this with a foreign key ({@code parent_product_family_id}) in the child row,
+ * so re-parenting a sub-family moves it rather than adding a second parent. (Products, held by a
+ * join table, may still belong to several families.) The former "multiple parents / DAG" wording
+ * did not match the mapping; the only structural guard enforced is the self-reference rejection in
+ * the importer.
  * <p>
  * This entity extends {@link BaseEntity} to inherit ID, versioning, and audit fields.
  * <p>
@@ -49,9 +53,13 @@ public class ProductFamily extends BaseEntity {
 
     /**
      * The list of products directly belonging to this family.
-     * Unidirectional relationship via a foreign key in the 'products' table.
+     * <p>
+     * No cascade toward {@link Product} (report §3): products are a shared catalog imported on
+     * their own, so removing or merging a family must never cascade a delete or an update into the
+     * product rows other families and prices also reference. The relation only links existing
+     * products; it never creates or removes them.
      */
-    @ManyToMany(fetch = FetchType.LAZY, cascade = CascadeType.ALL)
+    @ManyToMany(fetch = FetchType.LAZY)
     public Set<Product> products = new HashSet<>();
 
     // --------------------------------------------------

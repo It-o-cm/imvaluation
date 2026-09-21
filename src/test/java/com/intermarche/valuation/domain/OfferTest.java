@@ -250,7 +250,7 @@ class OfferTest {
         Store testStore = new Store();
         testStore.code = "S_TEST";
         testStore.name = "Test Store Name";
-        testStore.address = new Adresse();
+        testStore.address = new Address();
         testStore.persist();
         Offer offer = new Offer();
         offer.code = "PROMO_123";
@@ -274,7 +274,7 @@ class OfferTest {
         Store testStore = new Store();
         testStore.code = "S_TEST";
         testStore.name = "Test Store Name";
-        testStore.address = new Adresse();
+        testStore.address = new Address();
         testStore.persist();
         Offer targetOffer = new Offer();
         targetOffer.code = "TARGET";
@@ -329,7 +329,7 @@ class OfferTest {
         Store testStore = new Store();
         testStore.code = "S_TEST";
         testStore.name = "Test Store Name";
-        testStore.address = new Adresse();
+        testStore.address = new Address();
         testStore.persist();
         Offer offer = new Offer();
         offer.code = "EAN_OFFER";
@@ -464,7 +464,7 @@ class OfferTest {
         Store store = new Store();
         store.code = "S_ACT";
         store.name = "Activation Store";
-        store.address = new Adresse();
+        store.address = new Address();
         store.persist();
         java.time.LocalDateTime at = java.time.LocalDateTime.of(2026, 6, 1, 12, 0);
         Offer live = new Offer();

@@ -6,7 +6,7 @@ import com.intermarche.valuation.domain.ProductCategoryStorage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Offer;
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.util.DomainUtils;
 import io.quarkus.test.TestTransaction;
@@ -286,7 +286,7 @@ public class StoreResourceTest {
         // 1. Setup: Create store with an existing address (condition FALSE)
         Store existing = DomainUtils.createAndPersistStore("STORE_10", 0.0, 0.0);
         existing.name = "Old Name";
-        existing.address = new Adresse(); // Initialize Address
+        existing.address = new Address(); // Initialize Address
         existing.address.streetLine1 = "Old St";
 
         // 2. Input: Change ALL fields
@@ -360,7 +360,7 @@ public class StoreResourceTest {
     void testUpdateStore_NullCodeAndName() throws GraphQLException {
         // 1. Setup
         Store existing = DomainUtils.createAndPersistStore("STORE_30", 0.0, 0.0);
-        existing.address = new Adresse();
+        existing.address = new Address();
 
         // 2. Input: Code and Name are NULL
         StoreResource.StoreRecord input = new StoreResource.StoreRecord();

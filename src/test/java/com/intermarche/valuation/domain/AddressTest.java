@@ -5,25 +5,25 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Unit tests for {@link Adresse}.
+ * Unit tests for {@link Address}.
  * <p>
  * Verifies the behavior of the Value Object including field initialization via constructors,
  * equality based on content (Value Object semantics), hash code consistency,
  * and the checksum calculation logic.
  */
-class AdresseTest {
+class AddressTest {
 
     // --------------------------------------------------
     // Helper Methods
     // --------------------------------------------------
 
     /**
-     * Creates a standard instance of {@link Adresse} with predefined values.
+     * Creates a standard instance of {@link Address} with predefined values.
      *
-     * @return A fully populated {@link Adresse} object.
+     * @return A fully populated {@link Address} object.
      */
-    private Adresse createStandardAddress() {
-        return new Adresse(
+    private Address createStandardAddress() {
+        return new Address(
                 "10 Rue de la Paix",
                 "Batiment B",
                 "75002",
@@ -43,7 +43,7 @@ class AdresseTest {
      */
     @Test
     void fullConstructor_shouldInitializeAllFields() {
-        Adresse adresse = createStandardAddress();
+        Address adresse = createStandardAddress();
         assertEquals("10 Rue de la Paix", adresse.streetLine1);
         assertEquals("Batiment B", adresse.streetLine2);
         assertEquals("75002", adresse.postalCode);
@@ -58,7 +58,7 @@ class AdresseTest {
      */
     @Test
     void defaultConstructor_shouldCreateInstanceWithNullFields() {
-        Adresse adresse = new Adresse();
+        Address adresse = new Address();
         assertNull(adresse.streetLine1);
         assertNull(adresse.streetLine2);
         assertNull(adresse.postalCode);
@@ -77,7 +77,7 @@ class AdresseTest {
      */
     @Test
     void equals_shouldReturnTrue_forSameInstance() {
-        Adresse adresse = createStandardAddress();
+        Address adresse = createStandardAddress();
         assertEquals(adresse, adresse);
     }
 
@@ -86,8 +86,8 @@ class AdresseTest {
      */
     @Test
     void equals_shouldReturnTrue_forEqualContent() {
-        Adresse adresse1 = createStandardAddress();
-        Adresse adresse2 = createStandardAddress();
+        Address adresse1 = createStandardAddress();
+        Address adresse2 = createStandardAddress();
         assertEquals(adresse1, adresse2);
         assertEquals(adresse2, adresse1);
     }
@@ -97,7 +97,7 @@ class AdresseTest {
      */
     @Test
     void equals_shouldReturnFalse_whenOtherIsNull() {
-        Adresse adresse = createStandardAddress();
+        Address adresse = createStandardAddress();
         assertFalse(adresse.equals(null));
     }
 
@@ -106,7 +106,7 @@ class AdresseTest {
      */
     @Test
     void equals_shouldReturnFalse_forDifferentObject() {
-        Adresse adresse = createStandardAddress();
+        Address adresse = createStandardAddress();
         Object otherObject = "Not an Address";
         assertNotEquals(adresse, otherObject);
     }
@@ -116,67 +116,67 @@ class AdresseTest {
     // --------------------------------------------------
 
     /**
-     * Tests that equals returns false when {@link Adresse#streetLine1} differs.
+     * Tests that equals returns false when {@link Address#streetLine1} differs.
      */
     @Test
     void equals_shouldReturnFalse_whenStreetLine1Differs() {
-        Adresse adresse1 = createStandardAddress();
-        Adresse adresse2 = createStandardAddress();
+        Address adresse1 = createStandardAddress();
+        Address adresse2 = createStandardAddress();
         adresse2.streetLine1 = "20 Rue de la Liberté";
         assertNotEquals(adresse1, adresse2);
     }
 
     /**
-     * Tests that equals returns false when {@link Adresse#streetLine2} differs.
+     * Tests that equals returns false when {@link Address#streetLine2} differs.
      */
     @Test
     void equals_shouldReturnFalse_whenStreetLine2Differs() {
-        Adresse adresse1 = createStandardAddress();
-        Adresse adresse2 = createStandardAddress();
+        Address adresse1 = createStandardAddress();
+        Address adresse2 = createStandardAddress();
         adresse2.streetLine2 = "Batiment C";
         assertNotEquals(adresse1, adresse2);
     }
 
     /**
-     * Tests that equals returns false when {@link Adresse#postalCode} differs.
+     * Tests that equals returns false when {@link Address#postalCode} differs.
      */
     @Test
     void equals_shouldReturnFalse_whenPostalCodeDiffers() {
-        Adresse adresse1 = createStandardAddress();
-        Adresse adresse2 = createStandardAddress();
+        Address adresse1 = createStandardAddress();
+        Address adresse2 = createStandardAddress();
         adresse2.postalCode = "69001"; // Lyon code
         assertNotEquals(adresse1, adresse2);
     }
 
     /**
-     * Tests that equals returns false when {@link Adresse#country} differs.
+     * Tests that equals returns false when {@link Address#country} differs.
      */
     @Test
     void equals_shouldReturnFalse_whenCountryDiffers() {
-        Adresse adresse1 = createStandardAddress();
-        Adresse adresse2 = createStandardAddress();
+        Address adresse1 = createStandardAddress();
+        Address adresse2 = createStandardAddress();
         adresse2.country = "Italy";
         assertNotEquals(adresse1, adresse2);
     }
 
     /**
-     * Tests that equals returns false when {@link Adresse#city} differs.
+     * Tests that equals returns false when {@link Address#city} differs.
      */
     @Test
     void equals_shouldReturnFalse_whenCityDiffers() {
-        Adresse adresse1 = createStandardAddress();
-        Adresse adresse2 = createStandardAddress();
+        Address adresse1 = createStandardAddress();
+        Address adresse2 = createStandardAddress();
         adresse2.city = "Marseille";
         assertNotEquals(adresse1, adresse2);
     }
 
     /**
-     * Tests that equals returns false when GPS coordinates ({@link Adresse#latitude} or {@link Adresse#longitude}) differ.
+     * Tests that equals returns false when GPS coordinates ({@link Address#latitude} or {@link Address#longitude}) differ.
      */
     @Test
     void equals_shouldReturnFalse_whenCoordinatesDiffer() {
-        Adresse adresse1 = createStandardAddress();
-        Adresse adresse2 = new Adresse(
+        Address adresse1 = createStandardAddress();
+        Address adresse2 = new Address(
                 "10 Rue de la Paix",
                 "Batiment B",
                 "75002",
@@ -200,8 +200,8 @@ class AdresseTest {
      */
     @Test
     void hashCode_shouldBeEqual_forEqualObjects() {
-        Adresse adresse1 = createStandardAddress();
-        Adresse adresse2 = createStandardAddress();
+        Address adresse1 = createStandardAddress();
+        Address adresse2 = createStandardAddress();
         assertEquals(adresse1.hashCode(), adresse2.hashCode());
     }
 
@@ -210,22 +210,22 @@ class AdresseTest {
     // --------------------------------------------------
 
     /**
-     * Tests that {@link Adresse#getChecksum()} returns a value consistent with
-     * {@link Adresse#hashCode()} as both rely on the same fields.
+     * Tests that {@link Address#getChecksum()} returns a value consistent with
+     * {@link Address#hashCode()} as both rely on the same fields.
      */
     @Test
     void getChecksum_shouldMatchHashCode() {
-        Adresse adresse = createStandardAddress();
+        Address adresse = createStandardAddress();
         // Based on the implementation, getChecksum uses Objects.hash like hashCode
         assertEquals(adresse.hashCode(), adresse.getChecksum());
     }
 
     /**
-     * Tests that {@link Adresse#getChecksum()} returns different values for different content.
+     * Tests that {@link Address#getChecksum()} returns different values for different content.
      */
     @Test
     void getChecksum_shouldChange_whenContentChanges() {
-        Adresse adresse = createStandardAddress();
+        Address adresse = createStandardAddress();
         int originalChecksum = adresse.getChecksum();
         // Modify a field
         adresse.city = "Marseille";

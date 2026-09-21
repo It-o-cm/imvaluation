@@ -259,6 +259,9 @@ public class ProductResource implements GraphQLTrait {
         public String unitName;
         public Boolean active;
 
+        /**
+         * Default constructor.
+         */
         public ProductRecord() {
         }
 

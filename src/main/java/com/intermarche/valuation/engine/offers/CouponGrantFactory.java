@@ -5,7 +5,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 /**
  * Factory for the "COUPON_GRANT" offer type: coupons granted by the basket.
  * <p>
- * The whole behaviour — schema, tier mechanics, assiette, output shape — lives in
+ * The whole behaviour — schema, tier mechanics, base, output shape — lives in
  * {@link InstrumentGrantFactory}; this bean only fixes the discriminator and the labels.
  */
 @ApplicationScoped

@@ -9,22 +9,22 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Coverage-oriented @QuarkusTest for {@link Adresse}, covering the full constructor,
+ * Coverage-oriented @QuarkusTest for {@link Address}, covering the full constructor,
  * {@code equals}, {@code hashCode} and {@code getChecksum}, including the null and
  * differing arm of every compared field.
  * <p>
  * The class is a plain embeddable value object, so no database is involved.
  */
 @QuarkusTest
-class AdresseCoverageTest {
+class AddressCoverageTest {
 
     /**
      * Builds the reference address shared by the equality tests.
      *
      * @return A fully populated address.
      */
-    private Adresse base() {
-        return new Adresse("10 Rue A", "Bat B", "75008", "Paris", "France", 48.8, 2.3);
+    private Address base() {
+        return new Address("10 Rue A", "Bat B", "75008", "Paris", "France", 48.8, 2.3);
     }
 
     /**
@@ -32,7 +32,7 @@ class AdresseCoverageTest {
      */
     @Test
     void constructorSetsAllFields() {
-        Adresse a = base();
+        Address a = base();
         assertEquals("10 Rue A", a.streetLine1);
         assertEquals("Bat B", a.streetLine2);
         assertEquals("75008", a.postalCode);
@@ -47,12 +47,12 @@ class AdresseCoverageTest {
      */
     @Test
     void equalsSameInstance() {
-        Adresse a = base();
+        Address a = base();
         assertEquals(a, a);
     }
 
     /**
-     * An address never equals null (exercises {@code Adresse.equals(null)}).
+     * An address never equals null (exercises {@code Address.equals(null)}).
      */
     @Test
     void notEqualsNull() {
@@ -72,8 +72,8 @@ class AdresseCoverageTest {
      */
     @Test
     void equalsAndHashOnEqualContent() {
-        Adresse a = base();
-        Adresse b = base();
+        Address a = base();
+        Address b = base();
         assertEquals(a, b);
         assertEquals(a.hashCode(), b.hashCode());
         assertEquals(a.getChecksum(), b.getChecksum());
@@ -85,7 +85,7 @@ class AdresseCoverageTest {
      */
     @Test
     void notEqualsOnStreetLine1() {
-        Adresse b = base();
+        Address b = base();
         b.streetLine1 = "Other";
         assertNotEquals(base(), b);
     }
@@ -95,7 +95,7 @@ class AdresseCoverageTest {
      */
     @Test
     void notEqualsOnStreetLine2() {
-        Adresse b = base();
+        Address b = base();
         b.streetLine2 = "Other";
         assertNotEquals(base(), b);
     }
@@ -105,7 +105,7 @@ class AdresseCoverageTest {
      */
     @Test
     void notEqualsOnPostalCode() {
-        Adresse b = base();
+        Address b = base();
         b.postalCode = "99999";
         assertNotEquals(base(), b);
     }
@@ -115,7 +115,7 @@ class AdresseCoverageTest {
      */
     @Test
     void notEqualsOnCity() {
-        Adresse b = base();
+        Address b = base();
         b.city = "Lyon";
         assertNotEquals(base(), b);
     }
@@ -125,7 +125,7 @@ class AdresseCoverageTest {
      */
     @Test
     void notEqualsOnCountry() {
-        Adresse b = base();
+        Address b = base();
         b.country = "Belgium";
         assertNotEquals(base(), b);
     }
@@ -135,7 +135,7 @@ class AdresseCoverageTest {
      */
     @Test
     void notEqualsOnLatitude() {
-        Adresse b = base();
+        Address b = base();
         b.latitude = null;
         assertNotEquals(base(), b);
     }
@@ -145,7 +145,7 @@ class AdresseCoverageTest {
      */
     @Test
     void notEqualsOnLongitude() {
-        Adresse b = base();
+        Address b = base();
         b.longitude = null;
         assertNotEquals(base(), b);
     }
@@ -155,8 +155,8 @@ class AdresseCoverageTest {
      */
     @Test
     void defaultConstructorChecksumMatchesHash() {
-        Adresse a = new Adresse();
+        Address a = new Address();
         assertEquals(a.hashCode(), a.getChecksum());
-        assertTrue(a.equals(new Adresse()));
+        assertTrue(a.equals(new Address()));
     }
 }

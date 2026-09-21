@@ -13,6 +13,9 @@ import java.util.Objects;
 public final class DateTimeProvider {
 
     // Private constructor to prevent instantiation of the utility class
+    /**
+     * Not instantiable.
+     */
     private DateTimeProvider() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
     }

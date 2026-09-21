@@ -521,7 +521,8 @@ public class ValuationEngineTest {
             engine.evaluate(basket);
         });
 
-        assertTrue(ex.getMessage().contains("Error building appliers from factory"));
+        // A2 (report H1a): a generic (non-configuration) factory error propagates unwrapped —
+        // only a ConfigurationException is skipped — so the original cause message is preserved.
         assertTrue(ex.getMessage().contains("Factory Failure"));
     }
 
@@ -751,7 +752,7 @@ public class ValuationEngineTest {
             engine.createOfferApplications(appliers, eval);
         });
 
-        assertTrue(ex.getMessage().contains("Error applying offer logic"));
+        // A2 (report H1a): a generic applier error propagates unwrapped; the cause is preserved.
         assertTrue(ex.getMessage().contains("Applier crashed"));
     }
 
@@ -847,7 +848,7 @@ public class ValuationEngineTest {
             engine.createDiscountApplications(appliers, eval);
         });
 
-        assertTrue(ex.getMessage().contains("Error applying discount logic"));
+        // A2 (report H1a): a generic discount applier error propagates unwrapped; the cause is kept.
         assertTrue(ex.getMessage().contains("Applier crashed"));
     }
 
@@ -880,7 +881,7 @@ public class ValuationEngineTest {
             engine.evaluate(basket);
         });
 
-        assertTrue(ex.getMessage().contains("Error building appliers from factory"));
+        // A2 (report H1a): a generic factory error propagates unwrapped; the cause is preserved.
         assertTrue(ex.getMessage().contains("Discount Factory Failure"));
     }
 

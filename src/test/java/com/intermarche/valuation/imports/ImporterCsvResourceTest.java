@@ -508,14 +508,18 @@ public class ImporterCsvResourceTest {
     }
 
     /**
-     * Tests {@code safeParseDateTime} with valid ISO format and invalid formats.
+     * Tests {@code safeParseDateTime}: a valid ISO date parses, an absent/blank cell is an open
+     * bound (null), and a PRESENT-but-unparseable date rejects the line (report H6b) instead of
+     * silently collapsing to null.
      */
     @Test
     void testSafeParseDateTime() {
         String isoDate = "2023-10-27T10:00:00";
         LocalDateTime expected = LocalDateTime.parse(isoDate, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         assertEquals(expected, resource.safeParseDateTime(line(1, isoDate), "code"));
-        assertNull(resource.safeParseDateTime(line(1, "27/10/2023"), "code"));
+        assertNull(resource.safeParseDateTime(line(1, ""), "code"));
+        assertThrows(IllegalArgumentException.class,
+                () -> resource.safeParseDateTime(line(1, "27/10/2023"), "code"));
     }
 
     /**
@@ -615,6 +619,9 @@ public class ImporterCsvResourceTest {
         assertFalse(resource.safeParseBoolean(line(1, "true"), "name"));
         // Case unknown column
         assertFalse(resource.safeParseBoolean(line(1, "true"), "unknown"));
+        // Report §3: a present but unrecognised token rejects the line rather than reading false.
+        assertThrows(IllegalArgumentException.class,
+                () -> resource.safeParseBoolean(line(1, "YES"), "code"));
     }
 
     /**

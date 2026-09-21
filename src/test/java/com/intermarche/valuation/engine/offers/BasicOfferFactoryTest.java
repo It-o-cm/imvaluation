@@ -52,7 +52,7 @@ public class BasicOfferFactoryTest {
 
         // FIX: Initialize the embedded Address to avoid NullPointerException in @PrePersist
         // Store.getChecksum() calls address.getChecksum(), so address must not be null.
-        store.address = new Adresse();
+        store.address = new Address();
         store.persist();
 
         // 2. Create and Persist Products
@@ -218,14 +218,18 @@ public class BasicOfferFactoryTest {
 
 
     /**
-     * Tests {@link BasicOfferFactory.BasicOfferApplier#apply(BasketEvaluation)} ensuring that
-     * Reference Price is used when discount appliers are registered.
+     * Tests {@link BasicOfferFactory.BasicOfferApplier#apply(BasketEvaluation)} ensuring that the
+     * DEFAULT price is used at valuation time even when discount appliers are registered, and that
+     * the switch to the reference price happens only on an explicit re-pricing (A1, report C1).
      * <p>
-     * Condition tested: {@code this.getDiscountAppliers().isEmpty()} is {@code false}.
-     * Uses a real implementation of {@code AdvantageApplier} instead of a mock.
+     * Before A1 the applier switched to the reference price as soon as a discount applier was
+     * registered — before arbitration could discard that discount — which overcharged the customer
+     * when the discount was dropped. Now the line is always valued at the DEFAULT price during
+     * valuation; {@link BasicOfferFactory.BasicApplication#repriceToReference()} performs the
+     * switch, and the engine calls it only for lines carrying an actually-retained discount.
      */
     @Test
-    void testBasicOfferApplier_Apply_UsesRefPrice_WhenDiscountsExist() {
+    void testBasicOfferApplier_Apply_UsesDefaultPrice_UntilRepricedToReference() {
         setUpDatabase();
         // Arrange
         Basket basket = new Basket();
@@ -236,17 +240,22 @@ public class BasicOfferFactoryTest {
         // Create applier manually using real entities
         BasicOfferFactory.BasicOfferApplier applier =
                 new BasicOfferFactory.BasicOfferApplier(store, product1, defaultPrice, discountPrice);
-        // Register a real discount applier to trigger the logic branch
+        // Register a real discount applier: this no longer forces the reference price at apply time.
         SimpleDiscountApplier realDiscount = new SimpleDiscountApplier();
         applier.registerDiscountApplier(realDiscount);
         // Act
         Collection<OfferApplication> applications = applier.apply(evaluation);
-        // Assert
+        // Assert: the line is valued at the DEFAULT price during valuation.
         assertFalse(applications.isEmpty());
-        // Verify via reflection that REF price was used (not DEFAULT price)
         BasicOfferFactory.BasicApplication app = (BasicOfferFactory.BasicApplication) applications.iterator().next();
-        Price usedPrice = ReflectionUtils.getField(app, "price");
-        assertEquals(discountPrice, usedPrice, "Should use Reference Price when discount appliers exist");
+        assertEquals(defaultPrice, ReflectionUtils.getField(app, "price"),
+                "Should value at the DEFAULT price during valuation, whatever discount appliers are registered");
+        // Re-pricing switches the line to the reference price and reports the switch.
+        assertTrue(app.repriceToReference(), "repriceToReference should report the switch");
+        assertEquals(discountPrice, ReflectionUtils.getField(app, "price"),
+                "Should use the reference price once re-priced for a retained discount");
+        // A second call is a no-op: the line already sits on the reference price.
+        assertFalse(app.repriceToReference(), "repriceToReference should be a no-op once already on the reference price");
     }
 
     /**

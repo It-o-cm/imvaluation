@@ -109,7 +109,7 @@ public class DomainUtils {
         Store s = new Store();
         s.code = code;
         s.name = "Store " + code;
-        s.address = new Adresse();
+        s.address = new Address();
         if (lat != null) s.address.latitude = lat;
         if (lon != null) s.address.longitude = lon;
         s.persist();
@@ -157,7 +157,7 @@ public class DomainUtils {
     public static void updateStoreAddress(Store store, Double lat, Double lon) {
         if (lat != null || lon != null) {
             // Update coordinates if not null
-            store.address = new Adresse(); // Re-create to ensure object exists if coords are not null
+            store.address = new Address(); // Re-create to ensure object exists if coords are not null
             store.address.latitude = lat;
             store.address.longitude = lon;
         } else {

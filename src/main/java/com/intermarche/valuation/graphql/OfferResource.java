@@ -24,9 +24,42 @@ import java.util.stream.Collectors;
 @GraphQLApi
 @ApplicationScoped
 @RunOnVirtualThread
-public class OfferResource implements GraphQLTrait {
+public class OfferResource implements GraphQLTrait, com.intermarche.valuation.engine.EngineTrait {
 
     private static final Logger LOGGER = Logger.getLogger(OfferResource.class);
+
+    /**
+     * Registry of the per-type specification schemas declared by the offer/advantage factories,
+     * used to validate a specification exactly as the UI path does (report C3).
+     */
+    @jakarta.inject.Inject
+    com.intermarche.valuation.ui.OfferSchemaRegistry schemaRegistry;
+
+    /**
+     * Validates an offer specification against the factory schema of its type (report C3).
+     * <p>
+     * The GraphQL surface previously persisted any {@code specification} string verbatim, so a
+     * document the UI would reject — including one that later breaks out of the {@code <script>}
+     * block that echoes it — could be stored through the API. This applies the same
+     * {@link com.intermarche.valuation.engine.EngineTrait#processSpecification} validation as the
+     * UI. An unknown type or a null specification is left to the other checks. A rejection throws a
+     * {@link com.intermarche.valuation.engine.ConfigurationException}, which rolls the mutation back.
+     *
+     * @param type          the offer type, or {@code null} when not being set.
+     * @param specification the specification to validate, or {@code null} when not being set.
+     */
+    private void validateSpecification(String type, String specification) {
+        if (type == null || specification == null) {
+            return;
+        }
+        String schema = schemaRegistry.getSchema(type);
+        if (schema == null) {
+            return;
+        }
+        this.processSpecification(schema, specification, node -> {
+            // Validation only: the parsed node is not needed here.
+        });
+    }
 
     // --------------------------------------------------
     // Queries (Retrieve) -> MANAGER only
@@ -173,6 +206,8 @@ public class OfferResource implements GraphQLTrait {
                 throw new IllegalArgumentException("Offer must be linked to at least one Store OR one StoreGroup.");
             }
             // Creation Logic
+            // C3: reject a specification the factory schema would refuse, like the UI path.
+            validateSpecification(input.type, input.specification);
             Offer offer = new Offer();
             offer.code = input.code;
             offer.type = input.type;
@@ -223,6 +258,8 @@ public class OfferResource implements GraphQLTrait {
             if (input.type != null) offer.type = input.type;
             if (input.specification != null) offer.specification = input.specification;
             if (input.active != null) offer.active = input.active;
+            // C3: validate the effective type/specification (the update's, else the stored one).
+            validateSpecification(offer.type, offer.specification);
             if (input.validFrom != null) offer.validFrom = input.validFrom;
             if (input.validTo != null) offer.validTo = input.validTo;
             // Handle Store Relationship Updates

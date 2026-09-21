@@ -256,7 +256,7 @@ class GroupAIT {
             0103|Intermarché Test 3|99 Boulevard de la Liberte|Etage 2|69000|Lyon|France|45.75|4.85
             0104|Intermarché Test 4|25 Rue de Rivoli||75001|Paris|France|48.86|2.33
             0105|Intermarché Test 5|8 Place de la Gare|Bat C|67000|Strasbourg|France|48.57|7.75
-            0106|Intermarché Sans Adresse|||||||
+            0106|Intermarché Sans Address|||||||
             """;
 
     /**

@@ -123,44 +123,68 @@ public class PasswordChangeFilterTest {
     }
 
     /**
-     * Verifies a Basic-authenticated request is treated as an API call and left alone.
+     * Verifies a Basic-authenticated (API) request from an account with a pending password change
+     * is denied with 403 rather than left alone (report H4): the confinement now covers the API.
      */
     @Test
-    void testBasicAuthorizationIsNotBrowserNavigation() {
+    void testBasicRequestWithPendingChangeIsDeniedWith403() {
         PasswordChangeFilter filter = new PasswordChangeFilter();
         filter.enforced = true;
         filter.identity = authenticatedIdentity("alice");
         ContainerRequestContext requestContext =
                 requestContext("/ui/dashboard", "Basic dXNlcjpwYXNz", MediaType.TEXT_HTML);
-        filter.filter(requestContext);
-        verify(requestContext, never()).abortWith(any());
+        AppUser user = new AppUser();
+        user.mustChangePassword = true;
+        try (MockedStatic<AppUser> mocked = mockStatic(AppUser.class)) {
+            mocked.when(() -> AppUser.findByUsername("alice")).thenReturn(user);
+            filter.filter(requestContext);
+        }
+        ArgumentCaptor<Response> captor = ArgumentCaptor.forClass(Response.class);
+        verify(requestContext).abortWith(captor.capture());
+        assertEquals(Response.Status.FORBIDDEN.getStatusCode(), captor.getValue().getStatus());
     }
 
     /**
-     * Verifies a request with no Accept header is not treated as browser navigation.
+     * Verifies a request with no Accept header (an API call) from a pending account is denied with
+     * 403 (report H4).
      */
     @Test
-    void testMissingAcceptHeaderIsNotBrowserNavigation() {
+    void testMissingAcceptHeaderPendingChangeIsDeniedWith403() {
         PasswordChangeFilter filter = new PasswordChangeFilter();
         filter.enforced = true;
         filter.identity = authenticatedIdentity("alice");
         ContainerRequestContext requestContext = requestContext("/ui/dashboard", null, null);
-        filter.filter(requestContext);
-        verify(requestContext, never()).abortWith(any());
+        AppUser user = new AppUser();
+        user.mustChangePassword = true;
+        try (MockedStatic<AppUser> mocked = mockStatic(AppUser.class)) {
+            mocked.when(() -> AppUser.findByUsername("alice")).thenReturn(user);
+            filter.filter(requestContext);
+        }
+        ArgumentCaptor<Response> captor = ArgumentCaptor.forClass(Response.class);
+        verify(requestContext).abortWith(captor.capture());
+        assertEquals(Response.Status.FORBIDDEN.getStatusCode(), captor.getValue().getStatus());
     }
 
     /**
-     * Verifies a request accepting only JSON is not treated as browser navigation.
+     * Verifies a request accepting only JSON (an API call) from a pending account is denied with
+     * 403 (report H4).
      */
     @Test
-    void testNonHtmlAcceptHeaderIsNotBrowserNavigation() {
+    void testNonHtmlAcceptHeaderPendingChangeIsDeniedWith403() {
         PasswordChangeFilter filter = new PasswordChangeFilter();
         filter.enforced = true;
         filter.identity = authenticatedIdentity("alice");
         ContainerRequestContext requestContext =
                 requestContext("/ui/dashboard", null, MediaType.APPLICATION_JSON);
-        filter.filter(requestContext);
-        verify(requestContext, never()).abortWith(any());
+        AppUser user = new AppUser();
+        user.mustChangePassword = true;
+        try (MockedStatic<AppUser> mocked = mockStatic(AppUser.class)) {
+            mocked.when(() -> AppUser.findByUsername("alice")).thenReturn(user);
+            filter.filter(requestContext);
+        }
+        ArgumentCaptor<Response> captor = ArgumentCaptor.forClass(Response.class);
+        verify(requestContext).abortWith(captor.capture());
+        assertEquals(Response.Status.FORBIDDEN.getStatusCode(), captor.getValue().getStatus());
     }
 
     /**

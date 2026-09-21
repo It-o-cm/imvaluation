@@ -353,7 +353,8 @@ public class AmountPerItemDiscountFactory implements AdvantageApplierFactory, En
     /**
      * The application of an amount-per-item discount on one targeted offer application.
      */
-    public static class AmountPerItemDiscountApplication implements DiscountApplication {
+    public static class AmountPerItemDiscountApplication implements DiscountApplication,
+            com.intermarche.valuation.engine.ProductScopedDiscount {
 
         /**
          * The application moment restituted in the response (spec §3.6), set by the arbitration.
@@ -454,6 +455,16 @@ public class AmountPerItemDiscountFactory implements AdvantageApplierFactory, En
         @Override
         public AmountEvaluation getDiscountAmount() {
             return discountAmount;
+        }
+
+        /**
+         * Returns the EAN of the product line this per-item discount reduced (A3, report H2c).
+         *
+         * @return the discounted product EAN.
+         */
+        @Override
+        public String discountedEan() {
+            return ean;
         }
     }
 }

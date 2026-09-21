@@ -458,7 +458,7 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
             split.lineId = source.lineId;
             split.quantity = quantity;
             split.sourceLines = takeSourceLines(source, quantity);
-            if (split.sourceLines != null && !split.sourceLines.isEmpty()) {
+            if (!split.sourceLines.isEmpty()) {
                 split.lineId = split.sourceLines.get(0).lineId;
             }
             bundleList.add(split);
@@ -471,11 +471,11 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
          *
          * @param source   The item whose source-line list is consumed.
          * @param quantity The quantity to take.
-         * @return the taken source lines, or null when the source carries none
+         * @return the taken source lines, or an empty list when the source carries none (report §4)
          */
         private List<Basket.Item.SourceLine> takeSourceLines(Basket.Item source, double quantity) {
             if (source.sourceLines == null || source.sourceLines.isEmpty()) {
-                return null;
+                return List.of();
             }
             List<Basket.Item.SourceLine> taken = new ArrayList<>();
             double remaining = quantity;

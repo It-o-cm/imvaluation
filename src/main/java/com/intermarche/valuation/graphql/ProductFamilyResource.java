@@ -32,6 +32,11 @@ public class ProductFamilyResource implements GraphQLTrait {
     // Queries (Retrieve) -> MANAGER only
     // --------------------------------------------------
 
+    /**
+     * Retrieves every product family stored in the database.
+     *
+     * @return The list of all ProductFamily entities.
+     */
     @Query
     @Description("Get the list of all product families")
     @RolesAllowed("MANAGER")
@@ -42,6 +47,13 @@ public class ProductFamilyResource implements GraphQLTrait {
         return result;
     }
 
+    /**
+     * Retrieves a single product family by its database identifier.
+     *
+     * @param id The identifier of the product family to retrieve.
+     * @return The matching ProductFamily entity.
+     * @throws NoSuchElementException if no family exists for the given id.
+     */
     @Query
     @Description("Get a product family by its ID")
     @RolesAllowed("MANAGER")
@@ -56,6 +68,13 @@ public class ProductFamilyResource implements GraphQLTrait {
         return family;
     }
 
+    /**
+     * Retrieves a single product family by its business code.
+     *
+     * @param code The business code of the product family to retrieve.
+     * @return The matching ProductFamily entity.
+     * @throws NoSuchElementException if no family exists for the given code.
+     */
     @Query
     @Description("Get a product family by its code")
     @RolesAllowed("MANAGER")
@@ -209,6 +228,13 @@ public class ProductFamilyResource implements GraphQLTrait {
         }, ProductFamilyResource.class, "updateProductFamily");
     }
 
+    /**
+     * Deletes a product family identified by its database identifier.
+     *
+     * @param id The identifier of the product family to delete.
+     * @return {@code true} if a family was deleted, {@code false} otherwise.
+     * @throws GraphQLException if a persistence error occurs during deletion.
+     */
     @Mutation
     @Description("Delete a product family by ID")
     @RolesAllowed("ADMIN")

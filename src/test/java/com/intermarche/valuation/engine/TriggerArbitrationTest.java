@@ -1,5 +1,6 @@
 package com.intermarche.valuation.engine;
 
+import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.ProductType;
@@ -65,6 +66,45 @@ public class TriggerArbitrationTest {
                 amount, amount, BigDecimal.ZERO);
         DomainUtils.createAndPersistPrice(product, store, 0, PriceUsage.BASE_FOR_DISCOUNT,
                 amount, amount, BigDecimal.ZERO);
+    }
+
+    /**
+     * Seeds a UNIT product with distinct DEFAULT and BASE_FOR_DISCOUNT prices at a zero VAT rate,
+     * so the tax-included amount equals the price and the arithmetic stays exact — the setup A1
+     * (report C1) is about, where the reference price is higher than the default one.
+     *
+     * @param ean          the product EAN.
+     * @param defaultPrice the default unit price.
+     * @param basePrice    the reference unit price ({@code BASE_FOR_DISCOUNT}).
+     */
+    private void seedProductDistinct(String ean, String defaultPrice, String basePrice) {
+        Product product = DomainUtils.createAndPersistProduct(ean, ean, ProductType.UNIT);
+        BigDecimal dflt = new BigDecimal(defaultPrice);
+        BigDecimal base = new BigDecimal(basePrice);
+        DomainUtils.createAndPersistPrice(product, store, 0, PriceUsage.DEFAULT,
+                dflt, dflt, BigDecimal.ZERO);
+        DomainUtils.createAndPersistPrice(product, store, 0, PriceUsage.BASE_FOR_DISCOUNT,
+                base, base, BigDecimal.ZERO);
+    }
+
+    /**
+     * Seeds a UNIT product with equal DEFAULT and BASE_FOR_DISCOUNT prices at a given VAT rate,
+     * so a tax-included amount and its VAT can be asserted exactly (A3, report H2b).
+     *
+     * @param ean  the product EAN.
+     * @param ht   the price excluding tax.
+     * @param ttc  the price including tax.
+     * @param rate the VAT rate.
+     */
+    private void seedProductVat(String ean, String ht, String ttc, String rate) {
+        Product product = DomainUtils.createAndPersistProduct(ean, ean, ProductType.UNIT);
+        BigDecimal htAmount = new BigDecimal(ht);
+        BigDecimal ttcAmount = new BigDecimal(ttc);
+        BigDecimal rateAmount = new BigDecimal(rate);
+        DomainUtils.createAndPersistPrice(product, store, 0, PriceUsage.DEFAULT,
+                htAmount, ttcAmount, rateAmount);
+        DomainUtils.createAndPersistPrice(product, store, 0, PriceUsage.BASE_FOR_DISCOUNT,
+                htAmount, ttcAmount, rateAmount);
     }
 
     /**
@@ -274,6 +314,144 @@ public class TriggerArbitrationTest {
         assertEquals(0, new BigDecimal("5.00").compareTo(totalDiscount(engine.evaluate(withCoupon))));
         Basket withoutCoupon = basket(DomainUtils.createItem("ARB_TICK", 1.0));
         assertTrue(engine.evaluate(withoutCoupon).getAdvantages().isEmpty());
+    }
+
+    /**
+     * A1 (report C1): the BASE_FOR_DISCOUNT switch follows the real application of a discount, not
+     * its mere applicability — a discarded advantage costs the customer nothing.
+     * <p>
+     * Water is priced 1.50 DEFAULT / 1.80 BASE_FOR_DISCOUNT, with a 20% coupon-gated discount.
+     * Without the coupon the discount is discarded and the six waters are valued at the default
+     * price (6 x 1.50 = 9.00), never at the reference price (10.80) — the exact overcharge the old
+     * "registered ⇒ reference price" switch produced. With the coupon the line is re-priced to the
+     * reference base and the discount is recomputed on it: offers 10.80, discount 20% = 2.16, net
+     * 8.64.
+     */
+    @Test
+    void testA1ReferencePriceFollowsRealApplication() {
+        seedStore();
+        seedProductDistinct("ARB_WATER", "1.50", "1.80");
+        seedTiered("ARB_WATER_COUPON", ticketSpec("PERCENTAGE", "20",
+                "{ \"conditions\": [ { \"kind\": \"COUPON_CODE\", \"code\": \"WATER20\" } ] }",
+                null, null));
+        // Coupon absent: the advantage is discarded, so the line stays at the DEFAULT price.
+        BasketEvaluation withoutCoupon = engine.evaluate(basket(DomainUtils.createItem("ARB_WATER", 6.0)));
+        assertTrue(withoutCoupon.getAdvantages().isEmpty(),
+                "the coupon-gated discount must be discarded when the coupon is absent");
+        assertEquals(0, new BigDecimal("9.00").compareTo(withoutCoupon.getTotalPrice().amountIncludingTax),
+                "a discarded advantage costs nothing: 6 x 1.50 default = 9.00, never 6 x 1.80");
+        // Coupon present: the line is re-priced to the reference base and the discount recomputed.
+        Basket withCoupon = basket(DomainUtils.createItem("ARB_WATER", 6.0));
+        withCoupon.couponCodes = List.of("WATER20");
+        BasketEvaluation evaluation = engine.evaluate(withCoupon);
+        assertFalse(evaluation.getAdvantages().isEmpty(), "the coupon unlocks the discount");
+        assertEquals(0, new BigDecimal("2.16").compareTo(totalDiscount(evaluation)),
+                "the retained discount is computed on the reference base: 20% of 10.80 = 2.16");
+        assertEquals(0, new BigDecimal("8.64").compareTo(evaluation.getTotalPrice().amountIncludingTax),
+                "net = reference 10.80 minus 2.16 = 8.64");
+    }
+
+    /**
+     * A2 (report H1a): a configuration whose specification cannot be built is skipped
+     * fail-closed, the evaluation continues, and the skip is recorded.
+     * <p>
+     * A corrupted TIERED_DISCOUNT (a spec that fails schema validation) sits alongside a healthy
+     * standard line. Before A2 the build error propagated as a RuntimeException and every basket
+     * of the store answered 500; now the corrupted offer is skipped, the line is still valued at
+     * its default price, and the skip is recorded for the trace.
+     */
+    @Test
+    void testA2CorruptedSpecIsSkippedEvaluationContinues() {
+        seedStore();
+        seedProduct("ARB_TICK", "10.00");
+        DomainUtils.createAndPersistOffer("ARB_BAD_SPEC", store, "TIERED_DISCOUNT",
+                "{ \"garbage\": true }");
+        BasketEvaluation evaluation = engine.evaluate(basket(DomainUtils.createItem("ARB_TICK", 1.0)));
+        assertEquals(0, new BigDecimal("10.00").compareTo(evaluation.getTotalPrice().amountIncludingTax),
+                "the standard line is still valued despite the corrupted offer");
+        assertFalse(evaluation.getSkippedConfigurations().isEmpty(),
+                "the corrupted configuration must be recorded as skipped");
+        assertTrue(evaluation.getSkippedConfigurations().stream().anyMatch(m -> m.contains("skipped")),
+                "the skip message names the fail-closed skip");
+    }
+
+    /**
+     * A2 (report H1b): a configuration carrying a corrupted trigger is skipped fail-closed and its
+     * advantage is never granted — the old Trigger.ALWAYS fallback would have handed the discount
+     * to everyone (fail-open on money).
+     */
+    @Test
+    void testA2CorruptedTriggerNeverGrantsAdvantage() {
+        seedStore();
+        seedProduct("ARB_TICK", "10.00");
+        DomainUtils.createAndPersistOffer("ARB_BAD_TRIGGER", store, "TIERED_DISCOUNT",
+                ticketSpec("PERCENTAGE", "10",
+                        "{ \"conditions\": [ { \"kind\": \"BOGUS_KIND\" } ] }", null, null));
+        BasketEvaluation evaluation = engine.evaluate(basket(DomainUtils.createItem("ARB_TICK", 1.0)));
+        assertTrue(evaluation.getAdvantages().isEmpty(),
+                "a corrupted trigger must never grant the advantage");
+        assertEquals(0, new BigDecimal("10.00").compareTo(evaluation.getTotalPrice().amountIncludingTax),
+                "no discount is applied");
+        assertFalse(evaluation.getSkippedConfigurations().isEmpty(),
+                "the corrupted configuration must be recorded as skipped");
+    }
+
+    /**
+     * A2 (report H1b): {@link ValuationEngine#parseArbitrationConfig} is fail-closed on an
+     * unparseable specification — it marks the configuration invalid and records the skip, rather
+     * than falling back on {@link Trigger#ALWAYS}. Exercised directly on a malformed-JSON spec.
+     */
+    @Test
+    void testA2ParseArbitrationConfigFailsClosed() {
+        seedStore();
+        Offer offer = new Offer();
+        offer.code = "ARB_MALFORMED";
+        offer.specification = "{ this is not json ";
+        BasketEvaluation evaluation = engine.evaluate(basket());
+        ValuationEngine.ArbitrationConfig config = engine.parseArbitrationConfig(offer, evaluation);
+        assertFalse(config.valid(), "an unparseable specification must yield an invalid, fail-closed config");
+        assertFalse(evaluation.getSkippedConfigurations().isEmpty(), "the parse failure must be recorded");
+    }
+
+    /**
+     * A3 (report H2a): caps are taken on the net assiette, so a ticket total can never go negative.
+     * <p>
+     * A 100 line, a 30 discount then a 100 discount: the second discount is capped at the 70 the
+     * line is still worth (100 − 30), so the ticket floors at 0 instead of the −30 a gross cap
+     * would have produced.
+     */
+    @Test
+    void testA3NetCapNeverGoesNegative() {
+        seedStore();
+        seedProduct("ARB_NET", "100.00");
+        seedTiered("ARB_FIRST_30", ticketSpec("AMOUNT", "30", null, null, "{ \"priority\": 10 }"));
+        seedTiered("ARB_THEN_100", ticketSpec("AMOUNT", "100", null, null, "{ \"priority\": 20 }"));
+        BasketEvaluation evaluation = engine.evaluate(basket(DomainUtils.createItem("ARB_NET", 1.0)));
+        assertEquals(0, new BigDecimal("100.00").compareTo(totalDiscount(evaluation)),
+                "the second discount is capped at the net 70, so the total discount is 30 + 70 = 100");
+        assertEquals(0, BigDecimal.ZERO.compareTo(evaluation.getTotalPrice().amountIncludingTax),
+                "the ticket floors at 0, never negative");
+        assertTrue(evaluation.getTotalPrice().amountIncludingTax.signum() >= 0,
+                "a ticket total can never go negative");
+    }
+
+    /**
+     * A3 (report H2b): the VAT-refund measure is taken on the amount net of the discounts already
+     * retained — a 120 TTC / 20% line already halved by a 60 discount refunds the VAT of 60 (10),
+     * not the VAT of the gross 120 (20). No double advantage.
+     */
+    @Test
+    void testA3VatRefundMeasuredOnNetAmount() {
+        seedStore();
+        seedProductVat("ARB_VAT", "100.00", "120.00", "0.20");
+        seedTiered("ARB_PRIOR_60", ticketSpec("AMOUNT", "60", null, null, "{ \"priority\": 10 }"));
+        DomainUtils.createAndPersistOffer("ARB_VATREFUND", store, "VAT_REFUND_DISCOUNT",
+                "{ \"scope\": \"TICKET\", \"arbitration\": { \"priority\": 20 } }");
+        BasketEvaluation evaluation = engine.evaluate(basket(DomainUtils.createItem("ARB_VAT", 1.0)));
+        assertEquals(0, new BigDecimal("70.00").compareTo(totalDiscount(evaluation)),
+                "60 prior discount + 10 VAT of the net 60 = 70 (not 60 + 20 on the gross)");
+        assertEquals(0, new BigDecimal("50.00").compareTo(evaluation.getTotalPrice().amountIncludingTax),
+                "net = 120 − 60 − 10 = 50; a gross VAT measure would have paid 40");
     }
 
     /**

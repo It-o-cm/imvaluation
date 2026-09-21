@@ -6,7 +6,7 @@ import com.intermarche.valuation.domain.ProductCategoryStorage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Offer;
-import com.intermarche.valuation.domain.Adresse;
+import com.intermarche.valuation.domain.Address;
 import com.intermarche.valuation.domain.Store;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.security.TestSecurity;
@@ -158,7 +158,7 @@ public class StoreCsvResourceTest {
             Store s = new Store();
             s.code = "S001";
             s.name = "Old Name";
-            s.address = new Adresse();
+            s.address = new Address();
             s.address.city = "Old City";
             s.persist();
             return s.id;
@@ -200,7 +200,7 @@ public class StoreCsvResourceTest {
             s.name = "Store Identique";
 
             // Création de l'adresse complète
-            Adresse address = new Adresse();
+            Address address = new Address();
             address.streetLine1 = "10 Avenue des Champs-Elysees";
             address.streetLine2 = "Appt 5B";
             address.postalCode = "75008";

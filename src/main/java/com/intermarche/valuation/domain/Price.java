@@ -28,7 +28,13 @@ import java.util.Objects;
         indexes = {
                 @Index(name = "idx_price_product_store", columnList = "product_id, store_id"),
                 @Index(name = "idx_price_validity", columnList = "product_id, store_id, start_date_time, end_date_time")
-        }
+        },
+        // Natural key (report H6a): a product/store/usage/priority/start tuple identifies one price
+        // row. Enforcing it in the database means a duplicate in an import file fails at persist and
+        // is recorded as a line error by the staged fallback, rather than silently creating two
+        // identical rows that findActivePriceAtDate would then pick between arbitrarily.
+        uniqueConstraints = @UniqueConstraint(name = "uq_price_natural_key",
+                columnNames = {"product_id", "store_id", "price_usage", "priority", "start_date_time"})
 )
 @Cacheable
 public class Price extends BaseEntity {
@@ -57,7 +63,7 @@ public class Price extends BaseEntity {
      * Defines how the price is used (e.g., Standard, Promotional, Base for Discount).
      */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(name = "price_usage", nullable = false, length = 20)
     @NotNull(message = "Price usage is mandatory")
     public PriceUsage priceUsage;
 

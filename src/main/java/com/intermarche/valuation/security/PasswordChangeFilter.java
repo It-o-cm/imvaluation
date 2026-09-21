@@ -25,9 +25,13 @@ import java.net.URI;
  * out action, the login page, and static assets, which would otherwise leave the user
  * facing an unstyled page with no way out.
  * <p>
- * It also applies to browser navigation only. API clients authenticate with a Basic
- * header and expect a payload, not a redirect to an HTML screen, so a pending password
- * change must not break the CSV importers or the valuation endpoint.
+ * The confinement applies to API access too (report H4): a {@code mustChangePassword}
+ * account — the bootstrap admin at its known initial password included — must not keep full
+ * powers over GraphQL, the CSV importers or the valuation endpoint. A browser navigation is
+ * redirected to the password screen; an API/Basic call, which expects a payload rather than a
+ * redirect, is answered with 403 until the password has been changed. The whole mechanism is
+ * gated by {@code app.password-change.enforced}, which is {@code false} in the dev and test
+ * profiles, so the bootstrap admin can drive the API there.
  */
 @Provider
 public class PasswordChangeFilter implements ContainerRequestFilter {
@@ -78,9 +82,6 @@ public class PasswordChangeFilter implements ContainerRequestFilter {
         if (identity == null || identity.isAnonymous() || identity.getPrincipal() == null) {
             return;
         }
-        if (!isBrowserNavigation(requestContext)) {
-            return;
-        }
         // getPath() is documented as relative to the base URI, but implementations differ
         // on whether it carries a leading slash. Normalising here rather than assuming a
         // shape is what keeps the exempt paths actually exempt: a mismatch would redirect
@@ -98,9 +99,19 @@ public class PasswordChangeFilter implements ContainerRequestFilter {
         if (user == null || !user.mustChangePassword) {
             return;
         }
-        URI target = UriBuilder.fromPath("/ui/password").build();
-        LOGGER.debug("Password change pending, redirecting " + path + " to " + target);
-        requestContext.abortWith(Response.seeOther(target).build());
+        // Report H4: a pending password change confines the account on every surface, not only
+        // the browser. A browser navigation can act on a redirect to the password screen; an
+        // API/Basic call expects a payload, so it is denied with 403 until the change is done.
+        if (isBrowserNavigation(requestContext)) {
+            URI target = UriBuilder.fromPath("/ui/password").build();
+            LOGGER.debug("Password change pending, redirecting " + path + " to " + target);
+            requestContext.abortWith(Response.seeOther(target).build());
+        } else {
+            LOGGER.debug("Password change pending, denying API access to " + path);
+            requestContext.abortWith(Response.status(Response.Status.FORBIDDEN)
+                    .entity("Password change required before using the API.")
+                    .type(MediaType.TEXT_PLAIN).build());
+        }
     }
 
     /**
