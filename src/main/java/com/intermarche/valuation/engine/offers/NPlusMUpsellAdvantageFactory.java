@@ -12,6 +12,7 @@ import com.intermarche.valuation.engine.*;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 
 /**
@@ -260,18 +261,18 @@ public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, En
         private UpsellSuggestion calculateUpsell(Map<String, Basket.Item> remainingItems) {
             int bundleSize = config.getBundleSize();
             // 1. Sum up current quantities for all target EANs in remaining pool
-            double totalQty = 0.0;
+            BigDecimal totalQty = BigDecimal.ZERO;
             for (String ean : config.targetEans) {
                 Basket.Item item = remainingItems.get(ean);
                 if (item != null) {
-                    totalQty += item.quantity;
+                    totalQty = totalQty.add(item.quantity);
                 }
             }
             // 2. Calculate how many full bundles we already have in remaining pool
-            int targetBundles = (int) Math.ceil(totalQty / bundleSize);
-            double neededQty = (targetBundles * bundleSize) - totalQty;
-            // If we are extremely close (due to rounding), or exact, skip
-            if (neededQty < 0.001) {
+            int targetBundles = totalQty.divide(BigDecimal.valueOf(bundleSize), 0, RoundingMode.CEILING).intValue();
+            BigDecimal neededQty = BigDecimal.valueOf((long) targetBundles * bundleSize).subtract(totalQty);
+            // Nothing missing (already on a bundle boundary): skip
+            if (neededQty.signum() <= 0) {
                 return null;
             }
             // 4. Determine which product to suggest.
@@ -344,7 +345,8 @@ public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, En
         /**
          * The quantity needed.
          */
-        public final double quantity;
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.intermarche.valuation.engine.QuantitySerializer.class)
+        public final BigDecimal quantity;
 
         /**
          * The offer code associated with the suggestion.
@@ -358,7 +360,7 @@ public class NPlusMUpsellAdvantageFactory implements AdvantageApplierFactory, En
          * @param quantity  The quantity needed.
          * @param offerCode The offer code.
          */
-        UpsellSuggestion(String ean, double quantity, String offerCode) {
+        UpsellSuggestion(String ean, BigDecimal quantity, String offerCode) {
             this.ean = ean;
             this.quantity = quantity;
             this.offerCode = offerCode;

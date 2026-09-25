@@ -138,17 +138,17 @@ public class BasketEvaluationTest {
         Basket.Item item1 = new Basket.Item();
         item1.lineId = "1";
         item1.produceEan = "111";
-        item1.quantity = 2.0;
+        item1.quantity = BigDecimal.valueOf(2.0);
 
         Basket.Item item2 = new Basket.Item();
         item2.lineId = "2";
         item2.produceEan = "111"; // Same EAN
-        item2.quantity = 3.0;
+        item2.quantity = BigDecimal.valueOf(3.0);
 
         Basket.Item item3 = new Basket.Item();
         item3.lineId = "3";
         item3.produceEan = "222"; // Different EAN
-        item3.quantity = 1.0;
+        item3.quantity = BigDecimal.valueOf(1.0);
 
         basket.items = List.of(item1, item2, item3);
 
@@ -162,13 +162,13 @@ public class BasketEvaluationTest {
 
         List<Basket.Item> aggregatedBucket = evaluation.getToEvaluate().get("111");
         assertNotNull(aggregatedBucket);
-        assertEquals(5.0, evaluation.remainingQuantity("111"), 0.001); // 2.0 + 3.0
+        assertEquals(0, evaluation.remainingQuantity("111").compareTo(BigDecimal.valueOf(5.0))); // 2.0 + 3.0
         // Note: lineId might be from the last processed item or first depending on implementation,
         // here we check quantity as it's the business critical aggregation.
 
         List<Basket.Item> distinctBucket = evaluation.getToEvaluate().get("222");
         assertNotNull(distinctBucket);
-        assertEquals(1.0, evaluation.remainingQuantity("222"), 0.001);
+        assertEquals(0, evaluation.remainingQuantity("222").compareTo(BigDecimal.valueOf(1.0)));
     }
 
     // --------------------------------------------------
@@ -185,19 +185,19 @@ public class BasketEvaluationTest {
         Basket basket = new Basket();
         Basket.Item item = new Basket.Item();
         item.produceEan = "123";
-        item.quantity = 5.0;
+        item.quantity = BigDecimal.valueOf(5.0);
         basket.items = List.of(item);
 
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
         // Act
-        List<Basket.Item> picked = evaluation.pick(5.0, "123");
+        List<Basket.Item> picked = evaluation.pick(BigDecimal.valueOf(5.0), "123");
 
         // Assert
         assertEquals(1, picked.size());
         assertEquals("123", picked.get(0).produceEan);
-        assertEquals(5.0, picked.get(0).quantity, 0.001);
+        assertEquals(0, picked.get(0).quantity.compareTo(BigDecimal.valueOf(5.0)));
 
         // Verify it's removed from working set
         assertNull(evaluation.getToEvaluate().get("123"));
@@ -213,23 +213,23 @@ public class BasketEvaluationTest {
         Basket basket = new Basket();
         Basket.Item item = new Basket.Item();
         item.produceEan = "123";
-        item.quantity = 10.0;
+        item.quantity = BigDecimal.valueOf(10.0);
         basket.items = List.of(item);
 
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
         // Act
-        List<Basket.Item> picked = evaluation.pick(4.0, "123");
+        List<Basket.Item> picked = evaluation.pick(BigDecimal.valueOf(4.0), "123");
 
         // Assert
         assertEquals(1, picked.size());
-        assertEquals(4.0, picked.get(0).quantity, 0.001);
+        assertEquals(0, picked.get(0).quantity.compareTo(BigDecimal.valueOf(4.0)));
 
         // Verify remaining
         List<Basket.Item> remaining = evaluation.getToEvaluate().get("123");
         assertNotNull(remaining);
-        assertEquals(6.0, evaluation.remainingQuantity("123"), 0.001); // 10 - 4
+        assertEquals(0, evaluation.remainingQuantity("123").compareTo(BigDecimal.valueOf(6.0))); // 10 - 4
     }
 
     /**
@@ -242,18 +242,18 @@ public class BasketEvaluationTest {
         Basket basket = new Basket();
         Basket.Item item = new Basket.Item();
         item.produceEan = "123";
-        item.quantity = 2.0;
+        item.quantity = BigDecimal.valueOf(2.0);
         basket.items = List.of(item);
 
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
         // Act
-        List<Basket.Item> picked = evaluation.pick(10.0, "123"); // Ask for 10
+        List<Basket.Item> picked = evaluation.pick(BigDecimal.valueOf(10.0), "123"); // Ask for 10
 
         // Assert
         assertEquals(1, picked.size());
-        assertEquals(2.0, picked.get(0).quantity, 0.001); // Should only get 2
+        assertEquals(0, picked.get(0).quantity.compareTo(BigDecimal.valueOf(2.0))); // Should only get 2
 
         // Verify item is gone (fully consumed)
         assertNull(evaluation.getToEvaluate().get("123"));
@@ -271,7 +271,7 @@ public class BasketEvaluationTest {
         evaluation.feedFrom(basket);
 
         // Act
-        List<Basket.Item> picked = evaluation.pick(1.0, "999");
+        List<Basket.Item> picked = evaluation.pick(BigDecimal.valueOf(1.0), "999");
 
         // Assert
         assertTrue(picked.isEmpty());
@@ -285,7 +285,7 @@ public class BasketEvaluationTest {
         BasketEvaluation evaluation = new BasketEvaluation(new Basket());
 
         assertTrue(evaluation.pick(null, "123").isEmpty());
-        assertTrue(evaluation.pick(1.0, null).isEmpty());
+        assertTrue(evaluation.pick(BigDecimal.valueOf(1.0), null).isEmpty());
     }
 
     // --------------------------------------------------
@@ -303,11 +303,11 @@ public class BasketEvaluationTest {
 
         Basket.Item item1 = new Basket.Item();
         item1.produceEan = "UP1";
-        item1.quantity = 1.0;
+        item1.quantity = BigDecimal.valueOf(1.0);
 
         Basket.Item item2 = new Basket.Item();
         item2.produceEan = "UP1";
-        item2.quantity = 2.0;
+        item2.quantity = BigDecimal.valueOf(2.0);
 
         // Act
         evaluation.addAvailableToUpcell(item1);
@@ -317,7 +317,7 @@ public class BasketEvaluationTest {
         assertEquals(1, evaluation.getAvailableToUpcell().size());
         Basket.Item upcellItem = evaluation.getAvailableToUpcell().get("UP1");
         assertNotNull(upcellItem);
-        assertEquals(3.0, upcellItem.quantity, 0.001); // 1 + 2
+        assertEquals(0, upcellItem.quantity.compareTo(BigDecimal.valueOf(3.0))); // 1 + 2
     }
 
     // --------------------------------------------------

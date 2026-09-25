@@ -262,7 +262,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         Basket basket = createBasket("STORE_01", item);
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
-        evaluation.addAvailableToUpcell(evaluation.pickMerged(3.0, "1111111111111"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(BigDecimal.valueOf(3.0), "1111111111111"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -317,7 +317,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         Basket basket = createBasket("STORE_01", item);
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
-        evaluation.addAvailableToUpcell(evaluation.pickMerged(5.0, "2222222222222"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(BigDecimal.valueOf(5.0), "2222222222222"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -340,7 +340,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
     void testApplication_GetType() {
         // Arrange
         NPlusMUpsellAdvantageFactory.UpsellSuggestion suggestion =
-                new NPlusMUpsellAdvantageFactory.UpsellSuggestion("EAN_TEST", 2.5, "OFFER_X");
+                new NPlusMUpsellAdvantageFactory.UpsellSuggestion("EAN_TEST", BigDecimal.valueOf(2.5), "OFFER_X");
         NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication app =
                 new NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication("OFFER_X", suggestion);
 
@@ -361,7 +361,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
     void testApplication_GetOffer() {
         // Arrange
         NPlusMUpsellAdvantageFactory.UpsellSuggestion suggestion =
-                new NPlusMUpsellAdvantageFactory.UpsellSuggestion("EAN", 1.0, "CODE");
+                new NPlusMUpsellAdvantageFactory.UpsellSuggestion("EAN", BigDecimal.valueOf(1.0), "CODE");
         NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication app =
                 new NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication("CODE", suggestion);
 
@@ -379,7 +379,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
     void testApplication_GetOfferApplication() {
         // Arrange
         NPlusMUpsellAdvantageFactory.UpsellSuggestion suggestion =
-                new NPlusMUpsellAdvantageFactory.UpsellSuggestion("EAN", 1.0, "CODE");
+                new NPlusMUpsellAdvantageFactory.UpsellSuggestion("EAN", BigDecimal.valueOf(1.0), "CODE");
         NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication app =
                 new NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication("CODE", suggestion);
 
@@ -438,7 +438,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         evaluation.feedFrom(basket);
         // Fix: Add to availableToUpcell (simulating standard flow)
         // but current Applier implementation looks in toEvaluate.
-        evaluation.addAvailableToUpcell(evaluation.pickMerged(2.0, "1111111111111"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(BigDecimal.valueOf(2.0), "1111111111111"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -453,7 +453,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
                 (NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication) apps.iterator().next();
 
         assertEquals("1111111111111", app.getSuggestion().ean);
-        assertEquals(1.0, app.getSuggestion().quantity, 0.001, "Need 1 more item to complete bundle of 3");
+        assertEquals(0, app.getSuggestion().quantity.compareTo(BigDecimal.valueOf(1.0)), "Need 1 more item to complete bundle of 3");
     }
 
     /**
@@ -478,8 +478,8 @@ public class NPlusMUpsellAdvantageFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
-        evaluation.addAvailableToUpcell(evaluation.pickMerged(1.0, "1111111111111"));
-        evaluation.addAvailableToUpcell(evaluation.pickMerged(1.0, "2222222222222"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(BigDecimal.valueOf(1.0), "1111111111111"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(BigDecimal.valueOf(1.0), "2222222222222"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -493,7 +493,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
                 (NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication) apps.iterator().next();
 
         // Verify Quantity Suggested
-        assertEquals(1.0, app.getSuggestion().quantity, 0.001, "Need 1 more item to complete bundle of 3");
+        assertEquals(0, app.getSuggestion().quantity.compareTo(BigDecimal.valueOf(1.0)), "Need 1 more item to complete bundle of 3");
 
         // Verify Product Choice
         // Should suggest Product B (EAN 222...) because it is cheaper (1.00 vs 10.00)
@@ -522,7 +522,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         Basket basket = createBasket("STORE_01", item);
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
-        evaluation.addAvailableToUpcell(evaluation.pickMerged(1.0, "4444444444444"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(BigDecimal.valueOf(1.0), "4444444444444"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -537,7 +537,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
                 (NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication) apps.iterator().next();
 
         // Verify Quantity
-        assertEquals(2.0, app.getSuggestion().quantity, 0.001, "Need 2 items to complete bundle of 3");
+        assertEquals(0, app.getSuggestion().quantity.compareTo(BigDecimal.valueOf(2.0)), "Need 2 items to complete bundle of 3");
 
         // Verify Product Choice (Fallback to first in set)
         String suggestedEan = app.getSuggestion().ean;
@@ -566,7 +566,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
 
         evaluation.feedFrom(basket);
-        evaluation.addAvailableToUpcell(evaluation.pickMerged(1.0, "1111111111111"));
+        evaluation.addAvailableToUpcell(evaluation.pickMerged(BigDecimal.valueOf(1.0), "1111111111111"));
 
         Collection<AdvantageApplier> appliers = factory.buildAppliers(evaluation);
         AdvantageApplier applier = appliers.iterator().next();
@@ -581,7 +581,7 @@ public class NPlusMUpsellAdvantageFactoryTest {
                 (NPlusMUpsellAdvantageFactory.NPlusMUpsellAdvantageApplication) apps.iterator().next();
 
         // Verify Quantity
-        assertEquals(2.0, app.getSuggestion().quantity, 0.001, "Need 2 items to complete bundle of 3");
+        assertEquals(0, app.getSuggestion().quantity.compareTo(BigDecimal.valueOf(2.0)), "Need 2 items to complete bundle of 3");
 
         // Verify Product Choice
         // Since Ghost EAN has no product (null), it is skipped.

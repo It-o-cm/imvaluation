@@ -1,10 +1,12 @@
 package com.intermarche.valuation.engine;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
 
+import java.math.BigDecimal;
 import java.util.*;
 
 /**
@@ -86,6 +88,16 @@ public class BasketEvaluation {
      * The total price evaluation of the basket after applying offers and discounts.
      */
     private AmountEvaluation totalPrice;
+
+    /**
+     * The EGAlim conformity record, one entry per initial basket line (EGALIM_GUARD spec §6).
+     * <p>
+     * Populated by the EGAlim guard advantage when an {@code EGALIM_GUARD} configuration is in
+     * force and the guard actually runs (a closed basket). Left {@code null} — and omitted from
+     * the JSON response, see {@link #getEgalim()} — otherwise, so a basket valued without a
+     * guard configuration serialises exactly as before (regression-free).
+     */
+    private List<EgalimLine> egalim;
 
     /**
      * The configurations skipped during this evaluation, fail-closed (A2, report H1).
@@ -214,8 +226,8 @@ public class BasketEvaluation {
                     // Same EAN and same price: aggregate quantity, keep each contributing
                     // line on record for an exact per-line split downstream.
                     if (originalItem.quantity != null) {
-                        existingItem.quantity = (existingItem.quantity == null ? 0.0 : existingItem.quantity)
-                                + originalItem.quantity;
+                        existingItem.quantity = (existingItem.quantity == null ? BigDecimal.ZERO : existingItem.quantity)
+                                .add(originalItem.quantity);
                     }
                     existingItem.sourceLines.add(new Basket.Item.SourceLine(
                             originalItem.lineId, contributionOf(originalItem)));
@@ -244,7 +256,7 @@ public class BasketEvaluation {
      * @return A new {@link Basket.Item} describing what was actually taken (with the taken quantity),
      *         or {@code null} if no matching item was found.
      */
-    public List<Basket.Item> pick(Double quantityToPick, String ean) {
+    public List<Basket.Item> pick(BigDecimal quantityToPick, String ean) {
         List<Basket.Item> picked = new ArrayList<>();
         if (quantityToPick == null || ean == null) {
             return picked;
@@ -253,15 +265,16 @@ public class BasketEvaluation {
         if (bucket == null || bucket.isEmpty()) {
             return picked;
         }
-        double remaining = quantityToPick;
+        BigDecimal remaining = quantityToPick;
         // Consume price entries in order until the quantity is satisfied or the EAN runs
         // out. Each entry yields its own picked item, mono-price, so a downstream split
         // sees the exact price of every consumed slice — the whole point of separating a
-        // product's distinct prices.
-        while (remaining > 1e-9 && !bucket.isEmpty()) {
+        // product's distinct prices. Subtraction is exact in BigDecimal, so the taken
+        // slices sum to the demanded quantity to the last unit — no epsilon, no residue.
+        while (remaining.signum() > 0 && !bucket.isEmpty()) {
             Basket.Item item = bucket.get(0);
-            double available = contributionOf(item);
-            double take = Math.min(remaining, available);
+            BigDecimal available = contributionOf(item);
+            BigDecimal take = remaining.min(available);
 
             Basket.Item slice = new Basket.Item();
             slice.lineId = item.lineId;
@@ -277,9 +290,9 @@ public class BasketEvaluation {
             slice.sourceLines = consumeSourceLines(item, take);
             picked.add(slice);
 
-            remaining -= take;
-            if (take < available) {
-                item.quantity = roundQuantity(available - take);
+            remaining = remaining.subtract(take);
+            if (take.compareTo(available) < 0) {
+                item.quantity = available.subtract(take);
             } else {
                 bucket.remove(0);
             }
@@ -306,7 +319,7 @@ public class BasketEvaluation {
      * @param source         The line whose price profile identifies the entry to draw on.
      * @return The consumed slices, empty when no matching entry remains.
      */
-    public List<Basket.Item> pickMatching(Double quantityToPick, Basket.Item source) {
+    public List<Basket.Item> pickMatching(BigDecimal quantityToPick, Basket.Item source) {
         List<Basket.Item> picked = new ArrayList<>();
         if (quantityToPick == null || source == null) {
             return picked;
@@ -326,8 +339,8 @@ public class BasketEvaluation {
             return picked;
         }
         Basket.Item item = bucket.get(index);
-        double available = contributionOf(item);
-        double take = Math.min(quantityToPick, available);
+        BigDecimal available = contributionOf(item);
+        BigDecimal take = quantityToPick.min(available);
 
         Basket.Item slice = new Basket.Item();
         slice.lineId = item.lineId;
@@ -343,8 +356,8 @@ public class BasketEvaluation {
         slice.sourceLines = consumeSourceLines(item, take);
         picked.add(slice);
 
-        if (take < available) {
-            item.quantity = roundQuantity(available - take);
+        if (take.compareTo(available) < 0) {
+            item.quantity = available.subtract(take);
         } else {
             bucket.remove(index);
             if (bucket.isEmpty()) {
@@ -368,7 +381,7 @@ public class BasketEvaluation {
      * @param ean            The product EAN.
      * @return A single merged item, or {@code null} when nothing was taken.
      */
-    public Basket.Item pickMerged(Double quantityToPick, String ean) {
+    public Basket.Item pickMerged(BigDecimal quantityToPick, String ean) {
         List<Basket.Item> slices = pick(quantityToPick, ean);
         if (slices.isEmpty()) {
             return null;
@@ -384,9 +397,9 @@ public class BasketEvaluation {
         merged.pricePerUnitInclTax = first.pricePerUnitInclTax;
         merged.vatRate = first.vatRate;
         merged.priceDate = first.priceDate;
-        double total = 0.0;
+        BigDecimal total = BigDecimal.ZERO;
         for (Basket.Item slice : slices) {
-            total += contributionOf(slice);
+            total = total.add(contributionOf(slice));
             merged.sourceLines.addAll(slice.sourceLines);
         }
         merged.quantity = total;
@@ -405,39 +418,22 @@ public class BasketEvaluation {
      * @param quantity The quantity being consumed.
      * @return The source-line slices making up the consumed quantity.
      */
-    private List<Basket.Item.SourceLine> consumeSourceLines(Basket.Item item, double quantity) {
+    private List<Basket.Item.SourceLine> consumeSourceLines(Basket.Item item, BigDecimal quantity) {
         List<Basket.Item.SourceLine> taken = new ArrayList<>();
-        double remaining = quantity;
+        BigDecimal remaining = quantity;
         java.util.Iterator<Basket.Item.SourceLine> it = item.sourceLines.iterator();
-        while (it.hasNext() && remaining > 1e-9) {
+        while (it.hasNext() && remaining.signum() > 0) {
             Basket.Item.SourceLine line = it.next();
-            double slice = Math.min(line.quantity, remaining);
+            BigDecimal slice = line.quantity.min(remaining);
             taken.add(new Basket.Item.SourceLine(line.lineId, slice));
-            remaining -= slice;
-            if (slice >= line.quantity - 1e-9) {
+            remaining = remaining.subtract(slice);
+            if (slice.compareTo(line.quantity) >= 0) {
                 it.remove();
             } else {
-                line.quantity = roundQuantity(line.quantity - slice);
+                line.quantity = line.quantity.subtract(slice);
             }
         }
         return taken;
-    }
-
-    /**
-     * Rounds a quantity to a sane precision.
-     * <p>
-     * Quantities are doubles, so splitting one (3.639 minus 3.0) leaves artefacts like
-     * 0.6389999999999998 that then surface in offer labels and in the response. Rounding
-     * the remainder keeps the value the caller would expect without changing the total
-     * consumed.
-     *
-     * @param quantity The quantity to round.
-     * @return The quantity rounded to six decimals.
-     */
-    private static double roundQuantity(double quantity) {
-        return java.math.BigDecimal.valueOf(quantity)
-                .setScale(6, java.math.RoundingMode.HALF_UP)
-                .doubleValue();
     }
 
     /**
@@ -446,8 +442,8 @@ public class BasketEvaluation {
      * @param item The original basket line.
      * @return The quantity, or zero when the line carries none.
      */
-    private static double contributionOf(Basket.Item item) {
-        return item.quantity == null ? 0.0 : item.quantity;
+    private static BigDecimal contributionOf(Basket.Item item) {
+        return item.quantity == null ? BigDecimal.ZERO : item.quantity;
     }
 
     /**
@@ -533,14 +529,14 @@ public class BasketEvaluation {
      * @param ean The product EAN.
      * @return The summed remaining quantity; zero when the EAN is absent.
      */
-    public double remainingQuantity(String ean) {
+    public BigDecimal remainingQuantity(String ean) {
         List<Basket.Item> bucket = toEvaluate.get(ean);
         if (bucket == null) {
-            return 0.0;
+            return BigDecimal.ZERO;
         }
-        double total = 0.0;
+        BigDecimal total = BigDecimal.ZERO;
         for (Basket.Item item : bucket) {
-            total += contributionOf(item);
+            total = total.add(contributionOf(item));
         }
         return total;
     }
@@ -583,6 +579,28 @@ public class BasketEvaluation {
      */
     public AmountEvaluation getTotalPrice() {
         return totalPrice;
+    }
+
+    /**
+     * Returns the EGAlim conformity record, one line per initial basket line (spec §6).
+     * <p>
+     * Omitted from the JSON response when {@code null} (no in-force guard, or an open basket),
+     * so a valuation without an EGAlim guard is byte-for-byte identical to before.
+     *
+     * @return the record lines, or {@code null} when no guard produced a record.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public List<EgalimLine> getEgalim() {
+        return egalim;
+    }
+
+    /**
+     * Records the EGAlim conformity record produced by the guard (spec §6).
+     *
+     * @param egalim the record lines, one per initial basket line.
+     */
+    public void setEgalimRecord(List<EgalimLine> egalim) {
+        this.egalim = egalim;
     }
 
     /**
@@ -736,7 +754,7 @@ public class BasketEvaluation {
                 availableToUpcell.put(pickedItem.produceEan, copy);
             } else {
                 // Duplicate EAN: Aggregate quantity to the existing item
-                existingItem.quantity = contributionOf(existingItem) + contributionOf(pickedItem);
+                existingItem.quantity = contributionOf(existingItem).add(contributionOf(pickedItem));
             }
         }
     }
@@ -825,9 +843,10 @@ public class BasketEvaluation {
         public String produceEan;
 
         /**
-         * Quantity of this result item.
+         * Quantity of this result item, normalized to plain notation on output (spec A5 §1.4).
          */
-        public double quantity;
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = QuantitySerializer.class)
+        public BigDecimal quantity;
 
         /**
          * The offer's attributed amount for this item: excl. tax, incl. tax, and the real
@@ -850,8 +869,85 @@ public class BasketEvaluation {
         public Item(Basket.Item source, AmountEvaluation amount) {
             this.lineId = source.lineId;
             this.produceEan = source.produceEan;
-            this.quantity = source.quantity == null ? 0.0 : source.quantity;
+            this.quantity = source.quantity == null ? BigDecimal.ZERO : source.quantity;
             this.amount = amount;
+        }
+    }
+
+    /**
+     * One line of the EGAlim conformity record (EGALIM_GUARD spec §6).
+     * <p>
+     * A per-initial-line document of the generosity applied to the line: its nominal and final
+     * prices, the counted generosity rate, the part excluded from the ceiling (anti-waste and
+     * manual gestures), the margin still available before the ceiling, and the correction the
+     * guard applied when the ceiling was exceeded. {@code remainingBeforeCap} is absent for an
+     * {@link com.intermarche.valuation.domain.EgalimRegime#EXEMPT} line; {@code correction} is
+     * present only when a correction was made. Amounts are at scale 2, the rate at scale 4.
+     * <p>
+     * Fields are public for JSON serialization; null fields are omitted.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class EgalimLine {
+
+        /**
+         * The EAN of the initial line; null for a line carrying no EAN.
+         */
+        public String ean;
+
+        /**
+         * The product label (its catalog name); null when the product is unknown.
+         */
+        public String label;
+
+        /**
+         * The EGAlim regime that governed the line ({@code FOOD_34}, {@code DPH_40},
+         * {@code EXEMPT}).
+         */
+        public String regime;
+
+        /**
+         * The nominal price of the line: reference unit price times quantity, tax included.
+         */
+        public BigDecimal nominalPrice;
+
+        /**
+         * The final price of the line after every advantage, tax included, before the guard's
+         * own correction.
+         */
+        public BigDecimal finalPrice;
+
+        /**
+         * The counted generosity rate: counted generosity divided by nominal, scale 4.
+         */
+        public BigDecimal generosityRate;
+
+        /**
+         * The counted generosity in euros: nominal minus final, less the excluded part.
+         */
+        public BigDecimal countedGenerosity;
+
+        /**
+         * The excluded generosity in euros: the anti-waste and manual-gesture share, outside the
+         * ceiling.
+         */
+        public BigDecimal excludedGenerosity;
+
+        /**
+         * The generosity still available before the ceiling, in euros; {@code null} for an
+         * exempt line, {@code 0.00} when the ceiling is reached or exceeded.
+         */
+        public BigDecimal remainingBeforeCap;
+
+        /**
+         * The correction applied by the guard, in euros; {@code null} unless a correction was
+         * made (counted generosity above the ceiling).
+         */
+        public BigDecimal correction;
+
+        /**
+         * Default constructor for JSON serialization.
+         */
+        public EgalimLine() {
         }
     }
 

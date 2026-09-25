@@ -326,8 +326,8 @@ public class AmountPerItemDiscountFactory implements AdvantageApplierFactory, En
                     if (amountPerItem == null) {
                         continue;
                     }
-                    double quantity = productAwareApp.getProductQuantity(product);
-                    if (quantity <= 0) {
+                    BigDecimal quantity = productAwareApp.getProductQuantity(product);
+                    if (quantity.signum() <= 0) {
                         continue;
                     }
                     AmountEvaluation amount = productAwareApp.getProductAmount(product);
@@ -335,7 +335,7 @@ public class AmountPerItemDiscountFactory implements AdvantageApplierFactory, En
                             || amount.amountIncludingTax.signum() <= 0) {
                         continue;
                     }
-                    BigDecimal raw = amountPerItem.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal raw = amountPerItem.multiply(quantity).setScale(2, RoundingMode.HALF_UP);
                     BigDecimal discountTtc = raw.min(amount.amountIncludingTax);
                     if (discountTtc.signum() <= 0) {
                         continue;

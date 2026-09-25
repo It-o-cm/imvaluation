@@ -122,7 +122,7 @@ public class AntiWasteDiscountFactoryTest {
         Basket.Item item = new Basket.Item();
         item.lineId = lineId;
         item.produceEan = ean;
-        item.quantity = quantity;
+        item.quantity = BigDecimal.valueOf(quantity);
         item.bestBeforeDate = bestBeforeDate;
         return item;
     }
@@ -630,7 +630,7 @@ public class AntiWasteDiscountFactoryTest {
             this.valued = new BasketEvaluation.Item();
             this.valued.lineId = lineId;
             this.valued.produceEan = ean;
-            this.valued.quantity = quantity;
+            this.valued.quantity = BigDecimal.valueOf(quantity);
             BigDecimal amount = new BigDecimal(ttc);
             this.valued.amount = new AmountEvaluation(amount, amount, BigDecimal.ZERO);
         }
@@ -693,8 +693,8 @@ public class AntiWasteDiscountFactoryTest {
          * @return the quantity when the EAN matches, zero otherwise.
          */
         @Override
-        public double getProductQuantity(Product product) {
-            return (product != null && valued.produceEan.equals(product.ean)) ? valued.quantity : 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            return (product != null && valued.produceEan.equals(product.ean)) ? valued.quantity : BigDecimal.ZERO;
         }
     }
 

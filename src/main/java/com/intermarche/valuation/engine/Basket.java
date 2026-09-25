@@ -11,8 +11,10 @@ import com.intermarche.valuation.domain.util.DateTimeProvider;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Data Transfer Object representing a Shopping Basket.
@@ -124,6 +126,65 @@ public class Basket {
           "default": true,
           "description": "A fact declared by the caller: true = final basket, everything applies; false = basket in progress (till scan), AT_TOTAL advantages never fall. Never guessed by the engine.",
           "x-label": "Closed"
+        },
+        "cardNumber": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The loyalty card attached to the basket, for traceability of card-borne advantages.",
+          "x-label": "Card number"
+        },
+        "cardPromotions": {
+          "type": "array",
+          "description": "Card-borne promotions served by imfid at card attachment and transmitted in the basket (spec §2). Applied by the CARD_PROMOTION_DISCOUNT advantage; CAGNOTTE entries are silently ignored.",
+          "x-widget": "object-list",
+          "x-label": "Card promotions",
+          "x-item-label": "promotion",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ean", "promotionType", "value"],
+            "properties": {
+              "ean": {
+                "type": "string",
+                "minLength": 1,
+                "description": "EAN of the product the promotion is attached to.",
+                "x-widget": "ean",
+                "x-label": "Product"
+              },
+              "promotionType": {
+                "enum": ["PERCENT", "AMOUNT"],
+                "description": "PERCENT = fraction of the net base (0.05 = 5%); AMOUNT = euros per unit.",
+                "x-label": "Promotion type"
+              },
+              "value": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "PERCENT: a fraction in (0, 1]. AMOUNT: euros per unit, interpreted at scale 2.",
+                "x-label": "Value"
+              },
+              "benefit": {
+                "enum": ["CAGNOTTE", "IMMEDIATE_DISCOUNT"],
+                "description": "Optional, defaults to IMMEDIATE_DISCOUNT. A CAGNOTTE entry is transmitted for completeness but never applied by the engine (spec §2.1).",
+                "x-label": "Benefit"
+              },
+              "label": {
+                "type": "string",
+                "description": "Optional decorative product name from imfid, echoed in the output label when present.",
+                "x-label": "Label"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "required": ["promotionType"],
+                  "properties": { "promotionType": { "const": "PERCENT" } }
+                },
+                "then": {
+                  "properties": { "value": { "maximum": 1 } }
+                }
+              }
+            ]
+          }
         },
         "items": {
           "type": "array",
@@ -288,9 +349,133 @@ public class Basket {
      */
     public Boolean closed;
 
+    /**
+     * The loyalty card attached to the basket (spec §2), for traceability of card-borne
+     * advantages.
+     * <p>
+     * Additive and optional: independent of {@link #cardPromotions}, neither requires the
+     * other. The engine stays stateless and never calls imfid — this is a bare identifier
+     * echoed for the ticket trace, never a key the engine resolves.
+     */
+    public String cardNumber;
+
+    /**
+     * Card-borne promotions transmitted in the basket (spec §2).
+     * <p>
+     * imfid serves the promotions attached to the (card, EAN) couples at card attachment; the
+     * POS forwards them here, unfiltered, and the {@code CARD_PROMOTION_DISCOUNT} advantage
+     * synthesises a transient configuration from each {@code IMMEDIATE_DISCOUNT} entry (spec
+     * §3). A {@code CAGNOTTE} entry is transmitted for completeness but is the monopoly of
+     * imfid and is silently ignored by the engine (spec §2.1). A basket without card
+     * promotions behaves exactly as before.
+     */
+    public List<CardPromotion> cardPromotions;
+
     // --------------------------------------------------
     // Inner Classes (Nested DTOs)
     // --------------------------------------------------
+
+    /**
+     * One card-borne promotion attached to a (card, EAN) couple (spec §2).
+     * <p>
+     * Deserialised from the {@code cardPromotions} block of the request. Fields are public
+     * for JSON deserialisation. The schema validates the shape (including the cross-rule that
+     * a {@code PERCENT} value never exceeds 1); {@link Basket#validateCardPromotions()}
+     * enforces the uniqueness of the EAN, which a JSON schema cannot express.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class CardPromotion {
+
+        /**
+         * Benefit value meaning the advantage is applied immediately by the till/engine.
+         */
+        public static final String BENEFIT_IMMEDIATE_DISCOUNT = "IMMEDIATE_DISCOUNT";
+
+        /**
+         * Benefit value meaning the advantage is credited to the loyalty pot by imfid, never
+         * applied here.
+         */
+        public static final String BENEFIT_CAGNOTTE = "CAGNOTTE";
+
+        /**
+         * Default constructor used by the JSON deserializer.
+         */
+        public CardPromotion() {}
+
+        /**
+         * EAN of the product this promotion is attached to.
+         */
+        public String ean;
+
+        /**
+         * The promotion kind: {@code "PERCENT"} (a fraction of the net base) or
+         * {@code "AMOUNT"} (euros per unit).
+         */
+        public String promotionType;
+
+        /**
+         * The promotion value: a fraction in {@code (0, 1]} for {@code PERCENT}, euros per unit
+         * for {@code AMOUNT}. A {@link BigDecimal} so it never suffers double drift.
+         */
+        public BigDecimal value;
+
+        /**
+         * The benefit routing (spec §2): {@code "IMMEDIATE_DISCOUNT"} (the default) or
+         * {@code "CAGNOTTE"}. Optional; a {@code null} benefit reads as
+         * {@code IMMEDIATE_DISCOUNT}.
+         */
+        public String benefit;
+
+        /**
+         * Optional decorative product name from imfid, echoed in the output label when present.
+         */
+        public String label;
+
+        /**
+         * Tells whether this promotion is an immediate discount the engine must apply (spec
+         * §2.1): an absent {@code benefit} defaults to {@code IMMEDIATE_DISCOUNT}, and only a
+         * {@code CAGNOTTE} entry is excluded.
+         *
+         * @return {@code true} when the benefit is absent or {@code IMMEDIATE_DISCOUNT}.
+         */
+        @JsonIgnore
+        public boolean isImmediateDiscount() {
+            return this.benefit == null || BENEFIT_IMMEDIATE_DISCOUNT.equals(this.benefit);
+        }
+    }
+
+    /**
+     * Validates the card promotions cross-rules a JSON schema cannot express (spec §2.3, §5.7).
+     * <p>
+     * imfid guarantees at most one promotion per (card, EAN) couple; a duplicate EAN in
+     * {@code cardPromotions} is therefore a caller error, rejected rather than silently
+     * arbitrated. The {@code PERCENT}-value ceiling of 1 (100%) is also re-checked here so the
+     * rule holds when the method is invoked directly, mirroring the schema's own cross-rule.
+     *
+     * @throws IllegalArgumentException when an EAN appears twice, or a {@code PERCENT} value
+     *                                  exceeds 1.
+     */
+    public void validateCardPromotions() {
+        if (this.cardPromotions == null) {
+            return;
+        }
+        Set<String> seenEans = new HashSet<>();
+        for (CardPromotion promotion : this.cardPromotions) {
+            if (promotion == null || promotion.ean == null) {
+                continue;
+            }
+            if (!seenEans.add(promotion.ean)) {
+                throw new IllegalArgumentException(String.format(
+                        "Duplicate card promotion for EAN '%s'", promotion.ean));
+            }
+            if ("PERCENT".equals(promotion.promotionType) && promotion.value != null
+                    && promotion.value.compareTo(BigDecimal.ONE) > 0) {
+                throw new IllegalArgumentException(String.format(
+                        "Card promotion for EAN '%s' has a PERCENT value greater than 1 (100%%).",
+                        promotion.ean));
+            }
+        }
+    }
 
     /**
      * Inner class representing an item in the basket.
@@ -373,9 +558,13 @@ public class Basket {
         public String bestBeforeDate;
 
         /**
-         * The quantity (can be an integer or a decimal for weighed items).
+         * The quantity (an integer for unit items, a decimal in kilograms for weighed items).
+         * <p>
+         * A {@link BigDecimal} so quantities never suffer double drift: the JSON contract is
+         * unchanged ({@code items[].quantity} stays a {@code number}), only the Java carrier type
+         * differs, which is transparent to Jackson.
          */
-        public Double quantity;
+        public BigDecimal quantity;
 
         /**
          * Cached Product entity for this item.
@@ -413,7 +602,7 @@ public class Basket {
             /**
              * Quantity this line contributed to the aggregated item.
              */
-            public double quantity;
+            public BigDecimal quantity;
 
             /**
              * Constructs a source-line contribution.
@@ -421,7 +610,7 @@ public class Basket {
              * @param lineId   Identifier of the original line.
              * @param quantity Quantity contributed by that line.
              */
-            public SourceLine(String lineId, double quantity) {
+            public SourceLine(String lineId, BigDecimal quantity) {
                 this.lineId = lineId;
                 this.quantity = quantity;
             }

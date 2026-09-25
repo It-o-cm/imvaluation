@@ -11,6 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -51,7 +52,7 @@ public class ValuationResourceTest {
 
         Basket.Item item = new Basket.Item();
         item.produceEan = "1234567890123";
-        item.quantity = 1.0;
+        item.quantity = BigDecimal.valueOf(1.0);
         basket.items.add(item);
     }
 
@@ -140,7 +141,7 @@ public class ValuationResourceTest {
         Map<String, java.util.List<Basket.Item>> items = new HashMap<>();
         Basket.Item item = new Basket.Item();
         item.produceEan = "9999999999999";
-        item.quantity = 1.0;
+        item.quantity = BigDecimal.valueOf(1.0);
         items.put(item.produceEan, new ArrayList<>(java.util.List.of(item)));
         when(evaluation.getToEvaluate()).thenReturn(items);
         return evaluation;

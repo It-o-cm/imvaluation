@@ -2,6 +2,8 @@ package com.intermarche.valuation.engine;
 
 import com.intermarche.valuation.domain.Product;
 
+import java.math.BigDecimal;
+
 /**
  * Service Provider Interface (SPI) for applying offers that are aware of product details.
  * <p>
@@ -24,5 +26,5 @@ public interface ProductAwareOfferApplication extends OfferApplication {
      * @param product The product for which to retrieve the quantity.
      * @return The quantity of the specified product.
      */
-    double getProductQuantity(Product product);
+    BigDecimal getProductQuantity(Product product);
 }

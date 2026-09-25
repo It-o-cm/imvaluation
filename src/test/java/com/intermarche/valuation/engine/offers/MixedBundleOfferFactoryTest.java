@@ -274,7 +274,7 @@ public class MixedBundleOfferFactoryTest {
         assertEquals(new BigDecimal("20.00"), app.getAmount().amountIncludingTax);
 
         // 2.5 - 2.0 = 0.5 remaining
-        assertEquals(0.5, evaluation.remainingQuantity("1000000000001"), 0.001);
+        assertEquals(0, evaluation.remainingQuantity("1000000000001").compareTo(BigDecimal.valueOf(0.5)));
     }
 
     /**
@@ -393,8 +393,8 @@ public class MixedBundleOfferFactoryTest {
         MixedBundleOfferFactory.MixedBundleApplication app =
                 (MixedBundleOfferFactory.MixedBundleApplication) appliers.iterator().next().apply(evaluation).iterator().next();
 
-        assertEquals(2.0, app.getProductQuantity(mainProduct));
-        assertEquals(0.0, app.getProductQuantity(subProduct));
+        assertEquals(0, app.getProductQuantity(mainProduct).compareTo(BigDecimal.valueOf(2.0)));
+        assertEquals(0, app.getProductQuantity(subProduct).compareTo(BigDecimal.valueOf(0.0)));
     }
 
     /**
@@ -673,7 +673,7 @@ public class MixedBundleOfferFactoryTest {
         // HACK: Manually insert an item with quantity 0 to test the guard
         Basket.Item zeroItem = new Basket.Item();
         zeroItem.produceEan = "1000000000001";
-        zeroItem.quantity = 0.0; // Quantity is zero
+        zeroItem.quantity = BigDecimal.ZERO; // Quantity is zero
         evaluation.getToEvaluate().put("1000000000001", new java.util.ArrayList<>(java.util.List.of(zeroItem)));
 
         // Act
@@ -709,7 +709,7 @@ public class MixedBundleOfferFactoryTest {
             public BrokenPickEvaluation(Basket basket) { super(basket); }
 
             @Override
-            public List<Basket.Item> pick(Double quantityToPick, String ean) {
+            public List<Basket.Item> pick(BigDecimal quantityToPick, String ean) {
                 // Simulate a failure: nothing gets consumed (empty list).
                 return new ArrayList<>();
             }
@@ -774,7 +774,7 @@ public class MixedBundleOfferFactoryTest {
         // We simulate a simple bundle consumption
         Basket.Item consumedItem = new Basket.Item();
         consumedItem.produceEan = mainProduct.ean; // EAN: 100...
-        consumedItem.quantity = 1.0;
+        consumedItem.quantity = BigDecimal.valueOf(1.0);
 
         MixedBundleOfferFactory.MixedBundleApplication app =
                 new MixedBundleOfferFactory.MixedBundleApplication(

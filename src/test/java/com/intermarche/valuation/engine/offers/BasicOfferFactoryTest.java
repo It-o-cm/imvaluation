@@ -438,9 +438,9 @@ public class BasicOfferFactoryTest {
         Basket.Item item = createItem("1111111111111", 4.5);
         BasicOfferFactory.BasicApplication app = new BasicOfferFactory.BasicApplication(item, store, product1, defaultPrice);
         // Act
-        double quantity = app.getProductQuantity(product1);
+        BigDecimal quantity = app.getProductQuantity(product1);
         // Assert
-        assertEquals(4.5, quantity, "Should return the item quantity");
+        assertEquals(0, quantity.compareTo(BigDecimal.valueOf(4.5)), "Should return the item quantity");
     }
 
     /**
@@ -455,9 +455,9 @@ public class BasicOfferFactoryTest {
         Basket.Item item = createItem("1111111111111", 2.0);
         BasicOfferFactory.BasicApplication app = new BasicOfferFactory.BasicApplication(item, store, product1, defaultPrice);
         // Act
-        double quantity = app.getProductQuantity(product2); // product2 has different EAN
+        BigDecimal quantity = app.getProductQuantity(product2); // product2 has different EAN
         // Assert
-        assertEquals(0.0, quantity, "Should return 0.0 for non-matching product");
+        assertEquals(0, quantity.compareTo(BigDecimal.valueOf(0.0)), "Should return 0.0 for non-matching product");
     }
 
     /**
@@ -491,9 +491,9 @@ public class BasicOfferFactoryTest {
         Basket.Item item = createItem("1111111111111", 1.0);
         BasicOfferFactory.BasicApplication app = new BasicOfferFactory.BasicApplication(item, store, product1, defaultPrice);
         // Act
-        double quantity = app.getProductQuantity(null);
+        BigDecimal quantity = app.getProductQuantity(null);
         // Assert
-        assertEquals(0.0, quantity, "Should return 0.0 when provided product is null");
+        assertEquals(0, quantity.compareTo(BigDecimal.valueOf(0.0)), "Should return 0.0 when provided product is null");
     }
 
     // --------------------------------------------------

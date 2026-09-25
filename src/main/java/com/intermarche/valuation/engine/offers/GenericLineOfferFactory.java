@@ -175,10 +175,10 @@ public class GenericLineOfferFactory implements OfferApplierFactory {
          */
         @Override
         public AmountEvaluation getAmount() {
-            double quantity = slice.quantity == null ? 0.0 : slice.quantity;
+            BigDecimal quantity = slice.quantity == null ? BigDecimal.ZERO : slice.quantity;
             AmountEvaluation unit = new AmountEvaluation(
                     slice.pricePerUnitExclTax, slice.pricePerUnitInclTax, slice.vatRate);
-            return unit.multiply(BigDecimal.valueOf(quantity));
+            return unit.multiply(quantity);
         }
 
         /**
@@ -222,7 +222,7 @@ public class GenericLineOfferFactory implements OfferApplierFactory {
                     ttc = remainingTtc;
                     ht = remainingHt;
                 } else {
-                    BigDecimal qty = BigDecimal.valueOf(source.quantity);
+                    BigDecimal qty = source.quantity;
                     ttc = slice.pricePerUnitInclTax.multiply(qty).setScale(2, RoundingMode.HALF_UP);
                     ht = slice.pricePerUnitExclTax.multiply(qty).setScale(2, RoundingMode.HALF_UP);
                     remainingTtc = remainingTtc.subtract(ttc);
@@ -263,11 +263,11 @@ public class GenericLineOfferFactory implements OfferApplierFactory {
          * A generic line covers no cataloged product.
          *
          * @param product The product being asked about.
-         * @return {@code 0.0}, always.
+         * @return {@link BigDecimal#ZERO}, always.
          */
         @Override
-        public double getProductQuantity(Product product) {
-            return 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            return BigDecimal.ZERO;
         }
     }
 }

@@ -315,17 +315,17 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
             // 2. Calculate Max Bundles on the LIVE pool. A candidate may have been consumed
             //    already by a higher-priority offer (e.g. a manual gesture), so counting the
             //    frozen target quantities would over-count and build an empty application.
-            double totalAvailableQty = 0.0;
+            BigDecimal totalAvailableQty = BigDecimal.ZERO;
             for (Basket.Item candidate : sortedCandidates) {
-                totalAvailableQty += evaluation.remainingQuantity(candidate.produceEan);
+                totalAvailableQty = totalAvailableQty.add(evaluation.remainingQuantity(candidate.produceEan));
             }
             int bundleSize = quantityToPay + discountedQuantity;
 
-            int maxBundles = (int) (totalAvailableQty / bundleSize);
+            int maxBundles = totalAvailableQty.divide(BigDecimal.valueOf(bundleSize), 0, RoundingMode.FLOOR).intValue();
             if (maxBundles == 0) {
                 return Collections.emptyList();
             }
-            double totalQtyToConsume = maxBundles * bundleSize;
+            BigDecimal totalQtyToConsume = BigDecimal.valueOf((long) maxBundles * bundleSize);
 
             // 3. Bulk Pick: Consume items from the evaluation
             List<Basket.Item> pickedPool = pickItemsFromEvaluation(evaluation, sortedCandidates, totalQtyToConsume);
@@ -373,19 +373,19 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
          * @param totalQtyToConsume The total quantity required.
          * @return A list of successfully picked items.
          */
-        List<Basket.Item> pickItemsFromEvaluation(BasketEvaluation evaluation, List<Basket.Item> sortedCandidates, double totalQtyToConsume) {
+        List<Basket.Item> pickItemsFromEvaluation(BasketEvaluation evaluation, List<Basket.Item> sortedCandidates, BigDecimal totalQtyToConsume) {
             List<Basket.Item> pickedPool = new ArrayList<>();
-            double remainingToConsume = totalQtyToConsume;
+            BigDecimal remainingToConsume = totalQtyToConsume;
             for (Basket.Item candidate : sortedCandidates) {
                 // Live remaining quantity for this EAN, across its price entries.
-                double liveQty = evaluation.remainingQuantity(candidate.produceEan);
-                if (liveQty <= 0) continue;
-                double take = Math.min(liveQty, remainingToConsume);
+                BigDecimal liveQty = evaluation.remainingQuantity(candidate.produceEan);
+                if (liveQty.signum() <= 0) continue;
+                BigDecimal take = liveQty.min(remainingToConsume);
                 // pick may split across several prices of the same EAN; keep every slice.
                 List<Basket.Item> slices = evaluation.pick(take, candidate.produceEan);
                 for (Basket.Item slice : slices) {
                     pickedPool.add(slice);
-                    remainingToConsume -= slice.quantity;
+                    remainingToConsume = remainingToConsume.subtract(slice.quantity);
                 }
             }
             return pickedPool;
@@ -404,31 +404,31 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
             List<OfferApplication> applications = new ArrayList<>();
             List<Basket.Item> currentPaidItems = new ArrayList<>();
             List<Basket.Item> currentDiscountedItems = new ArrayList<>();
-            int neededDisc = discountedQuantity;
-            int neededPaid = quantityToPay;
+            BigDecimal neededDisc = BigDecimal.valueOf(discountedQuantity);
+            BigDecimal neededPaid = BigDecimal.valueOf(quantityToPay);
             for (Basket.Item item : pickedPool) {
-                double remainingItemQty = item.quantity;
+                BigDecimal remainingItemQty = item.quantity;
                 // Distribute the quantity of the current item across available slots
-                while (remainingItemQty > 0) {
-                    if (neededDisc > 0) {
+                while (remainingItemQty.signum() > 0) {
+                    if (neededDisc.signum() > 0) {
                         // Fill Discounted Slot
-                        double take = Math.min(remainingItemQty, neededDisc);
+                        BigDecimal take = remainingItemQty.min(neededDisc);
                         addItemToBundle(currentDiscountedItems, item, take);
-                        neededDisc -= take;
-                        remainingItemQty -= take;
-                    } else if (neededPaid > 0) {
+                        neededDisc = neededDisc.subtract(take);
+                        remainingItemQty = remainingItemQty.subtract(take);
+                    } else if (neededPaid.signum() > 0) {
                         // Fill Paid Slot
-                        double take = Math.min(remainingItemQty, neededPaid);
+                        BigDecimal take = remainingItemQty.min(neededPaid);
                         addItemToBundle(currentPaidItems, item, take);
-                        neededPaid -= take;
-                        remainingItemQty -= take;
+                        neededPaid = neededPaid.subtract(take);
+                        remainingItemQty = remainingItemQty.subtract(take);
                     } else {
                         // Bundle is complete, add it and reset counters
                         applications.add(new NPlusMApplication(code, currentPaidItems, currentDiscountedItems, store, discountType, discountValue));
                         currentPaidItems.clear();
                         currentDiscountedItems.clear();
-                        neededDisc = discountedQuantity;
-                        neededPaid = quantityToPay;
+                        neededDisc = BigDecimal.valueOf(discountedQuantity);
+                        neededPaid = BigDecimal.valueOf(quantityToPay);
                     }
                 }
             }
@@ -452,7 +452,7 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
          * @param source     The original item.
          * @param quantity   The quantity to take.
          */
-        private void addItemToBundle(List<Basket.Item> bundleList, Basket.Item source, double quantity) {
+        private void addItemToBundle(List<Basket.Item> bundleList, Basket.Item source, BigDecimal quantity) {
             Basket.Item split = new Basket.Item();
             split.produceEan = source.produceEan;
             split.lineId = source.lineId;
@@ -473,23 +473,22 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
          * @param quantity The quantity to take.
          * @return the taken source lines, or an empty list when the source carries none (report §4)
          */
-        private List<Basket.Item.SourceLine> takeSourceLines(Basket.Item source, double quantity) {
+        private List<Basket.Item.SourceLine> takeSourceLines(Basket.Item source, BigDecimal quantity) {
             if (source.sourceLines == null || source.sourceLines.isEmpty()) {
                 return List.of();
             }
             List<Basket.Item.SourceLine> taken = new ArrayList<>();
-            double remaining = quantity;
+            BigDecimal remaining = quantity;
             java.util.Iterator<Basket.Item.SourceLine> it = source.sourceLines.iterator();
-            while (it.hasNext() && remaining > 1e-9) {
+            while (it.hasNext() && remaining.signum() > 0) {
                 Basket.Item.SourceLine line = it.next();
-                double slice = Math.min(line.quantity, remaining);
+                BigDecimal slice = line.quantity.min(remaining);
                 taken.add(new Basket.Item.SourceLine(line.lineId, slice));
-                remaining -= slice;
-                if (slice >= line.quantity - 1e-9) {
+                remaining = remaining.subtract(slice);
+                if (slice.compareTo(line.quantity) >= 0) {
                     it.remove();
                 } else {
-                    line.quantity = java.math.BigDecimal.valueOf(line.quantity - slice)
-                            .setScale(6, java.math.RoundingMode.HALF_UP).doubleValue();
+                    line.quantity = line.quantity.subtract(slice);
                 }
             }
             return taken;
@@ -695,13 +694,13 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
          * @return The quantity of the specified product.
          */
         @Override
-        public double getProductQuantity(Product product) {
-            double qty = 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            BigDecimal qty = BigDecimal.ZERO;
             for (Basket.Item item : paidItems) {
-                if (item.produceEan.equals(product.ean)) qty += item.quantity;
+                if (item.produceEan.equals(product.ean)) qty = qty.add(item.quantity);
             }
             for (Basket.Item item : discountedItems) {
-                if (item.produceEan.equals(product.ean)) qty += item.quantity;
+                if (item.produceEan.equals(product.ean)) qty = qty.add(item.quantity);
             }
             return qty;
         }

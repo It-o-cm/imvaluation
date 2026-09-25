@@ -58,7 +58,7 @@ class AmountEvaluationCoverageTest {
      */
     @Test
     void nullProductYieldsZero() {
-        AmountEvaluation result = AmountEvaluation.getAmount(null, price("1.00", "1.20", "0.20"), 1.0);
+        AmountEvaluation result = AmountEvaluation.getAmount(null, price("1.00", "1.20", "0.20"), BigDecimal.valueOf(1.0));
         assertEquals(new BigDecimal("0.00"), result.amountExcludingTax);
         assertEquals(new BigDecimal("0.00"), result.amountIncludingTax);
         assertEquals(new BigDecimal("0.0000"), result.vatRate);
@@ -69,7 +69,7 @@ class AmountEvaluationCoverageTest {
      */
     @Test
     void nullPriceYieldsZero() {
-        AmountEvaluation result = AmountEvaluation.getAmount(product(ProductType.UNIT), null, 1.0);
+        AmountEvaluation result = AmountEvaluation.getAmount(product(ProductType.UNIT), null, BigDecimal.valueOf(1.0));
         assertEquals(new BigDecimal("0.00"), result.amountExcludingTax);
     }
 
@@ -79,7 +79,7 @@ class AmountEvaluationCoverageTest {
     @Test
     void unitProductMultipliesByQuantity() {
         AmountEvaluation result = AmountEvaluation.getAmount(product(ProductType.UNIT),
-                price("4.00", "4.40", "0.10"), 3.0);
+                price("4.00", "4.40", "0.10"), BigDecimal.valueOf(3.0));
         assertEquals(new BigDecimal("12.00"), result.amountExcludingTax);
         assertEquals(new BigDecimal("13.20"), result.amountIncludingTax);
         assertEquals(new BigDecimal("0.1000"), result.vatRate);
@@ -93,7 +93,7 @@ class AmountEvaluationCoverageTest {
         Product p = product(ProductType.WEIGHT);
         p.referenceWeight = null;
         assertThrows(IllegalStateException.class,
-                () -> AmountEvaluation.getAmount(p, price("4.00", "4.40", "0.10"), 1.0));
+                () -> AmountEvaluation.getAmount(p, price("4.00", "4.40", "0.10"), BigDecimal.valueOf(1.0)));
     }
 
     /**
@@ -104,7 +104,7 @@ class AmountEvaluationCoverageTest {
         Product p = product(ProductType.WEIGHT);
         p.referenceWeight = BigDecimal.ZERO;
         assertThrows(IllegalStateException.class,
-                () -> AmountEvaluation.getAmount(p, price("4.00", "4.40", "0.10"), 1.0));
+                () -> AmountEvaluation.getAmount(p, price("4.00", "4.40", "0.10"), BigDecimal.valueOf(1.0)));
     }
 
     /**
@@ -114,7 +114,7 @@ class AmountEvaluationCoverageTest {
     void weightProductPricesByRatio() {
         Product p = product(ProductType.WEIGHT);
         p.referenceWeight = new BigDecimal("2.0");
-        AmountEvaluation result = AmountEvaluation.getAmount(p, price("4.00", "4.40", "0.10"), 3.0);
+        AmountEvaluation result = AmountEvaluation.getAmount(p, price("4.00", "4.40", "0.10"), BigDecimal.valueOf(3.0));
         assertEquals(new BigDecimal("6.00"), result.amountExcludingTax);
         assertEquals(new BigDecimal("6.60"), result.amountIncludingTax);
         assertEquals(new BigDecimal("0.1000"), result.vatRate);
@@ -128,7 +128,7 @@ class AmountEvaluationCoverageTest {
         Product p = product(ProductType.VOLUME);
         p.referenceVolume = null;
         assertThrows(IllegalStateException.class,
-                () -> AmountEvaluation.getAmount(p, price("3.00", "3.30", "0.10"), 1.0));
+                () -> AmountEvaluation.getAmount(p, price("3.00", "3.30", "0.10"), BigDecimal.valueOf(1.0)));
     }
 
     /**
@@ -139,7 +139,7 @@ class AmountEvaluationCoverageTest {
         Product p = product(ProductType.VOLUME);
         p.referenceVolume = BigDecimal.ZERO;
         assertThrows(IllegalStateException.class,
-                () -> AmountEvaluation.getAmount(p, price("3.00", "3.30", "0.10"), 1.0));
+                () -> AmountEvaluation.getAmount(p, price("3.00", "3.30", "0.10"), BigDecimal.valueOf(1.0)));
     }
 
     /**
@@ -149,7 +149,7 @@ class AmountEvaluationCoverageTest {
     void volumeProductPricesByRatio() {
         Product p = product(ProductType.VOLUME);
         p.referenceVolume = new BigDecimal("1.5");
-        AmountEvaluation result = AmountEvaluation.getAmount(p, price("3.00", "3.30", "0.10"), 3.0);
+        AmountEvaluation result = AmountEvaluation.getAmount(p, price("3.00", "3.30", "0.10"), BigDecimal.valueOf(3.0));
         assertEquals(new BigDecimal("6.00"), result.amountExcludingTax);
         assertEquals(new BigDecimal("6.60"), result.amountIncludingTax);
         assertEquals(new BigDecimal("0.1000"), result.vatRate);

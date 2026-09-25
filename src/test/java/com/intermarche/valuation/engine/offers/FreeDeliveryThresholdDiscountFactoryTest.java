@@ -687,8 +687,8 @@ public class FreeDeliveryThresholdDiscountFactoryTest {
         }
 
         @Override
-        public double getProductQuantity(Product product) {
-            return 1.0;
+        public BigDecimal getProductQuantity(Product product) {
+            return BigDecimal.valueOf(1.0);
         }
     }
 }

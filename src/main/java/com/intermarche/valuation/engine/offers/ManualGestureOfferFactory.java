@@ -104,8 +104,8 @@ public class ManualGestureOfferFactory implements OfferApplierFactory, EngineTra
          */
         @Override
         public Collection<OfferApplication> apply(BasketEvaluation basketEvaluation) {
-            double remaining = basketEvaluation.remainingQuantity(item.produceEan);
-            if (remaining <= 0.0) {
+            BigDecimal remaining = basketEvaluation.remainingQuantity(item.produceEan);
+            if (remaining.signum() <= 0) {
                 return List.of();
             }
             // Consume this line's own entry. A plain pick would draw on the first entry of
@@ -178,7 +178,7 @@ public class ManualGestureOfferFactory implements OfferApplierFactory, EngineTra
 
             // The quantity is nullable on a basket line; an absent one prices as nothing
             // rather than failing on an unboxing the engine tolerates elsewhere.
-            BigDecimal qty = BigDecimal.valueOf(item.quantity == null ? 0.0 : item.quantity);
+            BigDecimal qty = item.quantity == null ? BigDecimal.ZERO : item.quantity;
             BigDecimal totalTtc = unitTtc.multiply(qty).setScale(2, RoundingMode.HALF_UP);
             BigDecimal totalHt = totalTtc.divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
             return new AmountEvaluation(totalHt, totalTtc, rate);
@@ -213,9 +213,9 @@ public class ManualGestureOfferFactory implements OfferApplierFactory, EngineTra
                 result.add(new BasketEvaluation.Item(item, total));
                 return result;
             }
-            double totalQty = 0.0;
+            BigDecimal totalQty = BigDecimal.ZERO;
             for (Basket.Item.SourceLine s : sources) {
-                totalQty += s.quantity;
+                totalQty = totalQty.add(s.quantity);
             }
             BigDecimal assignedHt = BigDecimal.ZERO;
             BigDecimal assignedTtc = BigDecimal.ZERO;
@@ -232,7 +232,7 @@ public class ManualGestureOfferFactory implements OfferApplierFactory, EngineTra
                             total.amountIncludingTax.subtract(assignedTtc),
                             total.vatRate);
                 } else {
-                    BigDecimal ratio = BigDecimal.valueOf(s.quantity / totalQty);
+                    BigDecimal ratio = s.quantity.divide(totalQty, 6, RoundingMode.HALF_UP);
                     BigDecimal ht = total.amountExcludingTax.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
                     BigDecimal ttc = total.amountIncludingTax.multiply(ratio).setScale(2, RoundingMode.HALF_UP);
                     lineAmount = new AmountEvaluation(ht, ttc, total.vatRate);

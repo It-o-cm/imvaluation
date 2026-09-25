@@ -218,17 +218,18 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
             List<OfferApplication> applications = new ArrayList<>();
             // 1. Calculate Total Volume required for basket items
             // We use evaluation.getBasket() to get the items
-            double totalVolumeLiters = 0.0;
+            BigDecimal totalVolumeLiters = BigDecimal.ZERO;
             Basket basket = evaluation.getBasket();
             if (basket.items != null) {
                 for (Basket.Item item : basket.items) {
                     Product product = item.getProduct();
-                    totalVolumeLiters += calculateItemVolume(item, product);
+                    totalVolumeLiters = totalVolumeLiters.add(calculateItemVolume(item, product));
                 }
             }
             // 2. Determine number of baskets needed
-            if (totalVolumeLiters > 0) {
-                int nbBaskets = (int) Math.ceil(totalVolumeLiters / basketVolumeCapacity);
+            if (totalVolumeLiters.signum() > 0) {
+                int nbBaskets = totalVolumeLiters
+                        .divide(BigDecimal.valueOf(basketVolumeCapacity), 0, RoundingMode.CEILING).intValue();
                 applications.add(new DepositBasketApplication(offerCode, nbBaskets, basketPriceTTC, vatRate));
             }
             return applications;
@@ -247,12 +248,12 @@ public class DepositBasketOfferFactory implements OfferApplierFactory, EngineTra
          * @param product The product details.
          * @return Volume in Liters.
          */
-        private double calculateItemVolume(Basket.Item item, Product product) {
+        private BigDecimal calculateItemVolume(Basket.Item item, Product product) {
             if (product.referenceVolume == null) {
                 // Cannot calculate volume if referenceVolume is missing. Assume 0.
-                return 0.0;
+                return BigDecimal.ZERO;
             }
-            return product.standardQuantity(item.quantity).multiply(product.referenceVolume).doubleValue();
+            return product.standardQuantity(item.quantity).multiply(product.referenceVolume);
         }
 
         /**

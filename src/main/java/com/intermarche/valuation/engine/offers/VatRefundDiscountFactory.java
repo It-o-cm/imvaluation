@@ -382,8 +382,8 @@ public class VatRefundDiscountFactory implements AdvantageApplierFactory, Engine
                     continue;
                 }
                 for (Product product : targetProducts) {
-                    double quantity = productAwareApp.getProductQuantity(product);
-                    if (quantity <= 0) {
+                    BigDecimal quantity = productAwareApp.getProductQuantity(product);
+                    if (quantity.signum() <= 0) {
                         continue;
                     }
                     AmountEvaluation gross = productAwareApp.getProductAmount(product);

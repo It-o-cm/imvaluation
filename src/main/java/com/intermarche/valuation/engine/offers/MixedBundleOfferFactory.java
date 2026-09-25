@@ -205,7 +205,7 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
 
             for (JsonNode itemNode : contentsNode) {
                 String mainEan = itemNode.get("ean").asText();
-                double requiredQty = itemNode.get("quantity").asDouble();
+                BigDecimal requiredQty = new BigDecimal(itemNode.get("quantity").asText());
 
                 Set<String> validEans = new LinkedHashSet<>();
                 validEans.add(mainEan);
@@ -238,7 +238,7 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
         String mainEan; // Reference EAN used for pricing calculation
         // LinkedHashSet to ensure uniqueness AND priority order (Main first, then substituteEans)
         Set<String> validEans;
-        double quantity;
+        BigDecimal quantity;
 
         /**
          * Constructs a new BundleComponent.
@@ -247,7 +247,7 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
          * @param validEans  The set of valid EANs (main + substitutes).
          * @param quantity   The required quantity.
          */
-        BundleComponent(String mainEan, Set<String> validEans, double quantity) {
+        BundleComponent(String mainEan, Set<String> validEans, BigDecimal quantity) {
             this.mainEan = mainEan;
             this.validEans = validEans;
             this.quantity = quantity;
@@ -352,12 +352,12 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
          int calculateMaxPossibleBundles(BasketEvaluation evaluation) {
             int maxBundles = Integer.MAX_VALUE;
             for (BundleComponent comp : components) {
-                double totalAvailableQty = 0.0;
+                BigDecimal totalAvailableQty = BigDecimal.ZERO;
                 // Sum available quantities for all valid EANs (Main + Substitutes)
                 for (String ean : comp.validEans) {
-                    totalAvailableQty += evaluation.remainingQuantity(ean);
+                    totalAvailableQty = totalAvailableQty.add(evaluation.remainingQuantity(ean));
                 }
-                int possibleForComp = (int) (totalAvailableQty / comp.quantity);
+                int possibleForComp = totalAvailableQty.divide(comp.quantity, 0, RoundingMode.FLOOR).intValue();
                 maxBundles = Math.min(maxBundles, possibleForComp);
             }
             return maxBundles;
@@ -377,33 +377,33 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
          List<Basket.Item> consumeComponentsForBundles(int nbBundles, BasketEvaluation evaluation) {
             List<Basket.Item> consumedItems = new ArrayList<>();
             for (BundleComponent comp : components) {
-                double totalToConsume = comp.quantity * nbBundles;
-                double remainingToConsume = totalToConsume;
+                BigDecimal totalToConsume = comp.quantity.multiply(BigDecimal.valueOf(nbBundles));
+                BigDecimal remainingToConsume = totalToConsume;
                 // Try to consume prioritizing Main EAN, then Substitutes in order
                 for (String ean : comp.validEans) {
-                    if (remainingToConsume <= 0.0) break;
-                    double availableQty = evaluation.remainingQuantity(ean);
+                    if (remainingToConsume.signum() <= 0) break;
+                    BigDecimal availableQty = evaluation.remainingQuantity(ean);
                     // If this specific EAN exists in the basket and has quantity
-                    if (availableQty > 0.0) {
+                    if (availableQty.signum() > 0) {
                         // Take what we can (min of available or remaining needed).
                         // pick may return several slices when the EAN carries more than one
                         // price; each slice is mono-price and is kept as its own item so the
                         // per-line valuation stays exact.
-                        double takeQty = Math.min(availableQty, remainingToConsume);
+                        BigDecimal takeQty = availableQty.min(remainingToConsume);
                         List<Basket.Item> slices = evaluation.pick(takeQty, ean);
                         if (!slices.isEmpty()) {
-                            double taken = 0.0;
+                            BigDecimal taken = BigDecimal.ZERO;
                             for (Basket.Item slice : slices) {
                                 consumedItems.add(slice);
-                                taken += slice.quantity;
+                                taken = taken.add(slice.quantity);
                             }
-                            remainingToConsume -= taken;
+                            remainingToConsume = remainingToConsume.subtract(taken);
                         } else {
                             return null;
                         }
                     }
                 }
-                if (remainingToConsume > 0.0001) {
+                if (remainingToConsume.signum() > 0) {
                     // If we couldn't consume enough despite the initial check
                     return null;
                 }
@@ -631,11 +631,11 @@ public class MixedBundleOfferFactory implements OfferApplierFactory, EngineTrait
          * @return The quantity of the specified product.
          */
         @Override
-        public double getProductQuantity(Product product) {
+        public BigDecimal getProductQuantity(Product product) {
             return coveredItems.stream()
                     .filter(item -> item.produceEan.equals(product.ean))
-                    .mapToDouble(item -> item.quantity)
-                    .sum();
+                    .map(item -> item.quantity)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
         }
 
     }

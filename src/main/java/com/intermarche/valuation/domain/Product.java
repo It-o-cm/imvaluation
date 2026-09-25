@@ -101,6 +101,17 @@ public class Product extends BaseEntity {
     @Column(name = "unit_name", length = 20)
     public String unitName;
 
+    /**
+     * The EGAlim regime of the product: which legal generosity ceiling applies to it.
+     * <p>
+     * Defaults to {@link EgalimRegime#EXEMPT} — the deliberate fail-open behaviour: a product
+     * with no declared regime is never corrected by the EGAlim guard. Fed by the optional
+     * {@code EGALIM_REGIME} column of the product CSV and part of the product checksum.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "egalim_regime", length = 20)
+    public EgalimRegime egalimRegime = EgalimRegime.EXEMPT;
+
     // --------------------------------------------------
     // Status
     // --------------------------------------------------
@@ -125,16 +136,15 @@ public class Product extends BaseEntity {
      * @param quantity The quantity to convert (can be integer or decimal).
      * @return The quantity expressed in standard units.
      */
-    public BigDecimal standardQuantity(double quantity) {
+    public BigDecimal standardQuantity(BigDecimal quantity) {
         if (this.productType == ProductType.UNIT) {
-            return BigDecimal.valueOf(quantity);
+            return quantity;
         }
         else {
             if (this.referenceWeight == null || this.referenceWeight.compareTo(BigDecimal.ZERO) == 0) {
                 return BigDecimal.ZERO;
             }
-            BigDecimal quantityKg = BigDecimal.valueOf(quantity);
-            return quantityKg.divide(this.referenceWeight, 6, RoundingMode.HALF_UP);
+            return quantity.divide(this.referenceWeight, 6, RoundingMode.HALF_UP);
         }
     }
 
@@ -202,6 +212,6 @@ public class Product extends BaseEntity {
      */
     @Override
     public int getChecksum() {
-        return Objects.hash(ean, name, description, brand, referenceWeight, referenceVolume, productType, unitName, active);
+        return Objects.hash(ean, name, description, brand, referenceWeight, referenceVolume, productType, unitName, active, egalimRegime);
     }
 }

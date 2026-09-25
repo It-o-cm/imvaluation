@@ -212,7 +212,7 @@ public class VignetteDiscountFactoryTest {
         evaluation.feedFrom(basket);
 
         // 1. Manually simulate the BasicOffer flow to have an OfferApplication in the evaluation
-        Basket.Item pickedItem = evaluation.pickMerged(1.0, "1111111111111");
+        Basket.Item pickedItem = evaluation.pickMerged(BigDecimal.valueOf(1.0), "1111111111111");
         BasicOfferFactory.BasicApplication basicApp = new BasicOfferFactory.BasicApplication(
                 pickedItem, store, productA, Price.findCurrentPrice(productA.id, store.id));
         evaluation.getOffers().add(basicApp);
@@ -268,7 +268,7 @@ public class VignetteDiscountFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
-        Basket.Item pickedItem = evaluation.pickMerged(1.0, "1111111111111");
+        Basket.Item pickedItem = evaluation.pickMerged(BigDecimal.valueOf(1.0), "1111111111111");
         BasicOfferFactory.BasicApplication basicApp = new BasicOfferFactory.BasicApplication(
                 pickedItem, store, productA, Price.findCurrentPrice(productA.id, store.id));
         evaluation.getOffers().add(basicApp);
@@ -316,7 +316,7 @@ public class VignetteDiscountFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
-        Basket.Item pickedItem = evaluation.pickMerged(1.0, "1111111111111");
+        Basket.Item pickedItem = evaluation.pickMerged(BigDecimal.valueOf(1.0), "1111111111111");
         BasicOfferFactory.BasicApplication basicApp = new BasicOfferFactory.BasicApplication(
                 pickedItem, store, productA, Price.findCurrentPrice(productA.id, store.id));
         evaluation.getOffers().add(basicApp);
@@ -358,7 +358,7 @@ public class VignetteDiscountFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
-        Basket.Item pickedItem = evaluation.pickMerged(1.0, "2222222222222");
+        Basket.Item pickedItem = evaluation.pickMerged(BigDecimal.valueOf(1.0), "2222222222222");
         BasicOfferFactory.BasicApplication basicApp = new BasicOfferFactory.BasicApplication(
                 pickedItem, store, productB, Price.findCurrentPrice(productB.id, store.id));
         evaluation.getOffers().add(basicApp);
@@ -403,7 +403,7 @@ public class VignetteDiscountFactoryTest {
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
 
-        Basket.Item pickedItem = evaluation.pickMerged(3.0, "1111111111111");
+        Basket.Item pickedItem = evaluation.pickMerged(BigDecimal.valueOf(3.0), "1111111111111");
         BasicOfferFactory.BasicApplication basicApp = new BasicOfferFactory.BasicApplication(
                 pickedItem, store, productA, Price.findCurrentPrice(productA.id, store.id));
         evaluation.getOffers().add(basicApp);
@@ -731,8 +731,8 @@ public class VignetteDiscountFactoryTest {
                 return new AmountEvaluation(BigDecimal.TEN, BigDecimal.valueOf(12.0), BigDecimal.valueOf(0.2));
             }
             @Override
-            public double getProductQuantity(Product product) {
-                return 0.0; // Trigger the condition
+            public BigDecimal getProductQuantity(Product product) {
+                return BigDecimal.ZERO; // Trigger the condition
             }
         };
         evaluation.getOffers().add(mockApp);
@@ -790,8 +790,8 @@ public class VignetteDiscountFactoryTest {
                 return null; // Trigger the condition
             }
             @Override
-            public double getProductQuantity(Product product) {
-                return 1.0;
+            public BigDecimal getProductQuantity(Product product) {
+                return BigDecimal.valueOf(1.0);
             }
         };
         evaluation.getOffers().add(mockApp);
@@ -839,7 +839,7 @@ public class VignetteDiscountFactoryTest {
         evaluation.feedFrom(basket);
 
         // Add a valid ProductAwareOfferApplication
-        Basket.Item pickedItem = evaluation.pickMerged(2.0, "1111111111111");
+        Basket.Item pickedItem = evaluation.pickMerged(BigDecimal.valueOf(2.0), "1111111111111");
         BasicOfferFactory.BasicApplication basicApp = new BasicOfferFactory.BasicApplication(
                 pickedItem, store, productA, Price.findCurrentPrice(productA.id, store.id));
         evaluation.getOffers().add(basicApp);
@@ -904,7 +904,7 @@ public class VignetteDiscountFactoryTest {
         evaluation.feedFrom(basket);
 
         // Add a valid application for that item
-        Basket.Item pickedItem = evaluation.pickMerged(0.5, "1111111111111");
+        Basket.Item pickedItem = evaluation.pickMerged(BigDecimal.valueOf(0.5), "1111111111111");
         BasicOfferFactory.BasicApplication basicApp = new BasicOfferFactory.BasicApplication(
                 pickedItem, store, productA, Price.findCurrentPrice(productA.id, store.id));
         evaluation.getOffers().add(basicApp);
@@ -972,8 +972,8 @@ public class VignetteDiscountFactoryTest {
             }
 
             @Override
-            public double getProductQuantity(Product product) {
-                return 1.0;
+            public BigDecimal getProductQuantity(Product product) {
+                return BigDecimal.valueOf(1.0);
             }
         };
         evaluation.getOffers().add(mockApp);

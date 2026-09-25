@@ -289,7 +289,7 @@ public class BasketTest {
         // Arrange
         Basket.Item item = new Basket.Item();
         item.produceEan = "555";
-        item.quantity = 2.5;
+        item.quantity = BigDecimal.valueOf(2.5);
         item.pricePerUnitExclTax = new BigDecimal("10.00");
         item.pricePerUnitInclTax = new BigDecimal("12.00");
         item.vatRate = new BigDecimal("0.20");
@@ -303,7 +303,7 @@ public class BasketTest {
         store.id = 9L;
 
         AmountEvaluation mockEval = new AmountEvaluation(new BigDecimal("25.00"), new BigDecimal("30.00"), new BigDecimal("0.20"));
-        mockedAmountEvaluation.when(() -> AmountEvaluation.getAmount(eq(product), any(Price.class), eq(2.5)))
+        mockedAmountEvaluation.when(() -> AmountEvaluation.getAmount(eq(product), any(Price.class), eq(BigDecimal.valueOf(2.5))))
                 .thenReturn(mockEval);
 
         // Act
@@ -314,7 +314,7 @@ public class BasketTest {
         assertEquals(new BigDecimal("25.00"), result.amountExcludingTax);
 
         // Verify delegation
-        mockedAmountEvaluation.verify(() -> AmountEvaluation.getAmount(eq(product), any(Price.class), eq(2.5)));
+        mockedAmountEvaluation.verify(() -> AmountEvaluation.getAmount(eq(product), any(Price.class), eq(BigDecimal.valueOf(2.5))));
     }
 
     // --------------------------------------------------
@@ -478,7 +478,7 @@ public class BasketTest {
         Basket.Item item1 = new Basket.Item();
         item1.lineId = "101";
         item1.produceEan = "3124567890123";
-        item1.quantity = 2.0;
+        item1.quantity = BigDecimal.valueOf(2.0);
         // Using manual pricing for this structural test
         item1.pricePerUnitExclTax = new BigDecimal("15.00");
         item1.pricePerUnitInclTax = new BigDecimal("18.00");
@@ -487,7 +487,7 @@ public class BasketTest {
         Basket.Item item2 = new Basket.Item();
         item2.lineId = "102";
         item2.produceEan = "3999999999999";
-        item2.quantity = 1.5; // Weighted item
+        item2.quantity = BigDecimal.valueOf(1.5); // Weighted item
         item2.pricePerUnitExclTax = new BigDecimal("8.00");
         item2.pricePerUnitInclTax = new BigDecimal("8.80");
         item2.vatRate = new BigDecimal("0.10");
@@ -516,11 +516,11 @@ public class BasketTest {
         Basket.Item firstItem = basket.items.get(0);
         assertEquals("101", firstItem.lineId);
         assertEquals("3124567890123", firstItem.produceEan);
-        assertEquals(2.0, firstItem.quantity);
+        assertEquals(0, firstItem.quantity.compareTo(BigDecimal.valueOf(2.0)));
 
         Basket.Item secondItem = basket.items.get(1);
         assertEquals("3999999999999", secondItem.produceEan);
-        assertEquals(1.5, secondItem.quantity);
+        assertEquals(0, secondItem.quantity.compareTo(BigDecimal.valueOf(1.5)));
 
         // Verify Metadata
         assertFalse(basket.instructions.isEmpty());

@@ -10,6 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.math.BigDecimal;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -119,8 +120,8 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
         @Override
         public Collection<OfferApplication> apply(BasketEvaluation evaluation) {
             // How much of this product remains, across all its price entries.
-            double remaining = evaluation.remainingQuantity(product.ean);
-            if (remaining <= 0.0) {
+            BigDecimal remaining = evaluation.remainingQuantity(product.ean);
+            if (remaining.signum() <= 0) {
                 // If the item is gone (picked by another offer) return empty list
                 return List.of();
             }
@@ -307,11 +308,11 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
          * @return The quantity of the specified product, or 0 if not applicable.
          */
         @Override
-        public double getProductQuantity(Product product) {
+        public BigDecimal getProductQuantity(Product product) {
             if (product != null && product.ean.equals(item.produceEan)) {
                 return item.quantity;
             }
-            return 0.0;
+            return BigDecimal.ZERO;
         }
     }
 }

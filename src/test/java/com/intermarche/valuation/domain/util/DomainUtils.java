@@ -181,7 +181,7 @@ public class DomainUtils {
     public static Basket.Item createItem(String ean, Double quantity) {
         Basket.Item item = new Basket.Item();
         item.produceEan = ean;
-        item.quantity = quantity;
+        item.quantity = quantity == null ? null : java.math.BigDecimal.valueOf(quantity);
         return item;
     }
 

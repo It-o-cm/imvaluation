@@ -118,9 +118,9 @@ public final class ItemValuation {
             return lines;
         }
 
-        double totalQty = 0.0;
+        BigDecimal totalQty = BigDecimal.ZERO;
         for (Basket.Item.SourceLine s : sources) {
-            totalQty += s.quantity;
+            totalQty = totalQty.add(s.quantity);
         }
 
         BigDecimal assignedHt = BigDecimal.ZERO;
@@ -140,7 +140,7 @@ public final class ItemValuation {
                         sliceAmount.amountIncludingTax.subtract(assignedTtc),
                         sliceAmount.vatRate);
             } else {
-                BigDecimal ratio = BigDecimal.valueOf(s.quantity / totalQty);
+                BigDecimal ratio = s.quantity.divide(totalQty, 6, RoundingMode.HALF_UP);
                 BigDecimal ht = sliceAmount.amountExcludingTax.multiply(ratio)
                         .setScale(2, RoundingMode.HALF_UP);
                 BigDecimal ttc = sliceAmount.amountIncludingTax.multiply(ratio)

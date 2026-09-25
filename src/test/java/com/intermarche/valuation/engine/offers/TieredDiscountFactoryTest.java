@@ -1141,7 +1141,7 @@ public class TieredDiscountFactoryTest {
         product.ean = "1000000000001";
         StubApplication stub = new StubApplication("1000000000001", 2.0, new AmountEvaluation(
                 new BigDecimal("10.00"), new BigDecimal("12.00"), new BigDecimal("0.20")), null);
-        assertEquals(2.0, stub.getProductQuantity(product));
+        assertEquals(0, stub.getProductQuantity(product).compareTo(BigDecimal.valueOf(2.0)));
         assertNull(stub.getProductAmount(product));
         BasketEvaluation evaluation = newEvaluation();
         evaluation.getOffers().add(stub);
@@ -1407,8 +1407,8 @@ public class TieredDiscountFactoryTest {
          * @return the quantity when the EAN matches, zero otherwise.
          */
         @Override
-        public double getProductQuantity(Product product) {
-            return (product != null && this.product.ean.equals(product.ean)) ? quantity : 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            return (product != null && this.product.ean.equals(product.ean)) ? BigDecimal.valueOf(quantity) : BigDecimal.ZERO;
         }
     }
 
@@ -1554,8 +1554,8 @@ public class TieredDiscountFactoryTest {
          * @return the covered quantity when the EAN matches, zero otherwise.
          */
         @Override
-        public double getProductQuantity(Product product) {
-            return (product != null && ean.equals(product.ean)) ? quantity : 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            return (product != null && ean.equals(product.ean)) ? BigDecimal.valueOf(quantity) : BigDecimal.ZERO;
         }
     }
 }

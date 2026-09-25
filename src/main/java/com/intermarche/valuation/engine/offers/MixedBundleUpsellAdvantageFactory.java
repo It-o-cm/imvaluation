@@ -12,6 +12,7 @@ import com.intermarche.valuation.engine.*;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 
 /**
@@ -138,7 +139,7 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
 
             for (JsonNode itemNode : contentsNode) {
                 String mainEan = itemNode.get("ean").asText();
-                double requiredQty = itemNode.get("quantity").asDouble();
+                BigDecimal requiredQty = new BigDecimal(itemNode.get("quantity").asText());
 
                 Set<String> validEans = new LinkedHashSet<>();
                 validEans.add(mainEan);
@@ -182,7 +183,7 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
      static class UpsellBundleComponent {
         final String mainEan; // Reference EAN
         final Set<String> validEans; // Main + Substitutes
-        final double requiredQuantity;
+        final BigDecimal requiredQuantity;
 
         /**
          * Constructs a bundle component with main EAN, valid EANs, and required quantity.
@@ -191,7 +192,7 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
          * @param validEans       Set of valid EANs (including substitutes).
          * @param requiredQuantity The quantity required for the bundle.
          */
-        UpsellBundleComponent(String mainEan, Set<String> validEans, double requiredQuantity) {
+        UpsellBundleComponent(String mainEan, Set<String> validEans, BigDecimal requiredQuantity) {
             this.mainEan = mainEan;
             this.validEans = validEans;
             this.requiredQuantity = requiredQuantity;
@@ -270,8 +271,8 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
             }
             // 2. Calculate total deficit across ALL components to reach this target
             Set<String> validEansForSuggestion = new HashSet<>();
-            double totalNeededQty = getTotalNeededQty(remainingItems, globalMaxBundles, validEansForSuggestion);
-            if (totalNeededQty < 0.001) {
+            BigDecimal totalNeededQty = getTotalNeededQty(remainingItems, globalMaxBundles, validEansForSuggestion);
+            if (totalNeededQty.signum() <= 0) {
                 return null;
             }
             // 4. Determine which product to suggest (Cheapest valid EAN)
@@ -289,16 +290,16 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
         private int getGlobalMaxBundles(Map<String, Basket.Item> remainingItems, Map<UpsellBundleComponent, Integer> maxBundlesPerComponent) {
             int globalMaxBundles = 0; // Start at 0, look for MAX
             for (UpsellBundleComponent comp : config.components) {
-                double compQty = 0.0;
+                BigDecimal compQty = BigDecimal.ZERO;
                 for (String ean : comp.validEans) {
                     Basket.Item item = remainingItems.get(ean);
                     if (item != null) {
-                        compQty += item.quantity;
+                        compQty = compQty.add(item.quantity);
                     }
                 }
                 // Use CEIL to determine "abundance" (capacity if we bought more)
                 // e.g., if I have 4.1 coffees, ceil(4.1) = 5. I can aim for 5.
-                int possible = (int) Math.ceil(compQty / comp.requiredQuantity);
+                int possible = compQty.divide(comp.requiredQuantity, 0, RoundingMode.CEILING).intValue();
                 maxBundlesPerComponent.put(comp, possible);
                 if (possible > globalMaxBundles) {
                     globalMaxBundles = possible;
@@ -315,21 +316,21 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
          * @param validEansForSuggestion  Output set to hold valid EANs for suggestion.
          * @return The total quantity needed.
          */
-        private double getTotalNeededQty(Map<String, Basket.Item> remainingItems, int targetBundles, Set<String> validEansForSuggestion) {
+        private BigDecimal getTotalNeededQty(Map<String, Basket.Item> remainingItems, int targetBundles, Set<String> validEansForSuggestion) {
             // We iterate through ALL components to find what is missing
-            double totalNeededQty = 0.0;
+            BigDecimal totalNeededQty = BigDecimal.ZERO;
             for (UpsellBundleComponent comp : config.components) {
-                double neededForComp = (targetBundles * comp.requiredQuantity);
-                double currentAvailableForComp = 0.0;
+                BigDecimal neededForComp = comp.requiredQuantity.multiply(BigDecimal.valueOf(targetBundles));
+                BigDecimal currentAvailableForComp = BigDecimal.ZERO;
                 for (String ean : comp.validEans) {
                     Basket.Item item = remainingItems.get(ean);
                     if (item != null) {
-                        currentAvailableForComp += item.quantity;
+                        currentAvailableForComp = currentAvailableForComp.add(item.quantity);
                     }
                 }
-                double deficit = neededForComp - currentAvailableForComp;
-                if (deficit > 0.0001) {
-                    totalNeededQty += deficit;
+                BigDecimal deficit = neededForComp.subtract(currentAvailableForComp);
+                if (deficit.signum() > 0) {
+                    totalNeededQty = totalNeededQty.add(deficit);
                     validEansForSuggestion.addAll(comp.validEans);
                 }
             }
@@ -392,7 +393,8 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
      */
      static class UpsellSuggestion {
         public final String ean;
-        public final double quantity;
+        @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.intermarche.valuation.engine.QuantitySerializer.class)
+        public final BigDecimal quantity;
         public final String offerCode;
 
         /**
@@ -402,7 +404,7 @@ public class MixedBundleUpsellAdvantageFactory implements AdvantageApplierFactor
          * @param quantity  The quantity needed.
          * @param offerCode The associated offer code.
          */
-        UpsellSuggestion(String ean, double quantity, String offerCode) {
+        UpsellSuggestion(String ean, BigDecimal quantity, String offerCode) {
             this.ean = ean;
             this.quantity = quantity;
             this.offerCode = offerCode;

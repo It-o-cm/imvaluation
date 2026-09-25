@@ -36,7 +36,7 @@ public class BasketEvaluationCoverageTest {
         Basket.Item i = new Basket.Item();
         i.lineId = lineId;
         i.produceEan = ean;
-        i.quantity = qty;
+        i.quantity = qty == null ? null : BigDecimal.valueOf(qty);
         return i;
     }
 
@@ -61,7 +61,7 @@ public class BasketEvaluationCoverageTest {
     @Test
     void feedFromAggregatesNonNullQuantities() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 2.0), item("L2", "E1", 3.0));
-        assertEquals(5.0, evaluation.remainingQuantity("E1"), 1e-9);
+        assertEquals(0, evaluation.remainingQuantity("E1").compareTo(BigDecimal.valueOf(5.0)));
         assertEquals(1, evaluation.getToEvaluate().get("E1").size());
     }
 
@@ -72,7 +72,7 @@ public class BasketEvaluationCoverageTest {
     @Test
     void feedFromAggregatesOntoNullQuantity() {
         BasketEvaluation evaluation = feed(item("L1", "E1", null), item("L2", "E1", 3.0));
-        assertEquals(3.0, evaluation.remainingQuantity("E1"), 1e-9);
+        assertEquals(0, evaluation.remainingQuantity("E1").compareTo(BigDecimal.valueOf(3.0)));
     }
 
     /**
@@ -81,7 +81,7 @@ public class BasketEvaluationCoverageTest {
     @Test
     void pickReturnsEmptyForAbsentEan() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 1.0));
-        assertTrue(evaluation.pick(1.0, "ABSENT").isEmpty());
+        assertTrue(evaluation.pick(BigDecimal.valueOf(1.0), "ABSENT").isEmpty());
     }
 
     /**
@@ -92,7 +92,7 @@ public class BasketEvaluationCoverageTest {
     void pickReturnsEmptyForNullArguments() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 1.0));
         assertTrue(evaluation.pick(null, "E1").isEmpty());
-        assertTrue(evaluation.pick(1.0, null).isEmpty());
+        assertTrue(evaluation.pick(BigDecimal.valueOf(1.0), null).isEmpty());
     }
 
     /**
@@ -102,12 +102,12 @@ public class BasketEvaluationCoverageTest {
     @Test
     void pickConsumesPartiallyThenFully() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 5.0));
-        List<Basket.Item> first = evaluation.pick(2.0, "E1");
+        List<Basket.Item> first = evaluation.pick(BigDecimal.valueOf(2.0), "E1");
         assertEquals(1, first.size());
-        assertEquals(2.0, first.get(0).quantity, 1e-9);
-        assertEquals(3.0, evaluation.remainingQuantity("E1"), 1e-9);
-        List<Basket.Item> second = evaluation.pick(3.0, "E1");
-        assertEquals(3.0, second.get(0).quantity, 1e-9);
+        assertEquals(0, first.get(0).quantity.compareTo(BigDecimal.valueOf(2.0)));
+        assertEquals(0, evaluation.remainingQuantity("E1").compareTo(BigDecimal.valueOf(3.0)));
+        List<Basket.Item> second = evaluation.pick(BigDecimal.valueOf(3.0), "E1");
+        assertEquals(0, second.get(0).quantity.compareTo(BigDecimal.valueOf(3.0)));
         assertTrue(evaluation.getToEvaluate().isEmpty());
     }
 
@@ -119,7 +119,7 @@ public class BasketEvaluationCoverageTest {
     void pickMatchingReturnsEmptyForNullArguments() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 1.0));
         assertTrue(evaluation.pickMatching(null, item("L1", "E1", 1.0)).isEmpty());
-        assertTrue(evaluation.pickMatching(1.0, null).isEmpty());
+        assertTrue(evaluation.pickMatching(BigDecimal.valueOf(1.0), null).isEmpty());
     }
 
     /**
@@ -128,7 +128,7 @@ public class BasketEvaluationCoverageTest {
     @Test
     void pickMatchingReturnsEmptyForAbsentBucket() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 1.0));
-        assertTrue(evaluation.pickMatching(1.0, item("L2", "OTHER", 1.0)).isEmpty());
+        assertTrue(evaluation.pickMatching(BigDecimal.valueOf(1.0), item("L2", "OTHER", 1.0)).isEmpty());
     }
 
     /**
@@ -142,7 +142,7 @@ public class BasketEvaluationCoverageTest {
         BasketEvaluation evaluation = feed(stored);
         Basket.Item source = item("L2", "E1", 2.0);
         source.pricePerUnitExclTax = new BigDecimal("9.99");
-        assertTrue(evaluation.pickMatching(2.0, source).isEmpty());
+        assertTrue(evaluation.pickMatching(BigDecimal.valueOf(2.0), source).isEmpty());
     }
 
     /**
@@ -151,10 +151,10 @@ public class BasketEvaluationCoverageTest {
     @Test
     void pickMatchingConsumesPartially() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 5.0));
-        List<Basket.Item> picked = evaluation.pickMatching(2.0, item("L1", "E1", 2.0));
+        List<Basket.Item> picked = evaluation.pickMatching(BigDecimal.valueOf(2.0), item("L1", "E1", 2.0));
         assertEquals(1, picked.size());
-        assertEquals(2.0, picked.get(0).quantity, 1e-9);
-        assertEquals(3.0, evaluation.remainingQuantity("E1"), 1e-9);
+        assertEquals(0, picked.get(0).quantity.compareTo(BigDecimal.valueOf(2.0)));
+        assertEquals(0, evaluation.remainingQuantity("E1").compareTo(BigDecimal.valueOf(3.0)));
     }
 
     /**
@@ -164,8 +164,8 @@ public class BasketEvaluationCoverageTest {
     @Test
     void pickMatchingConsumesFully() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 4.0));
-        List<Basket.Item> picked = evaluation.pickMatching(4.0, item("L1", "E1", 4.0));
-        assertEquals(4.0, picked.get(0).quantity, 1e-9);
+        List<Basket.Item> picked = evaluation.pickMatching(BigDecimal.valueOf(4.0), item("L1", "E1", 4.0));
+        assertEquals(0, picked.get(0).quantity.compareTo(BigDecimal.valueOf(4.0)));
         assertTrue(evaluation.getToEvaluate().isEmpty());
     }
 
@@ -175,7 +175,7 @@ public class BasketEvaluationCoverageTest {
     @Test
     void pickMergedReturnsNullWhenEmpty() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 1.0));
-        assertNull(evaluation.pickMerged(1.0, "ABSENT"));
+        assertNull(evaluation.pickMerged(BigDecimal.valueOf(1.0), "ABSENT"));
     }
 
     /**
@@ -185,8 +185,8 @@ public class BasketEvaluationCoverageTest {
     @Test
     void pickMergedReturnsSingleSlice() {
         BasketEvaluation evaluation = feed(item("L1", "E1", 5.0));
-        Basket.Item merged = evaluation.pickMerged(3.0, "E1");
-        assertEquals(3.0, merged.quantity, 1e-9);
+        Basket.Item merged = evaluation.pickMerged(BigDecimal.valueOf(3.0), "E1");
+        assertEquals(0, merged.quantity.compareTo(BigDecimal.valueOf(3.0)));
     }
 
     /**
@@ -201,8 +201,8 @@ public class BasketEvaluationCoverageTest {
         pricey.pricePerUnitExclTax = new BigDecimal("2.00");
         BasketEvaluation evaluation = feed(cheap, pricey);
         assertEquals(2, evaluation.getToEvaluate().get("E1").size());
-        Basket.Item merged = evaluation.pickMerged(4.0, "E1");
-        assertEquals(4.0, merged.quantity, 1e-9);
+        Basket.Item merged = evaluation.pickMerged(BigDecimal.valueOf(4.0), "E1");
+        assertEquals(0, merged.quantity.compareTo(BigDecimal.valueOf(4.0)));
         assertEquals(2, merged.sourceLines.size());
     }
 
@@ -227,11 +227,11 @@ public class BasketEvaluationCoverageTest {
         AmountEvaluation amount = new AmountEvaluation(
                 new BigDecimal("1.00"), new BigDecimal("1.20"), new BigDecimal("0.20"));
         BasketEvaluation.Item fromNull = new BasketEvaluation.Item(nullQty, amount);
-        assertEquals(0.0, fromNull.quantity, 1e-9);
+        assertEquals(0, fromNull.quantity.compareTo(BigDecimal.valueOf(0.0)));
         assertEquals("L1", fromNull.lineId);
         Basket.Item withQty = item("L2", "E1", 2.5);
         BasketEvaluation.Item fromQty = new BasketEvaluation.Item(withQty, amount);
-        assertEquals(2.5, fromQty.quantity, 1e-9);
+        assertEquals(0, fromQty.quantity.compareTo(BigDecimal.valueOf(2.5)));
         assertSame(amount, fromQty.amount);
     }
 }

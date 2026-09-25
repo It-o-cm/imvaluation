@@ -333,8 +333,8 @@ public class NewPriceDiscountFactory implements AdvantageApplierFactory, EngineT
                     if (newPrice == null) {
                         continue;
                     }
-                    double quantity = productAwareApp.getProductQuantity(product);
-                    if (quantity <= 0) {
+                    BigDecimal quantity = productAwareApp.getProductQuantity(product);
+                    if (quantity.signum() <= 0) {
                         continue;
                     }
                     AmountEvaluation amount = productAwareApp.getProductAmount(product);
@@ -349,7 +349,7 @@ public class NewPriceDiscountFactory implements AdvantageApplierFactory, EngineT
                     // of a multi-product application must not reduce this product's base.
                     BigDecimal currentTtc = NetAmounts.netProductTtc(evaluation, app, product.ean,
                             amount.amountIncludingTax).setScale(2, RoundingMode.HALF_UP);
-                    BigDecimal outcomeTtc = newPrice.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal outcomeTtc = newPrice.multiply(quantity).setScale(2, RoundingMode.HALF_UP);
                     BigDecimal discountTtc = currentTtc.subtract(outcomeTtc);
                     if (discountTtc.signum() <= 0) {
                         continue;

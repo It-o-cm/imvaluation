@@ -235,7 +235,7 @@ public class AmountEvaluationTest {
 
         double quantity = 3.0;
 
-        AmountEvaluation result = AmountEvaluation.getAmount(product, price, quantity);
+        AmountEvaluation result = AmountEvaluation.getAmount(product, price, BigDecimal.valueOf(quantity));
 
         assertEquals(new BigDecimal("30.00"), result.amountExcludingTax);
         assertEquals(new BigDecimal("36.00"), result.amountIncludingTax);
@@ -258,7 +258,7 @@ public class AmountEvaluationTest {
 
         double quantityKg = 1.500; // Buying 1.5kg
 
-        AmountEvaluation result = AmountEvaluation.getAmount(product, price, quantityKg);
+        AmountEvaluation result = AmountEvaluation.getAmount(product, price, BigDecimal.valueOf(quantityKg));
 
         // Ratio = 1.5 / 0.5 = 3 units
         // Total = 3 * 10 = 30
@@ -282,7 +282,7 @@ public class AmountEvaluationTest {
 
         double quantityLiters = 10.0;
 
-        AmountEvaluation result = AmountEvaluation.getAmount(product, price, quantityLiters);
+        AmountEvaluation result = AmountEvaluation.getAmount(product, price, BigDecimal.valueOf(quantityLiters));
 
         assertEquals(new BigDecimal("50.00"), result.amountExcludingTax);
         assertEquals(new BigDecimal("60.00"), result.amountIncludingTax);
@@ -294,7 +294,7 @@ public class AmountEvaluationTest {
      */
     @Test
     void testGetAmount_NullInputs_ReturnsZero() {
-        AmountEvaluation result = AmountEvaluation.getAmount(null, null, 1.0);
+        AmountEvaluation result = AmountEvaluation.getAmount(null, null, BigDecimal.valueOf(1.0));
         assertEquals(BigDecimal.ZERO.setScale(2), result.amountExcludingTax);
         assertEquals(BigDecimal.ZERO.setScale(2), result.amountIncludingTax);
     }
@@ -308,7 +308,7 @@ public class AmountEvaluationTest {
         Product product = new Product();
         product.productType = ProductType.UNIT;
 
-        AmountEvaluation result = AmountEvaluation.getAmount(product, null, 2.0);
+        AmountEvaluation result = AmountEvaluation.getAmount(product, null, BigDecimal.valueOf(2.0));
 
         // Expect an empty object (zero) according to safety logic
         assertEquals(BigDecimal.ZERO.setScale(2), result.amountExcludingTax);
@@ -329,7 +329,7 @@ public class AmountEvaluationTest {
         price.priceExcludingTax = new BigDecimal("10.00");
 
         assertThrows(IllegalStateException.class, () -> {
-            AmountEvaluation.getAmount(product, price, 1.0);
+            AmountEvaluation.getAmount(product, price, BigDecimal.valueOf(1.0));
         });
     }
 
@@ -353,12 +353,12 @@ public class AmountEvaluationTest {
 
         // Test with reference = 0
         assertThrows(IllegalStateException.class, () -> {
-            AmountEvaluation.getAmount(productZero, price, 1.0);
+            AmountEvaluation.getAmount(productZero, price, BigDecimal.valueOf(1.0));
         });
 
         // Test with negative reference
         assertThrows(IllegalStateException.class, () -> {
-            AmountEvaluation.getAmount(productNegative, price, 1.0);
+            AmountEvaluation.getAmount(productNegative, price, BigDecimal.valueOf(1.0));
         });
     }
 
@@ -377,7 +377,7 @@ public class AmountEvaluationTest {
         product.referenceVolume = null;
 
         IllegalStateException exceptionNull = assertThrows(IllegalStateException.class, () -> {
-            AmountEvaluation.getAmount(product, price, 1.0);
+            AmountEvaluation.getAmount(product, price, BigDecimal.valueOf(1.0));
         });
 
         // Verify that the message matches the configuration error for Volume
@@ -386,12 +386,12 @@ public class AmountEvaluationTest {
         // Case 2: referenceVolume is less than or equal to 0
         product.referenceVolume = BigDecimal.ZERO;
         assertThrows(IllegalStateException.class, () -> {
-            AmountEvaluation.getAmount(product, price, 1.0);
+            AmountEvaluation.getAmount(product, price, BigDecimal.valueOf(1.0));
         });
 
         product.referenceVolume = new BigDecimal("-1.0");
         assertThrows(IllegalStateException.class, () -> {
-            AmountEvaluation.getAmount(product, price, 1.0);
+            AmountEvaluation.getAmount(product, price, BigDecimal.valueOf(1.0));
         });
     }
 
@@ -409,7 +409,7 @@ public class AmountEvaluationTest {
         when(item.getPrice(store, PriceUsage.DEFAULT)).thenReturn(price);
 
         // Setup public fields via mock (or assume they are accessible)
-        item.quantity = 2.0;
+        item.quantity = BigDecimal.valueOf(2.0);
 
         // Setup Domain Objects
         product.productType = ProductType.UNIT;
@@ -444,7 +444,7 @@ public class AmountEvaluationTest {
 
         when(item1.getProduct()).thenReturn(p1);
         when(item1.getPrice(store, PriceUsage.DEFAULT)).thenReturn(pr1);
-        item1.quantity = 1.0;
+        item1.quantity = BigDecimal.valueOf(1.0);
 
         // Mock Item 2
         Product p2 = new Product(); p2.productType = ProductType.UNIT;
@@ -455,7 +455,7 @@ public class AmountEvaluationTest {
 
         when(item2.getProduct()).thenReturn(p2);
         when(item2.getPrice(store, PriceUsage.DEFAULT)).thenReturn(pr2);
-        item2.quantity = 1.0;
+        item2.quantity = BigDecimal.valueOf(1.0);
 
         AmountEvaluation result = AmountEvaluation.getAmount(items, store, PriceUsage.DEFAULT);
 
@@ -482,7 +482,7 @@ public class AmountEvaluationTest {
 
         when(item1.getProduct()).thenReturn(p1);
         when(item1.getPrice(store, PriceUsage.DEFAULT)).thenReturn(pr1);
-        item1.quantity = 1.0;
+        item1.quantity = BigDecimal.valueOf(1.0);
         item1.produceEan = targetEan; // Matching field
 
         // Item 2: Different EAN
@@ -491,7 +491,7 @@ public class AmountEvaluationTest {
         pr2.priceExcludingTax = new BigDecimal("50.00");
         pr2.priceIncludingTax = new BigDecimal("60.00");
 
-        item2.quantity = 1.0;
+        item2.quantity = BigDecimal.valueOf(1.0);
         item2.produceEan = "99999"; // Not matching
 
         AmountEvaluation result = AmountEvaluation.getAmountForProduct(items, targetEan, store, PriceUsage.DEFAULT);
@@ -516,7 +516,7 @@ public class AmountEvaluationTest {
 
         when(item.getProduct()).thenReturn(p);
         when(item.getPrice(store, PriceUsage.DEFAULT)).thenReturn(pr);
-        item.quantity = 1.0;
+        item.quantity = BigDecimal.valueOf(1.0);
 
         AmountEvaluation result = AmountEvaluation.getAmount(items, store, PriceUsage.DEFAULT);
 

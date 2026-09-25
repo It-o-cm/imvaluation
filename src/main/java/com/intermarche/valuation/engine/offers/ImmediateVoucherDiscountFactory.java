@@ -372,8 +372,8 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
                     for (Map.Entry<String, Product> entry : productMap.entrySet()) {
                         Product product = entry.getValue();
                         // Check if this offer covers this product
-                        double productQuantityInOffer = productAwareApp.getProductQuantity(product);
-                        if (productQuantityInOffer <= 0) {
+                        BigDecimal productQuantityInOffer = productAwareApp.getProductQuantity(product);
+                        if (productQuantityInOffer.signum() <= 0) {
                             continue;
                         }
                         // Retrieve the price for this specific product within the offer
@@ -398,7 +398,7 @@ public class ImmediateVoucherDiscountFactory implements AdvantageApplierFactory,
          * @param product   The product (used for reference weight).
          * @return The discount amount.
          */
-        private AmountEvaluation calculateDiscountAmount(AmountEvaluation basePrice, double quantity, Product product) {
+        private AmountEvaluation calculateDiscountAmount(AmountEvaluation basePrice, BigDecimal quantity, Product product) {
             BigDecimal vatRate = basePrice.vatRate;
             BigDecimal discountHt;
             switch (discountType) {

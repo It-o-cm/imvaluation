@@ -28,7 +28,7 @@ public class MinimumQuantityConditionTest {
     private BasketEvaluation.Item valued(String ean, double quantity) {
         BasketEvaluation.Item item = new BasketEvaluation.Item();
         item.produceEan = ean;
-        item.quantity = quantity;
+        item.quantity = BigDecimal.valueOf(quantity);
         item.amount = new AmountEvaluation(BigDecimal.ONE, BigDecimal.ONE, BigDecimal.ZERO);
         return item;
     }

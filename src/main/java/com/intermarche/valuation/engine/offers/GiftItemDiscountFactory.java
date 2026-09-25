@@ -180,10 +180,10 @@ public class GiftItemDiscountFactory implements AdvantageApplierFactory, EngineT
      * Tells whether a quantity is a whole number of units, the only kind that can be offered.
      *
      * @param quantity the quantity to test.
-     * @return true when the quantity is a positive integer within tolerance.
+     * @return true when the quantity is a positive whole number of units.
      */
-    private static boolean isInteger(double quantity) {
-        return quantity > 0 && Math.abs(quantity - Math.rint(quantity)) < 1e-9;
+    private static boolean isInteger(BigDecimal quantity) {
+        return quantity != null && quantity.signum() > 0 && quantity.stripTrailingZeros().scale() <= 0;
     }
 
     /**
@@ -350,7 +350,7 @@ public class GiftItemDiscountFactory implements AdvantageApplierFactory, EngineT
                             || item.amount.amountIncludingTax == null) {
                         continue;
                     }
-                    BigDecimal quantity = BigDecimal.valueOf(item.quantity);
+                    BigDecimal quantity = item.quantity;
                     BigDecimal unitTtc = item.amount.amountIncludingTax.divide(quantity, 2, RoundingMode.HALF_UP);
                     BigDecimal unitHt = item.amount.amountExcludingTax.divide(quantity, 2, RoundingMode.HALF_UP);
                     if (unitTtc.signum() <= 0) {

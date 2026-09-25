@@ -463,7 +463,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
      *                    whole amount in TICKET scope).
      */
     private record Contribution(ProductAwareOfferApplication application, Product product,
-                                double quantity, AmountEvaluation amount) {
+                                BigDecimal quantity, AmountEvaluation amount) {
     }
 
     /**
@@ -688,7 +688,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
             BigDecimal netBaseAmount = BigDecimal.ZERO;
             for (Contribution contribution : contributions) {
                 baseAmount = baseAmount.add(contribution.amount().amountIncludingTax);
-                baseQuantity = baseQuantity.add(BigDecimal.valueOf(contribution.quantity()));
+                baseQuantity = baseQuantity.add(contribution.quantity());
                 netBaseAmount = netBaseAmount.add(contribution.amount().amountIncludingTax
                         .multiply(NetAmounts.netFactor(evaluation, contribution.application())));
             }
@@ -737,13 +737,13 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                 if (scope == Scope.TICKET) {
                     AmountEvaluation amount = productAwareApp.getAmount();
                     if (amount != null && amount.amountIncludingTax.signum() > 0) {
-                        contributions.add(new Contribution(productAwareApp, null, 0.0, amount));
+                        contributions.add(new Contribution(productAwareApp, null, BigDecimal.ZERO, amount));
                     }
                     continue;
                 }
                 for (Product product : targetProducts) {
-                    double quantity = productAwareApp.getProductQuantity(product);
-                    if (quantity <= 0) {
+                    BigDecimal quantity = productAwareApp.getProductQuantity(product);
+                    if (quantity.signum() <= 0) {
                         continue;
                     }
                     AmountEvaluation amount = productAwareApp.getProductAmount(product);
@@ -870,7 +870,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                 if (unit == null) {
                     continue;
                 }
-                int available = (int) Math.floor(contribution.quantity());
+                int available = contribution.quantity().setScale(0, RoundingMode.FLOOR).intValue();
                 perProduct.merge(product.ean, new Unit(unit, available),
                         (a, b) -> new Unit(a.unitTtc(), a.available() + b.available()));
             }
@@ -917,7 +917,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                     valued = true;
                     continue;
                 }
-                total = total.add(perUnit.multiply(BigDecimal.valueOf(contribution.quantity())));
+                total = total.add(perUnit.multiply(contribution.quantity()));
                 valued = true;
             }
             return valued ? total : null;

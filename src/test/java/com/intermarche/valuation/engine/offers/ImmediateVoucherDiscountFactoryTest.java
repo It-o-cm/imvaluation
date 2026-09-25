@@ -104,9 +104,9 @@ public class ImmediateVoucherDiscountFactoryTest {
         }
 
         @Override
-        public double getProductQuantity(Product product) {
-            if (this.product.equals(product)) return this.quantity;
-            return 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            if (this.product.equals(product)) return BigDecimal.valueOf(this.quantity);
+            return BigDecimal.ZERO;
         }
     }
 
@@ -130,7 +130,7 @@ public class ImmediateVoucherDiscountFactoryTest {
         basket.storeCode = "STORE_01";
         Basket.Item item = new Basket.Item();
         item.produceEan = "1234567890123";
-        item.quantity = 1.0;
+        item.quantity = BigDecimal.valueOf(1.0);
         basket.items = List.of(item);
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         // Act
@@ -155,7 +155,7 @@ public class ImmediateVoucherDiscountFactoryTest {
         basket.storeCode = "STORE_01";
         Basket.Item item = new Basket.Item();
         item.produceEan = "1234567890123";
-        item.quantity = 1.0;
+        item.quantity = BigDecimal.valueOf(1.0);
         basket.items = List.of(item);
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         // Act
@@ -183,7 +183,7 @@ public class ImmediateVoucherDiscountFactoryTest {
         basket.storeCode = "STORE_01";
         Basket.Item item = new Basket.Item();
         item.produceEan = "1234567890123";
-        item.quantity = 2.0; // Quantity 2
+        item.quantity = BigDecimal.valueOf(2.0); // Quantity 2
         basket.items = List.of(item);
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         // Add a mock offer that covers the product (Unit Price 10.00 HT)
@@ -221,7 +221,7 @@ public class ImmediateVoucherDiscountFactoryTest {
         basket.storeCode = "STORE_01";
         Basket.Item item = new Basket.Item();
         item.produceEan = "1234567890123";
-        item.quantity = 3.0;
+        item.quantity = BigDecimal.valueOf(3.0);
         basket.items = List.of(item);
 
         BasketEvaluation evaluation = new BasketEvaluation(basket);
@@ -953,9 +953,9 @@ public class ImmediateVoucherDiscountFactoryTest {
         }
 
         @Override
-        public double getProductQuantity(Product product) {
-            if (this.product.equals(product)) return 0.0; // The condition to test
-            return 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            if (this.product.equals(product)) return BigDecimal.ZERO; // The condition to test
+            return BigDecimal.ZERO;
         }
     }
 
@@ -984,9 +984,9 @@ public class ImmediateVoucherDiscountFactoryTest {
         }
 
         @Override
-        public double getProductQuantity(Product product) {
-            if (this.product.equals(product)) return 1.0; // Valid quantity
-            return 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            if (this.product.equals(product)) return BigDecimal.valueOf(1.0); // Valid quantity
+            return BigDecimal.ZERO;
         }
     }
 

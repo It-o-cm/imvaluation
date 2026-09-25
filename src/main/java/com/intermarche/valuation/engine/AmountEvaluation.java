@@ -193,13 +193,13 @@ public class AmountEvaluation {
      * @param quantity The quantity being purchased.
      * @return The {@link AmountEvaluation} object containing the calculated Amount details.
      */
-    public static AmountEvaluation getAmount(Product product, Price price, double quantity) {
+    public static AmountEvaluation getAmount(Product product, Price price, BigDecimal quantity) {
         // Safety check for context (should not happen if factory works correctly)
         if (product == null|| price == null) {
             return new AmountEvaluation();
         }
         // 3. Calculation based on ProductType
-        BigDecimal qty = BigDecimal.valueOf(quantity);
+        BigDecimal qty = quantity;
         // --- Logic for Weighted or Volume Products ---
         // Requirement: the quantity is given in kilograms.
         if (product.productType == ProductType.WEIGHT) {

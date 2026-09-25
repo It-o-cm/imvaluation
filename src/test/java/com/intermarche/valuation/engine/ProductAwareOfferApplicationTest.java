@@ -1,6 +1,7 @@
 package com.intermarche.valuation.engine;
 
 import com.intermarche.valuation.domain.Product;
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.List;
 import org.junit.jupiter.api.Assertions;
@@ -57,7 +58,7 @@ class ProductAwareOfferApplicationTest {
         /**
          * The quantity returned by {@link #getProductQuantity(Product)} for {@link #keyProduct}.
          */
-        private final double productQuantity;
+        private final BigDecimal productQuantity;
 
         /**
          * Creates a test application wrapping the supplied accessor values.
@@ -70,7 +71,7 @@ class ProductAwareOfferApplicationTest {
          * @param productQuantity The quantity to expose for {@code keyProduct}.
          */
         private TestProductAwareOfferApplication(AmountEvaluation amount, Collection<Basket.Item> items, String type,
-                Product keyProduct, AmountEvaluation productAmount, double productQuantity) {
+                Product keyProduct, AmountEvaluation productAmount, BigDecimal productQuantity) {
             this.amount = amount;
             this.items = items;
             this.type = type;
@@ -128,8 +129,8 @@ class ProductAwareOfferApplicationTest {
          * @return The wrapped product quantity when {@code product} is the keyed product.
          */
         @Override
-        public double getProductQuantity(Product product) {
-            return product == keyProduct ? productQuantity : 0.0d;
+        public BigDecimal getProductQuantity(Product product) {
+            return product == keyProduct ? productQuantity : BigDecimal.ZERO;
         }
     }
 
@@ -141,9 +142,9 @@ class ProductAwareOfferApplicationTest {
         Product product = Mockito.mock(Product.class);
         AmountEvaluation productAmount = new AmountEvaluation();
         ProductAwareOfferApplication application = new TestProductAwareOfferApplication(new AmountEvaluation(),
-                List.of(), "PRODUCT_AWARE", product, productAmount, 2.5d);
+                List.of(), "PRODUCT_AWARE", product, productAmount, BigDecimal.valueOf(2.5d));
         Assertions.assertSame(productAmount, application.getProductAmount(product));
-        Assertions.assertEquals(2.5d, application.getProductQuantity(product));
+        Assertions.assertEquals(0, application.getProductQuantity(product).compareTo(BigDecimal.valueOf(2.5d)));
     }
 
     /**
@@ -156,9 +157,9 @@ class ProductAwareOfferApplicationTest {
         Product otherProduct = Mockito.mock(Product.class);
         AmountEvaluation productAmount = new AmountEvaluation();
         ProductAwareOfferApplication application = new TestProductAwareOfferApplication(new AmountEvaluation(),
-                List.of(), "PRODUCT_AWARE", keyProduct, productAmount, 2.5d);
+                List.of(), "PRODUCT_AWARE", keyProduct, productAmount, BigDecimal.valueOf(2.5d));
         Assertions.assertNotSame(productAmount, application.getProductAmount(otherProduct));
-        Assertions.assertEquals(0.0d, application.getProductQuantity(otherProduct));
+        Assertions.assertEquals(0, application.getProductQuantity(otherProduct).compareTo(BigDecimal.valueOf(0.0d)));
     }
 
     /**
@@ -172,7 +173,7 @@ class ProductAwareOfferApplicationTest {
         Collection<Basket.Item> items = List.of(covered);
         Product product = Mockito.mock(Product.class);
         ProductAwareOfferApplication application = new TestProductAwareOfferApplication(amount, items, "MANUAL",
-                product, new AmountEvaluation(), 1.0d);
+                product, new AmountEvaluation(), BigDecimal.valueOf(1.0d));
         Assertions.assertSame(amount, application.getAmount());
         Assertions.assertSame(items, application.getItems());
         Assertions.assertEquals("MANUAL", application.getType());
@@ -186,7 +187,7 @@ class ProductAwareOfferApplicationTest {
     void getValuedItemsDefaultsToEmptyList() {
         Product product = Mockito.mock(Product.class);
         ProductAwareOfferApplication application = new TestProductAwareOfferApplication(new AmountEvaluation(),
-                List.of(), "PRODUCT_AWARE", product, new AmountEvaluation(), 1.0d);
+                List.of(), "PRODUCT_AWARE", product, new AmountEvaluation(), BigDecimal.valueOf(1.0d));
         List<BasketEvaluation.Item> valued = application.getValuedItems();
         Assertions.assertNotNull(valued);
         Assertions.assertTrue(valued.isEmpty());

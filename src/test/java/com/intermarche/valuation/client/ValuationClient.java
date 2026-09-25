@@ -57,14 +57,14 @@ public class ValuationClient {
         Item item1 = new Item();
         item1.lineId = "1";
         item1.produceEan = "3300000000001"; // Pommes Golden
-        item1.quantity = 4.0; // 4 units of 1kg
+        item1.quantity = java.math.BigDecimal.valueOf(4.0); // 4 units of 1kg
         items.add(item1);
 
         // Mapping Product 2 (Milk - Sold by unit)
         Item item2 = new Item();
         item2.lineId = "2";
         item2.produceEan = "3300000000002"; // Lait UHT
-        item2.quantity = 1.0; // 1 bottle
+        item2.quantity = java.math.BigDecimal.valueOf(1.0); // 1 bottle
         items.add(item2);
 
         // Mapping Product 3 (Ham - Adding a weighted product)
@@ -73,7 +73,7 @@ public class ValuationClient {
         Item item3 = new Item();
         item3.lineId = "3";
         item3.produceEan = "3300000000008"; // Jambon Blanc 100g
-        item3.quantity = 0.5; // 0.5 kg
+        item3.quantity = java.math.BigDecimal.valueOf(0.5); // 0.5 kg
         items.add(item3);
 
         // --------------------------------------------------
@@ -85,14 +85,14 @@ public class ValuationClient {
         Item item4 = new Item();
         item4.lineId = "4";
         item4.produceEan = "3300000000004";
-        item4.quantity = 4.0;
+        item4.quantity = java.math.BigDecimal.valueOf(4.0);
         items.add(item4);
 
         // 2 Items "3300000000013" (Biscuits Chocolat 200g)
         Item item5 = new Item();
         item5.lineId = "5";
         item5.produceEan = "3300000000013";
-        item5.quantity = 2.0;
+        item5.quantity = java.math.BigDecimal.valueOf(2.0);
         items.add(item5);
 
         // 1 Item "3300000000014" (Chips Classiques)
@@ -103,7 +103,7 @@ public class ValuationClient {
         Item item6 = new Item();
         item6.lineId = "6";
         item6.produceEan = "3300000000014";
-        item6.quantity = 1.0;
+        item6.quantity = java.math.BigDecimal.valueOf(1.0);
         items.add(item6);
 
         // --------------------------------------------------
@@ -114,7 +114,7 @@ public class ValuationClient {
         Item item7 = new Item();
         item7.lineId = "7";
         item7.produceEan = "3300000000031"; // Poêle Antiadhésive 28cm
-        item7.quantity = 1.0;
+        item7.quantity = java.math.BigDecimal.valueOf(1.0);
         items.add(item7);
 
         // Construction of items JSON string

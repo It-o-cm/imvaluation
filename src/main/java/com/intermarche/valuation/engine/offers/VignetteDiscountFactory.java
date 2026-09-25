@@ -391,8 +391,8 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
         private void tryApplyVignetteDiscount(Product product, ProductAwareOfferApplication offerApp, VignetteRule rule, List<AdvantageApplication> applications) {
             Integer userVignetteCount = availableVignettes.getOrDefault(product.ean, 0);
             if (userVignetteCount >= rule.vignettesRequired) {
-                double productQuantity = offerApp.getProductQuantity(product);
-                if (productQuantity <= 0) return;
+                BigDecimal productQuantity = offerApp.getProductQuantity(product);
+                if (productQuantity.signum() <= 0) return;
                 int numberOfApplications = calculateMaxApplications(productQuantity, userVignetteCount, rule.vignettesRequired);
                 if (numberOfApplications > 0) {
                     AmountEvaluation discountAmount = calculateTotalDiscount(product, offerApp, rule, numberOfApplications);
@@ -421,8 +421,8 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
          * @param vignettesPerApplication The cost in vignettes for a single discount.
          * @return The number of applications.
          */
-        private int calculateMaxApplications(double productQuantity, int availableVignettes, int vignettesPerApplication) {
-            int maxByQuantity = (int) Math.floor(productQuantity);
+        private int calculateMaxApplications(BigDecimal productQuantity, int availableVignettes, int vignettesPerApplication) {
+            int maxByQuantity = productQuantity.setScale(0, RoundingMode.FLOOR).intValue();
             int maxByVignettes = availableVignettes / vignettesPerApplication;
             return Math.min(maxByQuantity, maxByVignettes);
         }
@@ -439,12 +439,12 @@ public class VignetteDiscountFactory implements AdvantageApplierFactory, EngineT
         AmountEvaluation calculateTotalDiscount(Product product, ProductAwareOfferApplication productApp, VignetteRule rule, int numberOfApplications) {
             AmountEvaluation totalProductPrice = productApp.getProductAmount(product);
             if (totalProductPrice == null) return null;
-            double totalQty = productApp.getProductQuantity(product);
+            BigDecimal totalQty = productApp.getProductQuantity(product);
             // Derive unit price
             BigDecimal unitPriceHT = totalProductPrice.amountExcludingTax.divide(
-                    BigDecimal.valueOf(totalQty), 4, RoundingMode.HALF_UP);
+                    totalQty, 4, RoundingMode.HALF_UP);
             BigDecimal unitPriceTTC = totalProductPrice.amountIncludingTax.divide(
-                    BigDecimal.valueOf(totalQty), 4, RoundingMode.HALF_UP);
+                    totalQty, 4, RoundingMode.HALF_UP);
             // Calculate unit discount
             AmountEvaluation unitDiscount = computeUnitDiscount(unitPriceHT, unitPriceTTC, totalProductPrice.vatRate, rule);
             // Scale to number of applications

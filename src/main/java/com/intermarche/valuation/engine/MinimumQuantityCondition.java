@@ -79,7 +79,7 @@ public final class MinimumQuantityCondition implements TriggerCondition {
                         continue;
                     }
                     contributes = true;
-                    quantity = quantity.add(BigDecimal.valueOf(item.quantity));
+                    quantity = quantity.add(item.quantity);
                 }
                 if (contributes) {
                     contributors.add(app);

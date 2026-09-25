@@ -725,8 +725,8 @@ public class VoucherGrantFactoryTest {
          * @return the covered quantity when the EAN matches, zero otherwise.
          */
         @Override
-        public double getProductQuantity(Product product) {
-            return (product != null && ean.equals(product.ean)) ? quantity : 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            return (product != null && ean.equals(product.ean)) ? BigDecimal.valueOf(quantity) : BigDecimal.ZERO;
         }
     }
 
@@ -831,8 +831,8 @@ public class VoucherGrantFactoryTest {
          * @return the quantity when the EAN matches, zero otherwise.
          */
         @Override
-        public double getProductQuantity(Product product) {
-            return (product != null && this.product.ean.equals(product.ean)) ? quantity : 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            return (product != null && this.product.ean.equals(product.ean)) ? BigDecimal.valueOf(quantity) : BigDecimal.ZERO;
         }
     }
 }

@@ -505,10 +505,10 @@ class GroupNIT {
             basket.deliveryMode = "IN_STORE";
             Basket.Item item = new Basket.Item();
             item.produceEan = LAIT_EAN;
-            item.quantity = 1.0;
+            item.quantity = BigDecimal.valueOf(1.0);
             Basket.Item second = new Basket.Item();
             second.produceEan = LAIT_EAN;
-            second.quantity = 1.0;
+            second.quantity = BigDecimal.valueOf(1.0);
             basket.items = List.of(item, second);
             BasketEvaluation evaluation = engine.evaluate(basket);
             traceService.record("{\"customerCode\":\"N1-422\"}", basket, evaluation, 422,

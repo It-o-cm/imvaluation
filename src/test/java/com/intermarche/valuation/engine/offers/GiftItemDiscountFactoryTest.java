@@ -147,7 +147,7 @@ public class GiftItemDiscountFactoryTest {
         BasketEvaluation.Item vi = new BasketEvaluation.Item();
         vi.lineId = lineId;
         vi.produceEan = ean;
-        vi.quantity = qty;
+        vi.quantity = BigDecimal.valueOf(qty);
         BigDecimal amount = new BigDecimal(ttc);
         vi.amount = new AmountEvaluation(amount, amount, BigDecimal.ZERO);
         return vi;
@@ -685,11 +685,11 @@ public class GiftItemDiscountFactoryTest {
          * @return the summed quantity when an item matches, zero otherwise.
          */
         @Override
-        public double getProductQuantity(Product product) {
-            double total = 0.0;
+        public BigDecimal getProductQuantity(Product product) {
+            BigDecimal total = BigDecimal.ZERO;
             for (BasketEvaluation.Item item : items) {
                 if (product != null && product.ean != null && product.ean.equals(item.produceEan)) {
-                    total += item.quantity;
+                    total = total.add(item.quantity);
                 }
             }
             return total;

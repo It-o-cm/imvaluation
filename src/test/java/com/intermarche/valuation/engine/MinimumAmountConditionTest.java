@@ -29,7 +29,7 @@ public class MinimumAmountConditionTest {
     private BasketEvaluation.Item valued(String ean, double quantity, String ttc) {
         BasketEvaluation.Item item = new BasketEvaluation.Item();
         item.produceEan = ean;
-        item.quantity = quantity;
+        item.quantity = BigDecimal.valueOf(quantity);
         item.amount = ttc == null ? null
                 : new AmountEvaluation(new BigDecimal(ttc), new BigDecimal(ttc), BigDecimal.ZERO);
         return item;

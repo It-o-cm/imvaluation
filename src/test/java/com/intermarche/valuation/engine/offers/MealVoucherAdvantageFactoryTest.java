@@ -323,7 +323,7 @@ public class MealVoucherAdvantageFactoryTest {
             this.amount = new AmountEvaluation(ht, ttc, new BigDecimal("0.10"));
             this.item = new Basket.Item();
             this.item.produceEan = product.ean;
-            this.item.quantity = 1.0;
+            this.item.quantity = BigDecimal.valueOf(1.0);
         }
 
         @Override public AmountEvaluation getAmount() { return amount; }
@@ -333,7 +333,7 @@ public class MealVoucherAdvantageFactoryTest {
             if (p != null && p.ean.equals(this.product.ean)) return amount;
             return null;
         }
-        @Override public double getProductQuantity(Product p) { return 1.0; }
+        @Override public BigDecimal getProductQuantity(Product p) { return BigDecimal.valueOf(1.0); }
     }
 
     /**
@@ -356,7 +356,7 @@ public class MealVoucherAdvantageFactoryTest {
         @Override public Collection<Basket.Item> getItems() { return List.of(item); }
         @Override public String getType() { return "MockMissing"; }
         @Override public AmountEvaluation getProductAmount(Product p) { return amount; }
-        @Override public double getProductQuantity(Product p) { return 1.0; }
+        @Override public BigDecimal getProductQuantity(Product p) { return BigDecimal.valueOf(1.0); }
     }
 
     /**
@@ -376,7 +376,7 @@ public class MealVoucherAdvantageFactoryTest {
         @Override public Collection<Basket.Item> getItems() { return List.of(item); }
         @Override public String getType() { return "MockNullAmount"; }
         @Override public AmountEvaluation getProductAmount(Product p) { return null; }
-        @Override public double getProductQuantity(Product p) { return 1.0; }
+        @Override public BigDecimal getProductQuantity(Product p) { return BigDecimal.valueOf(1.0); }
     }
 
     /**

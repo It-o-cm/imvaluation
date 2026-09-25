@@ -742,8 +742,8 @@ public class NewPriceDiscountFactoryTest {
          * @return the quantity when the EAN matches, zero otherwise.
          */
         @Override
-        public double getProductQuantity(Product p) {
-            return (p != null && product.ean.equals(p.ean)) ? quantity : 0.0;
+        public BigDecimal getProductQuantity(Product p) {
+            return (p != null && product.ean.equals(p.ean)) ? BigDecimal.valueOf(quantity) : BigDecimal.ZERO;
         }
     }
 

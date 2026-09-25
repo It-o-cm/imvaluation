@@ -1,5 +1,6 @@
 package com.intermarche.valuation.imports;
 
+import com.intermarche.valuation.domain.EgalimRegime;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.ProductType;
 import io.quarkus.hibernate.orm.panache.Panache;
@@ -56,6 +57,8 @@ public class ProductCsvResource extends ImporterCsvResource {
     static final String COL_UNIT_NAME = "UNIT_NAME";
     /** Header name of the active flag. */
     static final String COL_ACTIVE = "ACTIVE";
+    /** Header name of the optional EGAlim regime enum. */
+    static final String COL_EGALIM_REGIME = "EGALIM_REGIME";
 
     /** The columns this importer cannot work without. */
     static final List<String> REQUIRED_COLUMNS = List.of(
@@ -172,6 +175,7 @@ public class ProductCsvResource extends ImporterCsvResource {
         product.productType = safeParseProductType(data, COL_PRODUCT_TYPE);
         product.unitName = safeGet(data, COL_UNIT_NAME);
         product.active = safeParseBoolean(data, COL_ACTIVE);
+        product.egalimRegime = safeParseEgalimRegime(data, COL_EGALIM_REGIME);
     }
 
     /**
@@ -193,7 +197,8 @@ public class ProductCsvResource extends ImporterCsvResource {
                 safeParseBigDecimal(data, COL_REFERENCE_VOLUME),// referenceVolume
                 safeParseProductType(data, COL_PRODUCT_TYPE),   // productType
                 safeGet(data, COL_UNIT_NAME),                   // unitName
-                safeParseBoolean(data, COL_ACTIVE)              // active
+                safeParseBoolean(data, COL_ACTIVE),             // active
+                safeParseEgalimRegime(data, COL_EGALIM_REGIME)  // egalimRegime
         );
     }
 
@@ -213,6 +218,31 @@ public class ProductCsvResource extends ImporterCsvResource {
         } catch (IllegalArgumentException e) {
             LOGGER.warn("Unknown ProductType value: " + val + " in column " + column);
             return null;
+        }
+    }
+
+    /**
+     * Safely parses the optional EGAlim regime from a column resolved by name.
+     * <p>
+     * The column is optional: an absent or blank cell reads as {@link EgalimRegime#EXEMPT}, the
+     * deliberate fail-open default. A PRESENT but unknown value rejects the line (strict house
+     * pattern, like {@link #safeParseBoolean}): a mistyped regime must never silently fall back
+     * to exempt, which would defeat the very ceiling it was meant to declare.
+     *
+     * @param data   The parsed CSV line.
+     * @param column The header name of the column.
+     * @return The parsed {@link EgalimRegime}, or {@link EgalimRegime#EXEMPT} when absent or blank.
+     * @throws IllegalArgumentException when the token is present but not a valid regime.
+     */
+    EgalimRegime safeParseEgalimRegime(LineData data, String column) {
+        String val = data.get(column);
+        if (val == null || val.isEmpty()) return EgalimRegime.EXEMPT;
+        try {
+            return EgalimRegime.valueOf(val.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException(
+                    "Invalid EGAlim regime in column '" + column + "': '" + val
+                            + "' (expected FOOD_34, DPH_40 or EXEMPT)");
         }
     }
 }

@@ -61,7 +61,7 @@ public class ItemValuationTest {
         price.vat = new VatRate(null, rate, null);
         when(item.getProduct()).thenReturn(product);
         when(item.getPrice(store, PriceUsage.BASE_FOR_DISCOUNT)).thenReturn(price);
-        item.quantity = 1.0;
+        item.quantity = BigDecimal.valueOf(1.0);
         item.lineId = lineId;
         item.produceEan = ean;
         item.sourceLines = sourceLines;
@@ -143,7 +143,7 @@ public class ItemValuationTest {
         BasketEvaluation.Item item = result.get(0);
         assertEquals("L0", item.lineId);
         assertEquals("E0", item.produceEan);
-        assertEquals(1.0, item.quantity);
+        assertEquals(0, item.quantity.compareTo(BigDecimal.valueOf(1.0)));
         assertEquals(new BigDecimal("33.33"), item.amount.amountExcludingTax);
         assertEquals(new BigDecimal("40.00"), item.amount.amountIncludingTax);
         assertEquals(RATE_20, item.amount.vatRate);
@@ -164,7 +164,7 @@ public class ItemValuationTest {
         BasketEvaluation.Item item = result.get(0);
         assertEquals("L9", item.lineId);
         assertEquals("E9", item.produceEan);
-        assertEquals(1.0, item.quantity);
+        assertEquals(0, item.quantity.compareTo(BigDecimal.valueOf(1.0)));
         assertEquals(new BigDecimal("33.33"), item.amount.amountExcludingTax);
         assertEquals(new BigDecimal("40.00"), item.amount.amountIncludingTax);
     }
@@ -177,8 +177,8 @@ public class ItemValuationTest {
     void testDistribute_multipleSourceLines_prorataWithResidueOnLast() {
         Store store = mock(Store.class);
         List<Basket.Item.SourceLine> sources = List.of(
-                new Basket.Item.SourceLine("A", 1.0),
-                new Basket.Item.SourceLine("B", 3.0));
+                new Basket.Item.SourceLine("A", BigDecimal.valueOf(1.0)),
+                new Basket.Item.SourceLine("B", BigDecimal.valueOf(3.0)));
         Basket.Item s = slice(store, "L0", "E0", new BigDecimal("100.00"), RATE_20, sources);
         List<BasketEvaluation.Item> result =
                 ItemValuation.distribute(offer("30.00"), List.of(s), store);
@@ -186,14 +186,14 @@ public class ItemValuationTest {
         BasketEvaluation.Item first = result.get(0);
         assertEquals("A", first.lineId);
         assertEquals("E0", first.produceEan);
-        assertEquals(1.0, first.quantity);
+        assertEquals(0, first.quantity.compareTo(BigDecimal.valueOf(1.0)));
         assertEquals(new BigDecimal("6.25"), first.amount.amountExcludingTax);
         assertEquals(new BigDecimal("7.50"), first.amount.amountIncludingTax);
         assertEquals(RATE_20, first.amount.vatRate);
         BasketEvaluation.Item last = result.get(1);
         assertEquals("B", last.lineId);
         assertEquals("E0", last.produceEan);
-        assertEquals(3.0, last.quantity);
+        assertEquals(0, last.quantity.compareTo(BigDecimal.valueOf(3.0)));
         assertEquals(new BigDecimal("18.75"), last.amount.amountExcludingTax);
         assertEquals(new BigDecimal("22.50"), last.amount.amountIncludingTax);
         assertEquals(RATE_20, last.amount.vatRate);
@@ -208,9 +208,9 @@ public class ItemValuationTest {
     void testDistribute_twoSlices_residueToHighestRate() {
         Store store = mock(Store.class);
         Basket.Item low = slice(store, "L0", "E0", new BigDecimal("100.00"), RATE_5_5,
-                List.of(new Basket.Item.SourceLine("L0", 1.0)));
+                List.of(new Basket.Item.SourceLine("L0", BigDecimal.valueOf(1.0))));
         Basket.Item high = slice(store, "L1", "E1", new BigDecimal("100.00"), RATE_20,
-                List.of(new Basket.Item.SourceLine("L1", 1.0)));
+                List.of(new Basket.Item.SourceLine("L1", BigDecimal.valueOf(1.0))));
         List<BasketEvaluation.Item> result =
                 ItemValuation.distribute(offer("100.01"), List.of(low, high), store);
         assertEquals(2, result.size());

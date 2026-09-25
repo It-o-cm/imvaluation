@@ -51,7 +51,7 @@ public class ManualGestureApplicationCoverageTest {
     private Basket.Item pricedItem(String ean, Double quantity, BigDecimal inclTax) {
         Basket.Item item = new Basket.Item();
         item.produceEan = ean;
-        item.quantity = quantity;
+        item.quantity = quantity == null ? null : BigDecimal.valueOf(quantity);
         item.pricePerUnitExclTax = new BigDecimal("10.00");
         item.pricePerUnitInclTax = inclTax;
         item.vatRate = new BigDecimal("0.2");
@@ -84,7 +84,7 @@ public class ManualGestureApplicationCoverageTest {
     void testApplyReturnsEmptyWhenNothingRemains() {
         Basket.Item item = pricedItem("1111111111111", 1.0, new BigDecimal("12.00"));
         BasketEvaluation evaluation = Mockito.mock(BasketEvaluation.class);
-        Mockito.when(evaluation.remainingQuantity("1111111111111")).thenReturn(0.0);
+        Mockito.when(evaluation.remainingQuantity("1111111111111")).thenReturn(BigDecimal.valueOf(0.0));
         ManualGestureOfferFactory.ManualGestureOfferApplier applier =
                 new ManualGestureOfferFactory.ManualGestureOfferApplier(null, item);
         Collection<OfferApplication> applications = applier.apply(evaluation);
@@ -243,19 +243,19 @@ public class ManualGestureApplicationCoverageTest {
     void testGetValuedItemsSplitsAcrossSourceLines() {
         Basket.Item item = pricedItem("1111111111111", 3.0, new BigDecimal("12.00"));
         item.sourceLines = new ArrayList<>();
-        item.sourceLines.add(new Basket.Item.SourceLine("L1", 1.0));
-        item.sourceLines.add(new Basket.Item.SourceLine("L2", 2.0));
+        item.sourceLines.add(new Basket.Item.SourceLine("L1", BigDecimal.valueOf(1.0)));
+        item.sourceLines.add(new Basket.Item.SourceLine("L2", BigDecimal.valueOf(2.0)));
         Basket.Item gesture = new Basket.Item();
         ManualGestureOfferFactory.ManualGestureApplication app =
                 new ManualGestureOfferFactory.ManualGestureApplication(null, item, gesture);
         List<BasketEvaluation.Item> valued = app.getValuedItems();
         assertEquals(2, valued.size());
         assertEquals("L1", valued.get(0).lineId);
-        assertEquals(1.0, valued.get(0).quantity);
+        assertEquals(0, valued.get(0).quantity.compareTo(BigDecimal.valueOf(1.0)));
         assertEquals(new BigDecimal("12.00"), valued.get(0).amount.amountIncludingTax);
         assertEquals(new BigDecimal("10.00"), valued.get(0).amount.amountExcludingTax);
         assertEquals("L2", valued.get(1).lineId);
-        assertEquals(2.0, valued.get(1).quantity);
+        assertEquals(0, valued.get(1).quantity.compareTo(BigDecimal.valueOf(2.0)));
         assertEquals(new BigDecimal("24.00"), valued.get(1).amount.amountIncludingTax);
         assertEquals(new BigDecimal("20.00"), valued.get(1).amount.amountExcludingTax);
     }

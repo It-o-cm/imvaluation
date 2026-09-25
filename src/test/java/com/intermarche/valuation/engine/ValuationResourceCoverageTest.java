@@ -7,6 +7,7 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -62,7 +63,7 @@ public class ValuationResourceCoverageTest {
         basket.customerCode = "C1";
         Basket.Item item = new Basket.Item();
         item.produceEan = "3300000000001";
-        item.quantity = 1.0;
+        item.quantity = BigDecimal.valueOf(1.0);
         basket.items = new ArrayList<>(List.of(item));
         return basket;
     }
@@ -77,7 +78,7 @@ public class ValuationResourceCoverageTest {
         Map<String, List<Basket.Item>> remaining = new HashMap<>();
         Basket.Item leftover = new Basket.Item();
         leftover.produceEan = "3300000000001";
-        leftover.quantity = 1.0;
+        leftover.quantity = BigDecimal.valueOf(1.0);
         remaining.put("3300000000001", new ArrayList<>(List.of(leftover)));
         when(evaluation.getToEvaluate()).thenReturn(remaining);
         when(engine.evaluate(any(Basket.class))).thenReturn(evaluation);

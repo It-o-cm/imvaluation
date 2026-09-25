@@ -602,8 +602,8 @@ public class TicketDiscountFactoryTest {
          * @return one when the EAN matches, zero otherwise.
          */
         @Override
-        public double getProductQuantity(Product p) {
-            return (p != null && product.ean.equals(p.ean)) ? 1.0 : 0.0;
+        public BigDecimal getProductQuantity(Product p) {
+            return (p != null && product.ean.equals(p.ean)) ? BigDecimal.valueOf(1.0) : BigDecimal.ZERO;
         }
     }
 

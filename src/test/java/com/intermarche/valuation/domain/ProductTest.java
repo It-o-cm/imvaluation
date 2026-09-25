@@ -41,7 +41,7 @@ class ProductTest {
         Product product = new Product();
         product.productType = ProductType.UNIT;
         double input =5.0;
-        BigDecimal result = product.standardQuantity(input);
+        BigDecimal result = product.standardQuantity(BigDecimal.valueOf(input));
         assertEquals(0, new BigDecimal("5.0").compareTo(result));
     }
 
@@ -56,7 +56,7 @@ class ProductTest {
         product.productType = ProductType.WEIGHT;
         product.referenceWeight = new BigDecimal("0.500"); // 500g per unit
         // 1.5kg / 0.5kg = 3 units
-        BigDecimal result = product.standardQuantity(1.5);
+        BigDecimal result = product.standardQuantity(BigDecimal.valueOf(1.5));
         assertEquals(0, new BigDecimal("3.000000").compareTo(result));
     }
 
@@ -72,7 +72,7 @@ class ProductTest {
         Product product = new Product();
         product.productType = ProductType.VOLUME;
         product.referenceWeight = new BigDecimal("2.0");
-        BigDecimal result = product.standardQuantity(10.0);
+        BigDecimal result = product.standardQuantity(BigDecimal.valueOf(10.0));
         assertEquals(0, new BigDecimal("5.000000").compareTo(result));
     }
 
@@ -86,7 +86,7 @@ class ProductTest {
         Product product = new Product();
         product.productType = ProductType.WEIGHT;
         product.referenceWeight = null;
-        BigDecimal result = product.standardQuantity(100.0);
+        BigDecimal result = product.standardQuantity(BigDecimal.valueOf(100.0));
         assertEquals(BigDecimal.ZERO, result);
     }
 
@@ -100,7 +100,7 @@ class ProductTest {
         Product product = new Product();
         product.productType = ProductType.WEIGHT;
         product.referenceWeight = BigDecimal.ZERO;
-        BigDecimal result = product.standardQuantity(100.0);
+        BigDecimal result = product.standardQuantity(BigDecimal.valueOf(100.0));
         assertEquals(BigDecimal.ZERO, result);
     }
 

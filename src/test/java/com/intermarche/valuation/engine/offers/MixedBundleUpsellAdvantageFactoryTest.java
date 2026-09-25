@@ -133,7 +133,7 @@ public class MixedBundleUpsellAdvantageFactoryTest {
         // Verify Suggestion
         MixedBundleUpsellAdvantageFactory.UpsellSuggestion suggestion = app.getSuggestion();
         assertEquals("3000000000003", suggestion.ean);
-        assertEquals(4.0, suggestion.quantity, 0.001);
+        assertEquals(0, suggestion.quantity.compareTo(BigDecimal.valueOf(4.0)));
     }
 
     /**
@@ -231,7 +231,7 @@ public class MixedBundleUpsellAdvantageFactoryTest {
     @Test
     void testApplication_GetType() {
         MixedBundleUpsellAdvantageFactory.UpsellSuggestion suggestion =
-                new MixedBundleUpsellAdvantageFactory.UpsellSuggestion("1000000000001", 2.5, "OFFER_01");
+                new MixedBundleUpsellAdvantageFactory.UpsellSuggestion("1000000000001", BigDecimal.valueOf(2.5), "OFFER_01");
 
         MixedBundleUpsellAdvantageFactory.MixedBundleUpsellAdvantageApplication app =
                 new MixedBundleUpsellAdvantageFactory.MixedBundleUpsellAdvantageApplication("OFFER_01", suggestion);

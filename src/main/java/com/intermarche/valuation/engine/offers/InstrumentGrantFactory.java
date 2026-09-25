@@ -465,7 +465,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
      * @param amount   the amount the application attributes to the product (or its whole
      *                 amount in TICKET scope).
      */
-    private record Contribution(double quantity, AmountEvaluation amount) {
+    private record Contribution(BigDecimal quantity, AmountEvaluation amount) {
     }
 
     /**
@@ -617,7 +617,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             for (Contribution contribution : contributions) {
                 baseAmount = baseAmount.add(contribution.amount().amountIncludingTax);
                 baseVat = baseVat.add(vatAmount(contribution.amount()));
-                baseQuantity = baseQuantity.add(BigDecimal.valueOf(contribution.quantity()));
+                baseQuantity = baseQuantity.add(contribution.quantity());
             }
             if (baseAmount.signum() <= 0) {
                 return applications;
@@ -708,13 +708,13 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                 if (scope == Scope.TICKET) {
                     AmountEvaluation amount = productAwareApp.getAmount();
                     if (amount != null && amount.amountIncludingTax.signum() > 0) {
-                        contributions.add(new Contribution(0.0, amount));
+                        contributions.add(new Contribution(BigDecimal.ZERO, amount));
                     }
                     continue;
                 }
                 for (Product product : targetProducts) {
-                    double quantity = productAwareApp.getProductQuantity(product);
-                    if (quantity <= 0) {
+                    BigDecimal quantity = productAwareApp.getProductQuantity(product);
+                    if (quantity.signum() <= 0) {
                         continue;
                     }
                     AmountEvaluation amount = productAwareApp.getProductAmount(product);

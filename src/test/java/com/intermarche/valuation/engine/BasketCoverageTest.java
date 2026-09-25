@@ -192,7 +192,7 @@ public class BasketCoverageTest {
              MockedStatic<AmountEvaluation> mockedAmount = mockStatic(AmountEvaluation.class)) {
             Basket.Item item = new Basket.Item();
             item.produceEan = "555";
-            item.quantity = 2.5;
+            item.quantity = BigDecimal.valueOf(2.5);
             item.pricePerUnitExclTax = new BigDecimal("10.00");
             item.pricePerUnitInclTax = new BigDecimal("12.00");
             item.vatRate = new BigDecimal("0.20");
@@ -203,7 +203,7 @@ public class BasketCoverageTest {
             store.id = 9L;
             AmountEvaluation expected = new AmountEvaluation(
                     new BigDecimal("25.00"), new BigDecimal("30.00"), new BigDecimal("0.20"));
-            mockedAmount.when(() -> AmountEvaluation.getAmount(eq(product), any(Price.class), eq(2.5)))
+            mockedAmount.when(() -> AmountEvaluation.getAmount(eq(product), any(Price.class), eq(BigDecimal.valueOf(2.5))))
                     .thenReturn(expected);
             AmountEvaluation result = item.getAmount(store, PriceUsage.DEFAULT);
             assertNotNull(result);

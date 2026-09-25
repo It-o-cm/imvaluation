@@ -519,7 +519,7 @@ public class NPlusMOfferFactoryTest {
         assertEquals(2, apps.size(), "Should create 2 applications for 2 bundles of 3");
 
         int totalItems = apps.stream().mapToInt(
-                app -> app.getItems().stream().mapToInt(item -> (int) Math.round(item.quantity)).sum()
+                app -> app.getItems().stream().mapToInt(item -> (int) Math.round(item.quantity.doubleValue())).sum()
         ).sum();
         assertEquals(6, totalItems);
     }
@@ -598,11 +598,11 @@ public class NPlusMOfferFactoryTest {
                 NPlusMOfferFactory.DiscountType.PERCENTAGE, 0, store);
 
         List<Basket.Item> sortedCandidates = new ArrayList<>(basket.items);
-        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, 1.0);
+        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, BigDecimal.valueOf(1.0));
 
         assertEquals(1, result.size());
-        assertEquals(1.0, result.get(0).quantity);
-        assertEquals(1.0, evaluation.remainingQuantity("1000000000001"));
+        assertEquals(0, result.get(0).quantity.compareTo(BigDecimal.valueOf(1.0)));
+        assertEquals(0, evaluation.remainingQuantity("1000000000001").compareTo(BigDecimal.valueOf(1.0)));
     }
 
     /**
@@ -624,7 +624,7 @@ public class NPlusMOfferFactoryTest {
                 NPlusMOfferFactory.DiscountType.PERCENTAGE, 0, store);
 
         List<Basket.Item> sortedCandidates = new ArrayList<>(basket.items);
-        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, 1.0);
+        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, BigDecimal.valueOf(1.0));
 
         assertEquals(1, result.size());
     }
@@ -648,7 +648,7 @@ public class NPlusMOfferFactoryTest {
                 NPlusMOfferFactory.DiscountType.PERCENTAGE, 0, store);
 
         List<Basket.Item> sortedCandidates = List.of(createItem("9999999999999", 1.0));
-        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, 1.0);
+        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, BigDecimal.valueOf(1.0));
 
         assertTrue(result.isEmpty());
     }
@@ -675,7 +675,7 @@ public class NPlusMOfferFactoryTest {
                 NPlusMOfferFactory.DiscountType.PERCENTAGE, 0, store);
 
         List<Basket.Item> sortedCandidates = List.of(zeroItem);
-        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, 1.0);
+        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, BigDecimal.valueOf(1.0));
 
         assertTrue(result.isEmpty());
     }
@@ -689,7 +689,7 @@ public class NPlusMOfferFactoryTest {
 
         Basket.Item nullEanItem = new Basket.Item();
         nullEanItem.produceEan = null;
-        nullEanItem.quantity = 1.0;
+        nullEanItem.quantity = BigDecimal.valueOf(1.0);
 
         Basket basket = new Basket();
         basket.storeCode = "STORE_01";
@@ -705,7 +705,7 @@ public class NPlusMOfferFactoryTest {
                 NPlusMOfferFactory.DiscountType.PERCENTAGE, 0, store);
 
         List<Basket.Item> sortedCandidates = List.of(nullEanItem);
-        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, 1.0);
+        List<Basket.Item> result = applier.pickItemsFromEvaluation(evaluation, sortedCandidates, BigDecimal.valueOf(1.0));
 
         assertTrue(result.isEmpty(), "Item should not be added if pickedItem is null");
     }
@@ -827,8 +827,8 @@ public class NPlusMOfferFactoryTest {
                 "TEST", paid, discounted, store, NPlusMOfferFactory.DiscountType.PERCENTAGE, 50.0
         );
 
-        double qty = app.getProductQuantity(productExpensive);
-        assertEquals(2.0, qty, 0.001);
+        BigDecimal qty = app.getProductQuantity(productExpensive);
+        assertEquals(0, qty.compareTo(BigDecimal.valueOf(2.0)));
     }
 
     /**
@@ -866,11 +866,10 @@ public class NPlusMOfferFactoryTest {
                 "TEST", paid, discounted, store, NPlusMOfferFactory.DiscountType.PERCENTAGE, 50.0
         );
 
-        double qtyExpensive = app.getProductQuantity(productExpensive);
-        assertEquals(1.0, qtyExpensive, 0.001, "Should count only matching items in paid list");
-
-        double qtyCheap = app.getProductQuantity(productCheap);
-        assertEquals(7.0, qtyCheap, 0.001, "Should aggregate matching items from both lists");
+        BigDecimal qtyExpensive = app.getProductQuantity(productExpensive);
+        assertEquals(0, qtyExpensive.compareTo(BigDecimal.valueOf(1.0)), "Should count only matching items in paid list");
+        BigDecimal qtyCheap = app.getProductQuantity(productCheap);
+        assertEquals(0, qtyCheap.compareTo(BigDecimal.valueOf(7.0)), "Should aggregate matching items from both lists");
     }
 
     /**

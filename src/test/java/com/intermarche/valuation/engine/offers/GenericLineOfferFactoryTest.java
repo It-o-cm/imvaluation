@@ -53,7 +53,7 @@ public class GenericLineOfferFactoryTest {
         Basket.Item item = new Basket.Item();
         item.lineId = lineId;
         item.produceEan = null;
-        item.quantity = quantity;
+        item.quantity = quantity == null ? null : BigDecimal.valueOf(quantity);
         item.pricePerUnitExclTax = new BigDecimal(ht);
         item.pricePerUnitInclTax = new BigDecimal(ttc);
         item.vatRate = new BigDecimal(rate);
@@ -114,7 +114,7 @@ public class GenericLineOfferFactoryTest {
         Basket.Item eanLine = new Basket.Item();
         eanLine.lineId = "L1";
         eanLine.produceEan = "1000000000001";
-        eanLine.quantity = 1.0;
+        eanLine.quantity = BigDecimal.valueOf(1.0);
         BasketEvaluation evaluation = evaluationOf(new ArrayList<>(List.of(
                 eanLine, genericItem("L2", 1.0, "5.00", "6.00", "0.20"))));
         Collection<OfferApplier> appliers = factory.buildAppliers(evaluation);
@@ -280,8 +280,8 @@ public class GenericLineOfferFactoryTest {
         Basket.Item slice = genericItem("SLICE", 3.0, "0.90", "1.00", "0.1111");
         slice.produceEan = null;
         slice.sourceLines = new ArrayList<>(List.of(
-                new Basket.Item.SourceLine("L1", 1.0),
-                new Basket.Item.SourceLine("L2", 2.0)));
+                new Basket.Item.SourceLine("L1", BigDecimal.valueOf(1.0)),
+                new Basket.Item.SourceLine("L2", BigDecimal.valueOf(2.0))));
         GenericLineOfferFactory.GenericLineApplication app =
                 new GenericLineOfferFactory.GenericLineApplication(slice);
         List<BasketEvaluation.Item> valued = app.getValuedItems();
@@ -321,6 +321,6 @@ public class GenericLineOfferFactoryTest {
         Product product = new Product();
         product.ean = "1000000000001";
         assertNull(app.getProductAmount(product));
-        assertEquals(0.0, app.getProductQuantity(product));
+        assertEquals(0, app.getProductQuantity(product).compareTo(BigDecimal.valueOf(0.0)));
     }
 }

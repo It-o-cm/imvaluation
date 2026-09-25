@@ -52,7 +52,7 @@ class ItemValuationCoverageTest {
         Basket.Item item = new Basket.Item();
         item.lineId = lineId;
         item.produceEan = product.ean;
-        item.quantity = qty;
+        item.quantity = BigDecimal.valueOf(qty);
         item.pricePerUnitExclTax = new BigDecimal(ht);
         item.pricePerUnitInclTax = new BigDecimal(ttc);
         item.vatRate = new BigDecimal(rate);
@@ -103,8 +103,8 @@ class ItemValuationCoverageTest {
         Product pb = product("EANB");
         Basket.Item a = slice("A", pa, 1.0, "10.00", "11.00", "0.10");
         a.sourceLines = new java.util.ArrayList<>();
-        a.sourceLines.add(new Basket.Item.SourceLine("L1", 0.75));
-        a.sourceLines.add(new Basket.Item.SourceLine("L2", 0.25));
+        a.sourceLines.add(new Basket.Item.SourceLine("L1", BigDecimal.valueOf(0.75)));
+        a.sourceLines.add(new Basket.Item.SourceLine("L2", BigDecimal.valueOf(0.25)));
         Basket.Item b = slice("B", pb, 1.0, "20.00", "24.00", "0.20");
         AmountEvaluation total = new AmountEvaluation(new BigDecimal("30.00"), new BigDecimal("35.00"),
                 new BigDecimal("0.1667"));
@@ -113,20 +113,20 @@ class ItemValuationCoverageTest {
         BasketEvaluation.Item l1 = result.get(0);
         assertEquals("L1", l1.lineId);
         assertEquals("EANA", l1.produceEan);
-        assertEquals(0.75, l1.quantity, 1e-9);
+        assertEquals(0, l1.quantity.compareTo(BigDecimal.valueOf(0.75)));
         assertEquals(new BigDecimal("7.50"), l1.amount.amountExcludingTax);
         assertEquals(new BigDecimal("8.25"), l1.amount.amountIncludingTax);
         assertEquals(new BigDecimal("0.1000"), l1.amount.vatRate);
         BasketEvaluation.Item l2 = result.get(1);
         assertEquals("L2", l2.lineId);
-        assertEquals(0.25, l2.quantity, 1e-9);
+        assertEquals(0, l2.quantity.compareTo(BigDecimal.valueOf(0.25)));
         assertEquals(new BigDecimal("2.50"), l2.amount.amountExcludingTax);
         assertEquals(new BigDecimal("2.75"), l2.amount.amountIncludingTax);
         assertEquals(new BigDecimal("0.1000"), l2.amount.vatRate);
         BasketEvaluation.Item lb = result.get(2);
         assertEquals("B", lb.lineId);
         assertEquals("EANB", lb.produceEan);
-        assertEquals(1.0, lb.quantity, 1e-9);
+        assertEquals(0, lb.quantity.compareTo(BigDecimal.valueOf(1.0)));
         assertEquals(new BigDecimal("20.00"), lb.amount.amountExcludingTax);
         assertEquals(new BigDecimal("24.00"), lb.amount.amountIncludingTax);
         assertEquals(new BigDecimal("0.2000"), lb.amount.vatRate);
