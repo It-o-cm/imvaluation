@@ -272,6 +272,17 @@ public class Basket {
                 "format": "date",
                 "description": "Best-before date (DLC) of this line, ISO-8601. Optional; drives the anti-waste discount. Per line: two lots of the same EAN are two lines.",
                 "x-label": "Best-before date"
+              },
+              "srpOverride": {
+                "type": "boolean",
+                "description": "One-off resale-below-cost derogation on THIS line, declared by the till under supervisor approval (degraded, unsellable article). Disables the SRP floor guard for this line only; the bypass is traced in the srp[] record. Distinct from compliance.srpExempt, which exempts an article.",
+                "x-label": "SRP override"
+              },
+              "srpOverrideReason": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The operator's reason for the SRP override, echoed verbatim in the srp[] record for the electronic journal and the financial exports.",
+                "x-label": "SRP override reason"
               }
             }
           }
@@ -556,6 +567,26 @@ public class Basket {
          * it.
          */
         public String bestBeforeDate;
+
+        /**
+         * One-off resale-below-cost derogation carried by this line (spec-srp-guard §3.C).
+         * <p>
+         * Declared by the till under supervisor approval for a degraded, unsellable article. When
+         * {@code true}, the {@code SRP_GUARD} floor check is disabled for this line only — the line
+         * may go below its floor without correction — and the bypass is traced in the {@code srp[]}
+         * record ({@code reasonCode = SRP_OVERRIDE}, {@code overrideReason}) so the electronic journal
+         * and the financial exports can find it. Additive and backward-compatible: absent (false)
+         * leaves the guard's behaviour unchanged. This is NOT {@code compliance.srpExempt}, which
+         * exempts an article at configuration level; this is a punctual, per-line, per-ticket gesture.
+         */
+        public boolean srpOverride;
+
+        /**
+         * The operator's reason for {@link #srpOverride}, chosen at the till under supervisor
+         * approval; echoed verbatim in the {@code srp[]} record. Optional; never interpreted by the
+         * engine.
+         */
+        public String srpOverrideReason;
 
         /**
          * The quantity (an integer for unit items, a decimal in kilograms for weighed items).

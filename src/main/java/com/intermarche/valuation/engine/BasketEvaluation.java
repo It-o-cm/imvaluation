@@ -2,9 +2,12 @@ package com.intermarche.valuation.engine;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
+import com.intermarche.valuation.engine.offers.InstrumentGrantFactory;
 
 import java.math.BigDecimal;
 import java.util.*;
@@ -16,6 +19,8 @@ import java.util.*;
  * (keyed by EAN) that remain to be processed, a list of offers
  * successfully applied so far, and the store context.
  */
+@JsonPropertyOrder({"offers", "advantages", "messages", "grantTotals", "totalPrice", "egalim", "srp",
+        "vatBreakdown", "availableToUpcell"})
 public class BasketEvaluation {
 
     /**
@@ -98,6 +103,17 @@ public class BasketEvaluation {
      * guard configuration serialises exactly as before (regression-free).
      */
     private List<EgalimLine> egalim;
+
+    /**
+     * The SRP (resale-below-cost) floor record, one entry per controlled initial basket line
+     * (spec-srp-guard §3).
+     * <p>
+     * Populated by the SRP guard advantage when an {@code SRP_GUARD} configuration is in force and
+     * the guard actually runs (a closed basket). Left {@code null} — and omitted from the JSON
+     * response, see {@link #getSrp()} — otherwise, so a basket valued without a guard configuration
+     * serialises exactly as before (regression-free).
+     */
+    private List<SrpLine> srp;
 
     /**
      * The configurations skipped during this evaluation, fail-closed (A2, report H1).
@@ -553,14 +569,96 @@ public class BasketEvaluation {
     }
 
     /**
-     * Gets the set of applied discounts.
+     * Gets the full set of applied advantages, message advantages included.
      * <p>
-     * This is visible in the JSON response.
+     * Internal accessor used across the engine; NOT the serialized view — the JSON {@code advantages}
+     * block is produced by {@link #getVisibleAdvantages()}, which omits the message advantages so the
+     * monetary block stays clean (they surface in {@code messages[]} instead).
      *
-     * @return The set of discount applications.
+     * @return The set of advantage applications.
      */
+    @JsonIgnore
     public Collection<AdvantageApplication> getAdvantages() {
         return advantages;
+    }
+
+    /**
+     * The serialized {@code advantages} block: every applied advantage except the message advantages
+     * (spec-messages-editique §1). With no message applied this is exactly the full set, so the
+     * response stays byte-for-byte identical to before.
+     *
+     * @return the monetary advantages, in application order.
+     */
+    @JsonProperty("advantages")
+    public List<AdvantageApplication> getVisibleAdvantages() {
+        List<AdvantageApplication> visible = new ArrayList<>();
+        for (AdvantageApplication advantage : advantages) {
+            if (!(advantage instanceof MessageApplication)) {
+                visible.add(advantage);
+            }
+        }
+        return visible;
+    }
+
+    /**
+     * The additive {@code messages} response block (spec-messages-editique §1): one entry per applied
+     * message advantage. {@code null} — and thus omitted — when no message applies, so a valuation
+     * without messages serialises exactly as before.
+     *
+     * @return the messages, or {@code null} when none applied.
+     */
+    @JsonProperty("messages")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public List<MessageLine> getMessages() {
+        List<MessageLine> messages = new ArrayList<>();
+        for (AdvantageApplication advantage : advantages) {
+            if (advantage instanceof MessageApplication message) {
+                messages.add(new MessageLine(message.getCode(), message.getText(), message.getPrintMode()));
+            }
+        }
+        return messages.isEmpty() ? null : messages;
+    }
+
+    /**
+     * The additive {@code grantTotals} response block (spec-plafonds-attribution §3): the total
+     * number of points and vignettes attributed across every attribution mechanic of the ticket
+     * (GM-06-04-12 / GM-09-05-12 — "return the total number to give when several mechanics apply").
+     * <p>
+     * Summed from the {@link InstrumentGrantFactory.InstrumentGrantApplication} grants whose unit is
+     * {@code POINTS} or {@code VIGNETTES}; monetary ({@code EUR}) vouchers and coupons keep their own
+     * line in {@code advantages[]} but are not points or vignettes, so they do not feed this block.
+     * The attributed vignettes counted here are the ones the ticket EARNS — never the vignettes the
+     * basket brought in for a {@code VIGNETTE_DISCOUNT} (spec §5): the two never mix, they live in
+     * unrelated structures.
+     * <p>
+     * Returned {@code null} — and thus omitted — when no points or vignettes were attributed, so a
+     * valuation without an attribution serialises exactly as before (bit-for-bit regression).
+     *
+     * @return the summed points and vignettes, or {@code null} when none was attributed.
+     */
+    @JsonProperty("grantTotals")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public GrantTotals getGrantTotals() {
+        BigDecimal points = BigDecimal.ZERO;
+        BigDecimal vignettes = BigDecimal.ZERO;
+        boolean any = false;
+        for (AdvantageApplication advantage : advantages) {
+            if (!(advantage instanceof InstrumentGrantFactory.InstrumentGrantApplication grant)) {
+                continue;
+            }
+            InstrumentGrantFactory.Grant instrument = grant.getGrant();
+            if (instrument == null || instrument.amount() == null) {
+                continue;
+            }
+            if ("POINTS".equals(instrument.unit())) {
+                points = points.add(instrument.amount());
+                any = true;
+            } else if ("VIGNETTES".equals(instrument.unit())) {
+                vignettes = vignettes.add(instrument.amount());
+                any = true;
+            }
+        }
+        return any ? new GrantTotals(points, vignettes) : null;
     }
 
     /**
@@ -601,6 +699,28 @@ public class BasketEvaluation {
      */
     public void setEgalimRecord(List<EgalimLine> egalim) {
         this.egalim = egalim;
+    }
+
+    /**
+     * Returns the SRP floor record, one entry per controlled initial basket line (spec-srp-guard §3).
+     * <p>
+     * Omitted from the JSON response when {@code null} (no in-force guard, or an open basket), so a
+     * valuation without an SRP guard is byte-for-byte identical to before.
+     *
+     * @return the record lines, or {@code null} when no guard produced a record.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public List<SrpLine> getSrp() {
+        return srp;
+    }
+
+    /**
+     * Records the SRP floor record produced by the guard (spec-srp-guard §3).
+     *
+     * @param srp the record lines, one per controlled initial basket line.
+     */
+    public void setSrpRecord(List<SrpLine> srp) {
+        this.srp = srp;
     }
 
     /**
@@ -948,6 +1068,183 @@ public class BasketEvaluation {
          * Default constructor for JSON serialization.
          */
         public EgalimLine() {
+        }
+    }
+
+    /**
+     * One line of the SRP floor record (spec-srp-guard §3): the floor, the final price after every
+     * advantage, the margin above the floor, and the correction when one was applied. Emitted only
+     * for controlled lines (those whose article carries an {@code SRP_FLOOR} price).
+     * <p>
+     * Fields are public for JSON serialization.
+     */
+    public static class SrpLine {
+
+        /**
+         * The id of the controlled initial line.
+         */
+        public String lineId;
+
+        /**
+         * The EAN of the controlled line.
+         */
+        public String ean;
+
+        /**
+         * The floor price of the line: floor unit price times quantity, tax included.
+         */
+        public BigDecimal floorPrice;
+
+        /**
+         * The final price of the line after every advantage (the EGAlim reprise included), tax
+         * included, before the guard's own correction.
+         */
+        public BigDecimal finalPrice;
+
+        /**
+         * The margin above the floor in euros: final minus floor; {@code 0.00} on a corrected line.
+         */
+        public BigDecimal marginAboveFloor;
+
+        /**
+         * The correction applied by the guard, in euros; {@code null} unless the line was below its
+         * floor (and not exempt nor overridden).
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public BigDecimal correction;
+
+        /**
+         * Stable machine reason code the till maps to a screen message (spec-srp-guard §3.A/B/C), never
+         * a French text from the engine and distinct from the EGAlim record. One of
+         * {@code SRP_FLOOR_CLAMPED} (the line was lifted to its floor), {@code SRP_MARGIN_WARNING} (the
+         * discount reached a configured warning palier without being clamped) or {@code SRP_OVERRIDE}
+         * (the floor was bypassed by a per-line derogation). {@code null} on a line granted without
+         * reserve, so an unaffected line is unchanged.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public String reasonCode;
+
+        /**
+         * The descent toward the floor, as a fraction of the room between the sale price and the floor
+         * (spec-srp-guard §3.B): {@code (nominal − final) / (nominal − floor)}, scale 4. Present only
+         * when the guard carries warning paliers and the line has a floor room to measure against;
+         * {@code null} otherwise.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public BigDecimal descentFraction;
+
+        /**
+         * The highest configured warning palier the line's descent reached (spec-srp-guard §3.B), e.g.
+         * {@code 0.80}; present only on a {@code SRP_MARGIN_WARNING} line, {@code null} otherwise.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public BigDecimal warningThreshold;
+
+        /**
+         * The discount that had been requested on the line, tax included (spec-srp-guard §3.A):
+         * {@code nominal − final(before the floor lift)}. Present only on a clamped line that carries a
+         * manual gesture, so the till can say "3.00 asked, 1.20 granted".
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public BigDecimal requestedDiscount;
+
+        /**
+         * The discount actually granted on the line after the floor lift, tax included
+         * (spec-srp-guard §3.A): {@code nominal − floor = requestedDiscount − correction}. Present only
+         * on a clamped line that carries a manual gesture.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public BigDecimal grantedDiscount;
+
+        /**
+         * The operator's reason for a per-line SRP override, echoed verbatim (spec-srp-guard §3.C);
+         * present only on a {@code SRP_OVERRIDE} line whose declaration carried a reason.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public String overrideReason;
+
+        /**
+         * Default constructor for JSON serialization.
+         */
+        public SrpLine() {
+        }
+    }
+
+    /**
+     * The {@code grantTotals} response block (spec-plafonds-attribution §3): the summed points and
+     * vignettes attributed by the ticket. Both keys are always present — a zero says "this ticket
+     * attributed none of that kind". Fields are public for JSON serialization.
+     */
+    public static class GrantTotals {
+
+        /**
+         * The total number of points attributed across every mechanic of the ticket.
+         */
+        public BigDecimal points;
+
+        /**
+         * The total number of vignettes attributed across every mechanic of the ticket (outgoing
+         * only — never the vignettes the basket brought in).
+         */
+        public BigDecimal vignettes;
+
+        /**
+         * Default constructor for JSON serialization.
+         */
+        public GrantTotals() {
+        }
+
+        /**
+         * Builds the totals.
+         *
+         * @param points    the summed attributed points.
+         * @param vignettes the summed attributed vignettes.
+         */
+        public GrantTotals(BigDecimal points, BigDecimal vignettes) {
+            this.points = points;
+            this.vignettes = vignettes;
+        }
+    }
+
+    /**
+     * One entry of the {@code messages} response block (spec-messages-editique §1): a resolved till
+     * message. Fields are public for JSON serialization.
+     */
+    public static class MessageLine {
+
+        /**
+         * The configuration code the message was declared under.
+         */
+        public String code;
+
+        /**
+         * The resolved message text, variables substituted.
+         */
+        public String text;
+
+        /**
+         * The print mode ({@code LINE}/{@code FOOTER}), omitted when unset.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public String printMode;
+
+        /**
+         * Default constructor for JSON serialization.
+         */
+        public MessageLine() {
+        }
+
+        /**
+         * Builds a message line.
+         *
+         * @param code      the configuration code.
+         * @param text      the resolved text.
+         * @param printMode the print mode, or null.
+         */
+        public MessageLine(String code, String text, String printMode) {
+            this.code = code;
+            this.text = text;
+            this.printMode = printMode;
         }
     }
 

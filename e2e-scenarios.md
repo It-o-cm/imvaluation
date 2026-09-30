@@ -3,10 +3,15 @@
 Couche complémentaire des tests unitaires et du `ValuationEndToEndTest` existant : ici
 l'application réelle démarre sur **:8090**, la base H2 **en mémoire** vit
 (`drop-and-create` : tout est perdu au redémarrage), le référentiel est seedé par les
-**7 imports CSV** (jeu miroir d'`ImportAllClient` : magasins `0101`–`0105`, groupes
-`REGION_NORTH`/`DEPT_59`/…, produits `3300000000001`–`033`, 9 familles, ~96 prix
-valides à partir de `2026-01-12T00:00:00`, 11 offres). Compte d'amorçage `admin`/`admin`
-(profils dev/test).
+**10 imports CSV** (jeu miroir d'`ImportAllClient` : magasins `0101`–`0105`, groupes
+`REGION_NORTH`/`DEPT_59`/…, produits `3300000000001`–`033` (dont quelques
+`EGALIM_REGIME` FOOD_34/DPH_40 portés en 10ᵉ colonne, le reste `EXEMPT`), 9 familles,
+~96 prix valides à partir de `2026-01-12T00:00:00`, 11 offres, un référentiel
+`EGALIM_REGIMES` (FOOD_34/DPH_40/EXEMPT) et un référentiel `BUDGET_GROUPS`). Compte
+d'amorçage `admin`/`admin` (profils dev/test). Les prix `SRP_FLOOR`, les gardes
+`EGALIM_GUARD`/`SRP_GUARD` et les offres portant les nouveaux fragments (trigger,
+arbitration, budget, compliance, TIME_WINDOW, MESSAGE) sont seedés en phases locales par
+les groupes qui les exercent (offres/prix remis à zéro par classe).
 
 Infrastructure par groupe : **[D]** = profil dev/test (défaut : `admin`/`admin`,
 `app.password-change.enforced=false`) ; **[P]** = profil prod-like
@@ -21,6 +26,16 @@ sur un index**, toujours par `find{…}` ; les corps des réponses 4xx/5xx de `/
 (`WebApplicationException` sans entité) sont **à calibrer une fois** sur l'environnement
 cible avant toute assertion textuelle — le message est en revanche garanti dans
 `valuation_traces.error_message`.
+
+> **Note i18n (spec-exploitation §1) — assertions en fr.** Depuis le lot exploitation,
+> l'IHM BO est localisée (bundles `messages_fr`/`messages_en`) et la **langue par défaut est
+> `fr`** : sans préférence utilisateur (`AppUser.locale`) ni en-tête `Accept-Language`, tout
+> écran `/ui/*` et tout libellé/notice/validation qu'il rend sortent en **français**. Les
+> assertions textuelles e2e portant sur des libellés d'IHM se font donc **en fr** (catégorie b :
+> les littéraux ont quitté les templates pour les bundles). Restent en **anglais** (contrat
+> machine, inchangé) : les erreurs des API (`/valuation`, GraphQL, imports CSV, `/consumptions`),
+> les corps JSON, les en-têtes CSV et `valuation_traces.error_message`. Pour asserter un écran en
+> anglais, envoyer `Accept-Language: en`.
 
 ## A. Démarrage & amorçage [D]
 
@@ -41,8 +56,9 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   l'affiche : `The in-memory database is reset at every restart — run the CSV imports
   to load a catalog.` Re-seed obligatoire.
 - **A5 Seed miroir & idempotence** : rejouer `ImportAllClient` dans l'ordre imposé
-  (Stores → StoreGroups → Products → ProductFamilies → Categories → Prices → Offers) →
-  chaque import répond 200 `{"createdCount":N, "updatedCount":0}` ; rejouer le MÊME
+  (VatRates → EgalimRegimes → Stores → StoreGroups → Products → ProductFamilies → Categories → Prices → BudgetGroups → Offers ;
+  le référentiel TVA est désormais un prérequis de `/prices/import`, qui rejette un taux sans
+  régime) → chaque import répond 200 `{"createdCount":N, "updatedCount":0}` ; rejouer le MÊME
   seed immédiatement → `createdCount:0, updatedCount:0` partout (idempotence par
   checksum), **y compris un magasin sans adresse** : le checksum d'adresse est
   symétrique (adresse absente normalisée en adresse vide avant calcul, comme le fait
@@ -146,7 +162,9 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
 - **D8 Erreurs de flux** : flux coupé → **500** texte `Error reading file: <msg>` ;
   Throwable inattendu → **500** `Unexcepted error: <msg>` (faute de frappe présente
   dans le code, à asserter telle quelle).
-- **D9 Rôle insuffisant** : MANAGER (sans ADMIN) → 403 sur les 7 endpoints d'import.
+- **D9 Rôle insuffisant** : MANAGER (sans ADMIN) → 403 sur les 10 endpoints d'import
+  (ajout des chantiers EGAlim/TVA & budgets : `/vat-rates/import`, `/egalim-regimes/import`,
+  `/budget-groups/import`).
 
 ## E. Imports CSV — spécificités par ressource
 
@@ -154,8 +172,9 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   7 col. min) : upsert par code, lat/lon optionnelles (`safeParseDouble` silencieux) ;
   `name` vide → violation `Store name is mandatory` remontée en erreur de ligne.
 - **E2 Store-groups** (`group_code|group_name|store_codes|store_group_codes`, listes
-  séparées par **`;`**) : stratégie **additive** — réimporter avec une liste amputée ne
-  retire aucun lien (contrat à figer, opposé aux familles/offres) ; ordre
+  séparées par **`;`**) : stratégie de **remplacement** (A4) — réimporter avec une liste
+  amputée **retire** les liens absents (`replaceStores`/`replaceSubGroups` vident puis
+  ré-ajoutent), et le checksum inclut désormais les membres ; ordre
   parent-avant-enfant requis : sous-groupe inconnu →
   `StoreGroup '<code>' not found. Check CSV order (Parent must be defined before
   Child).` ; magasin inconnu → `Store '<code>' not found.` ; **aucun contrôle
@@ -167,18 +186,20 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
 - **E4 Product-families** (`code|description|flags|product_eans|family_codes`, listes
   par `,`) : stratégie de **remplacement** (colonne vide = liens vidés) ; messages :
   `Product EAN '<ean>' not found.`, `SubFamily code '<code>' not found.`,
-  `Family '<code>' cannot contain itself.` ; ⚠ **bug figé** : la mise à jour d'une
-  famille EXISTANTE est comptée (`updatedCount:1`) mais **non persistée** (entité
-  détachée jamais ré-attachée) — le test vérifie l'état réel en base et documente
-  l'écart.
+  `Family '<code>' cannot contain itself.` ; ⚠ le checksum d'une famille **exclut ses
+  enfants** (code/description/flags seulement) : un ré-import qui ne change que les
+  sous-familles est un no-op silencieux et n'atteint jamais `linkSubFamilies` où se déclenche
+  le garde d'auto-référence — il faut donc modifier la description pour que la mise à jour
+  s'exécute (le test le fait).
 - **E5 Categories** (`productEan|level1|…|level5`) : clé fonctionnelle
   `(ean, level1, level5)` ; une modification portant uniquement sur `level2/3/4` est
   bien détectée comme update ; EAN inconnu → `Product with EAN '<ean>' not found.`
 - **E6 Prices** (9 col.) : clé composite `ean:store:usage:start:priority` — changer
   `endDateTime` **met à jour** le prix ; changer `priority`, `startDateTime` ou
   `priceUsage` **crée un prix supplémentaire** sans supprimer l'ancien (chevauchement
-  silencieux, résolu par priorité — croiser H2) ; date non-ISO → silencieusement
-  `null` + WARN (change la clé !) ; `priceUsage` invalide →
+  silencieux, résolu par priorité — croiser H2) ; date présente mais non-ISO → **ligne
+  rejetée** (H6b) `Invalid date in column 'START_DATE': '<val>' (expected YYYY-MM-DDTHH:MM:SS)`
+  (seule une date absente/vide reste un bord ouvert `null`) ; `priceUsage` invalide →
   `PriceUsage is mandatory at column 5` ; `priority` vide → violation au commit ;
   EAN inconnu → `Product with EAN <ean> not found.` (sans quotes — asymétrie avec E5).
 - **E7 Offers** (`offer_code|offer_type|specification|store_code|store_group_code`) :
@@ -188,6 +209,25 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   flush, dans `errors[]`) ; spec > 1000 caractères → violation de longueur ; **type
   inconnu accepté** et stocké mais jamais appliqué par le moteur (test canari : l'offre
   existe, la valorisation l'ignore) ; cibles en **remplacement** (clear + re-link).
+
+- **E8 EGALIM_REGIMES (extension 27/09)** : nominal `CODE|LABEL|CAP_RATE` avec `EXEMPT`
+  à cap VIDE (non plafonné, accepté) ; `CAP_RATE` > 1 ou négatif → ligne rejetée avec
+  message ; idempotence checksum ; upsert par code (re-livrer FOOD_34 à 0,3000 met à
+  jour, pas de doublon).
+- **E9 PRODUCTS, colonne `EGALIM_REGIME` (extension 27/09)** : absente ou vide →
+  `EXEMPT` (fail-open) ; valeur inconnue → ligne rejetée ; insensible à la casse ;
+  le régime entre dans le checksum (re-livraison avec régime changé = `updatedCount`).
+- **E10 PRICES, usage `SRP_FLOOR` (extension 27/09)** : accepté avec les mêmes
+  contrôles (cohérence HT/TTC/taux au centime, validité, priorité) ; usage inconnu →
+  ligne rejetée.
+- **E11 BUDGET_GROUPS (extension 27/09)** : nominal, idempotence, période
+  optionnelle ; livré AVANT OFFERS ; `MAX_AMOUNT` et `MAX_APPLICATIONS` tous deux
+  vides → accepté (groupe sans enveloppe = simple regroupement).
+- **E12 OFFERS, colonnes nouvelles (extension 27/09)** : `BUDGET_GROUP_CODE` inconnu →
+  ligne rejetée ; les colonnes `EXCLUDED_STORE_CODES`/`EXCLUDED_STORE_GROUP_CODES`
+  (chantier ciblage, cf. W) sont optionnelles et un code inconnu **rejette la ligne**
+  (`Excluded store code '<c>' not found.`), un code valide est lié ; toutes optionnelles —
+  un fichier OFFERS d'avant l'extension passe inchangé.
 
 ## F. GraphQL (`POST /graphql`, Basic)
 
@@ -222,21 +262,34 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
 - **F6 Clés immuables** : `code` jamais modifié à l'update d'`Offer`, `StoreGroup`,
   `ProductFamily` (l'input est ignoré) — à prouver.
 - **F7 Suppressions** : id inexistant → `false` sans exception ; magasin référencé par
-  des prix/offres → violation FK → message F4 ; ⚠ **`deleteProductFamily` cascade ALL :
-  supprime les PRODUITS liés et les sous-familles** — scénario destructif à prouver sur
-  un jeu jetable, c'est le comportement le plus dangereux de l'API.
+  des prix/offres → violation FK (`System error`, la contrainte ne fire qu'au commit) ; ⚠
+  **`deleteProductFamily` ne cascade QUE les sous-familles** (`@OneToMany CascadeType.ALL`) :
+  le `@ManyToMany` vers le catalogue Produit partagé a **abandonné `CascadeType.ALL`**
+  (rapport-remediation-imvaluation.md:109), donc les PRODUITS liés **survivent** — l'ancien
+  « comportement le plus dangereux » est corrigé.
 - **F8 Prix, cas vicieux** : `currentPrice` sans prix actif → **`null`** + WARN, pas
   d'exception ; doublon avec `startDateTime` null **non détecté** (le JPQL `= null` ne
   matche jamais) → deux prix identiques créés ; `updatePrice` d'un prix à start null →
   NPE masquée `An error occurred during updatePrice.` Tests négatifs documentant.
 - **F9 Asymétrie createStoreGroup** : sous-groupe inconnu à la création → `null` ajouté
-  au Set → erreur générique ; à l'update → message propre
-  `StoreGroup with code '<c>' not found.`
+  au Set → depuis A4 le checksum inclut les membres (`getChecksum` mappe `g.code`), donc
+  `@PrePersist` **NPE** sur l'enfant null → **rejet** masqué `An error occurred during
+  createStoreGroup.` + rollback ; à l'update, contrôle explicite → `NoSuchElementException`
+  masquée en `System error`.
 - **F10 Cycles indirects acceptés** : construire A→B puis B→A via deux updates → accepté
   (`wouldCreateCycle` jamais appelée) ; vérifier que `findAllStoreGroups` et la
   valorisation par groupe survivent (sets `visited`) — croiser K4.
 - **F11 offersByStoresAndType** : un doublon dans `storeCodes` → `One or more Store
   codes provided do not exist.` (le contrôle compare les tailles) — piège à figer.
+
+- **F12 `Product.egalimRegime` (extension 27/09)** : lecture jamais nulle (défaut
+  `EXEMPT`) ; mutation avec les trois valeurs ; valeur inconnue → erreur GraphQL
+  propre ; update SANS le champ → valeur conservée.
+- **F13 `BudgetGroup` (extension 27/09)** : CRUD par code métier, RBAC identique aux
+  autres référentiels ; `Offer.budgetGroupCode` et les exclusions PDV exposés.
+- **F14 Suivi budgétaire (extension 27/09)** : `budgetStatus(offerCode)` /
+  `groupBudgetStatus(groupCode)` en MANAGER ; code inconnu → erreur « introuvable »
+  propre ; cohérence consommé/restant/`byStore` avec V1–V6.
 
 ## G. API `/valuation` — le contrat
 
@@ -275,10 +328,30 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   invalide → **400** du provider Jackson, **aucune trace** (l'exception précède la
   méthode) — la distinction « 400 avec trace / 400 sans trace » est le contrat.
 
+- **G8 Rejets 400 de l'extension (27/09)** : `promotionType` hors enum, PERCENT
+  `value` > 1, `value` ≤ 0 → 400 schéma ; `couponCodes:[""]` (minLength) → 400. Chacun =
+  trace `REJECTED` (patron G2). ⚠ CALIBRÉ : `cardPromotions` doublon d'EAN n'est PAS un
+  400 — l'unicité n'est pas exprimable au schéma, elle lève dans `engine.evaluate()` et
+  ressort en **500** `FAILED` `Duplicate card promotion for EAN '<ean>'` (cf. T4) ;
+  `closed:"yes"` (non booléen) est un **400 du provider Jackson SANS trace** (patron G7,
+  avant la méthode), pas un `REJECTED`.
+- **G9 Forme de la réponse enrichie (27/09)** : `egalim[]`, `srp[]`, `messages[]`
+  n'apparaissent QUE leur configuration in-force (clé ABSENTE sinon — l'assertion
+  d'absence est le critère de régression) ; les invariants G6 restent vrais avec des
+  corrections NÉGATIVES au ticket (Σ ventilation TTC = totalPrice, corrections
+  comprises) ; `accountingCode`/`printMode` recopiés sur les remises qui les portent,
+  absents des autres.
+
 ## H. Résolution des prix & lignes standard
 
+> **Note A5 (quantités BigDecimal)** : `Item.quantity` est désormais un `BigDecimal`, interpolé
+> brut dans le libellé `Standard: …, Qty=<q>`. Une quantité entière obtenue à l'échelle 0 s'affiche
+> **sans `.0`** (`Qty=1`, `Qty=2` — cas H1/H6, J2, J7) ; certains chemins arithmétiques (le reliquat
+> d'un MixedBundle en J10) produisent une échelle 1 et affichent `Qty=2.0`. Chaque test épingle la
+> valeur réellement sérialisée.
+
 - **H1 Ligne simple** : 1 × lait `…002` sur `0101` → une offre
-  `Standard: EAN=3300000000002, Qty=1.0`, total 3.00, ventilation TVA 20 %.
+  `Standard: EAN=3300000000002, Qty=1`, total 3.00, ventilation TVA 20 %.
 - **H2 Chevauchement & priorité** : deux prix DEFAULT valides simultanément, priorités
   0 et 1 → le **1** gagne (`order by priority DESC`) ; créer une égalité de priorité →
   gagnant indéterminé, test documentaire (l'assertion accepte l'un OU l'autre et le
@@ -310,6 +383,11 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   standard, la ligne est valorisée au prix `BASE_FOR_DISCOUNT` (+10 % dans le seed) —
   l'écart de total prouve la bascule. C'est LE comportement le plus contre-intuitif du
   moteur : le prix de référence change quand une remise existe.
+
+- **H9 `SRP_FLOOR` n'est pas un prix de vente (extension 27/09)** : un article dont
+  la SEULE ligne de prix active est `SRP_FLOOR` → « No active price found » (le
+  plancher ne tarife jamais) ; avec un `DEFAULT` actif à côté → c'est le `DEFAULT`
+  qui valorise, quelle que soit la priorité de la ligne `SRP_FLOOR`.
 
 ## I. Gestes manuels (portés par la ligne)
 
@@ -353,10 +431,14 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   produits chers + 2 pas chers (4 unités = 2 lots différents) → les applications
   partagent les mêmes listes vidées entre lots → **total faux**. Test NÉGATIF gravant
   le symptôme exact pour le diagnostic (montant observé ≠ somme attendue).
-- **J6 Configurations toxiques** : `quantityToPay: 0` — acceptée par l'offre, refusée
-  par la factory d'upsell (`minimum: 1`) → **500 systématique sur tout panier du
-  magasin** ; `quantityToPay: 0` ET `discountedQuantity: 0` → division par zéro → 500.
-  L'offre empoisonne le magasin entier : à graver.
+- **J6 Configurations toxiques (fail-closed A2)** : `quantityToPay: 0` (+ `discountedQuantity: 1`)
+  — acceptée par l'offre, refusée par la factory d'upsell (`minimum: 1`) : depuis A2 la
+  `ConfigurationException` est **skippée et tracée**, la valorisation répond **200** et la trace
+  `STATUS_SUCCESS` porte `Skipped configurations: … Error validating offer: …` (J6A, magasin 0106).
+  En revanche `quantityToPay: 0` ET `discountedQuantity: 0` → `bundleSize = 0` → **division par zéro
+  à l'application** (`ArithmeticException "/ by zero"`, pas une `ConfigurationException`) → **500**
+  qui subsiste (J6B, magasin 0107). A2 désamorce le déni de service de config mais expose l'erreur
+  d'exécution jusque-là masquée.
 - **J7 Bundle prix fixe & substitut** : café `…004` + biscuits `…013`
   (`PROMO_COFFEE_PACK`, 4.50) → `MixedBundle: PROMO_COFFEE_PACK x1 for 4.50€` ; café +
   chips `…014` (substitut) → **4.50 aussi** ; café seul → aucun applier, panier au
@@ -366,12 +448,12 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   le taux effectif est **dérivé des produits couverts** (`TTC/HT − 1`), le `vatRate`
   déclaré n'est qu'un repli — la ventilation TVA du ticket reste aux taux réels
   (croiser G6). ⚠ MAIS voir J9 avant de seeder.
-- **J9 Bundle `discount` = poison global** : une offre `MIXED_BUNDLE` en mode
+- **J9 Bundle `discount` = config invalide (fail-closed A2)** : une offre `MIXED_BUNDLE` en mode
   `discount` est valide pour l'offre mais **rejetée par le schéma divergent de
-  `MixedBundleUpsellAdvantageFactory`** (exige `bundlePrice`, interdit `discount`) →
-  `createDiscountAppliers` s'exécutant en premier, **toute valorisation du magasin part
-  en 500** `Error building appliers from factory: Error validating offer: …`. Test
-  négatif prioritaire : c'est un déni de service par configuration.
+  `MixedBundleUpsellAdvantageFactory`** (exige `bundlePrice`, interdit `discount`) → depuis A2 cette
+  `ConfigurationException` est **skippée et tracée** : la valorisation du magasin répond **200** et la
+  trace `STATUS_SUCCESS` porte `Skipped configurations: … Error validating offer: …`. Plus de déni de
+  service par configuration.
 - **J10 Capacité de lots** : `maxBundles = min` par composant (troncature) ;
   consommation EAN principal d'abord, puis substituts **dans l'ordre déclaré** — prouver
   avec 5 cafés + 2 biscuits + 1 chips → 2 lots max, chips consommée en dernier recours.
@@ -409,9 +491,11 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   applied 2 times ; qty 2 + 7 vignettes → 1 seule.
 - **K6 Vignette fixe non plafonnée** : `FIXED_AMOUNT` > prix du produit → remise
   intégrale, contribution négative — test négatif (croiser K2).
-- **K7 EAN inconnu dans `vignettes`** : `vignettes: {"9999999999999": 3}` → **NPE →
-  500**. Test négatif documentant (le `Collectors.toMap` ne tolère pas un produit
-  null).
+- **K7 EAN inconnu dans `vignettes`** : `vignettes: {"9999999999999": 3}` → depuis H5 le
+  constructeur `VignetteDiscountApplier` **filtre** un EAN dont `findByEan` renvoie null (au lieu de
+  laisser `Collectors.toMap` NPE) : la valorisation répond **200**, **aucun avantage vignette** n'est
+  produit, la trace `STATUS_SUCCESS` ne porte aucune erreur (un EAN vignette erroné est une saisie
+  utilisateur, pas un 500).
 - **K8 `vignettesRequired: 0`** : schéma l'accepte (`minimum: 0`) → division entière
   par zéro dès qu'un produit du catalogue est couvert → 500. Config toxique à graver
   (croiser J6).
@@ -516,6 +600,11 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   d'un id sans payload → formulaire vide `{}` **sans message** (échec silencieux à
   figer) ; bouton littéral `Value this basket`.
 
+- **N8 Raisons d'arbitrage tracées (extension 27/09)** : refus de cumul, limites,
+  `BUDGET_EXHAUSTED`/`GROUP_BUDGET_EXHAUSTED`, configurations skippées (trigger
+  inconnu, famille inconnue, variable de message inconnue) — chaque refus/écartement
+  de R→W laisse sa raison lisible dans la trace de la valorisation concernée.
+
 ## O. UI d'administration — offres, workbench, lookups
 
 - **O1 Liste des offres** : filtres `q` (contains sur code), `type` (strict, options =
@@ -576,13 +665,29 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   (plus d'écrasement silencieux). Une offre créée via le formulaire pour chacun des 8 types
   se valorise sans 500.
 
+- **O8 Formulaire schéma-driven à jour (extension 27/09)** : le formulaire d'offres
+  rend les nouveaux fragments sans code dédié — `trigger`, `arbitration`, `budget`,
+  `compliance`, `accountingCode`, `printMode`, `targetFamilyCodes`, `excludedEans` —
+  pour un type qui les porte ; bascule Form/JSON fidèle dans les deux sens.
+- **O9 Import de liste d'EANs par fichier (extension 27/09)** : bouton du widget
+  `ean-list` — fichier texte/CSV une colonne : liste remplie, doublons dédupliqués,
+  BOM strippé, binaire refusé proprement, rien n'est envoyé au serveur.
+- **O10 Écrans nouveaux (extension 27/09)** : `/ui/egalim-ceilings` lecture seule
+  (VIEWER ; « — » pour non plafonné ; anonyme refusé) ; `/ui/consumptions` (MANAGER ;
+  agrégats = CSV téléchargé, X5) ; écran d'imports à NEUF domaines avec préselection
+  par nom de fichier (`vat` → VAT_RATES, `egalim` → EGALIM_REGIMES) ; section
+  « Périmètre » de l'écran utilisateurs (Y1–Y4, sémantique stricte des cases).
+
 ## P. Coutures transverses (2e passe d'audit)
 
 - **P1 Double exécution des appliers** : chaque applier est rejoué « à blanc » pour le
   score d'efficacité avant l'application réelle → prouver l'idempotence observable
-  (vignettes : solde restauré, résultat identique en répétant le même appel 10×) ;
-  offre dont le montant à blanc vaut 0 → division par zéro dans le score
-  (`Infinity`/`NaN`) — comportement observé à figer.
+  (vignettes : solde restauré, résultat identique en répétant le même appel 10×) ; les seules
+  offres qui pourraient annuler le montant sont rejetées par leur schéma AVANT de scorer
+  (`bundlePrice:0.0` viole `exclusiveMinimum:0`, N+M `quantityToPay:0` viole `minimum:1`) : depuis
+  A2 elles sont **skippées fail-closed** → valorisation **200** + trace `STATUS_SUCCESS`
+  `Skipped configurations: … Error validating offer: …`, la division reste code mort masqué par les
+  schémas (plus de 500 par configuration).
 - **P2 Le panier maximal** : panier « ValuationClient » complet (7 lignes, livraison
   Seclin, consigne, vignettes, N+M, bundle+substitut, deux vouchers, TR) → l'ordre
   d'application découle des scores (geste MAX → vignette 10 → vouchers → franco −1 →
@@ -590,9 +695,10 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
   apparaît une fois. C'est le scénario de non-régression de référence.
 - **P3 Spécification d'offre — deux chemins d'échec** : JSON invalide refusé **au
   persist** (`Failed to parse specification for Offer …`) ; JSON valide mais non
-  conforme au schéma stocké quand même (import CSV sans validation de schéma !) puis
-  refusé **à la valorisation** (500 `Error validating offer: …`) — prouver que l'UI
-  (qui valide au schéma) et le CSV (qui ne valide pas) divergent.
+  conforme au schéma stocké quand même (import CSV sans validation de schéma !) puis, depuis A2,
+  **skippé fail-closed à la valorisation** (200 + trace `STATUS_SUCCESS` `Skipped configurations: …
+  Error validating offer: …`) — l'UI (qui valide au schéma) et le CSV (qui ne valide pas) divergent
+  toujours, mais le moteur met la config en quarantaine par panier sans faire échouer la valorisation.
 - **P4 Index `Offer.eans`** : la liste d'EAN est extraite récursivement de la spec
   (toute clé finissant par `ean`/`eans` : `targetEans`, `contents[].ean`,
   `substituteEans`) → pilote le filtre EAN de la liste UI et le ciblage N+M/bundle ;
@@ -736,9 +842,232 @@ N7 · O7 · P8) + inventaire Q (16 erreurs moteur, 14 libellés d'application, ~
 messages GraphQL, 18 messages d'import, ~60 messages UI).
 
 Priorité d'exécution suggérée : **G/H (le contrat de l'API et des prix — l'argent)** →
-J/K (offres & remises, dont les 3 poisons de configuration J6/J9/K8) → P2 (le panier
+J/K (offres & remises : configs invalides désormais skippées fail-closed en 200 — J6A/J9/P1/P3 —
+sauf les vraies erreurs d'exécution qui restent en 500 — J6B division par zéro, K8) → P2 (le panier
 maximal de non-régression) → N (traces, l'observabilité) → D/E/F (référentiel) → le
 reste. Les scénarios [P] demandent un lancement avec profil prod-like (variables
 d'environnement + `app.password-change.enforced=true`) ; les [W] demandent un
 navigateur piloté (Playwright/Selenium) avec neutralisation du `beforeunload` du
 workbench et tolérance à l'auto-refresh 1 s des valuations.
+
+---
+
+# Extension du 27/09/2026 — chantiers triggers/arbitrage, C3, promotions carte, gardes, budgets, ciblage, sorties enrichies
+
+> Même convention que le tronc : parcours → attendus vérifiables. Les libellés cités
+> entre guillemets typographiques sont ceux des **specs** (`spec-*.md` à la racine) ;
+> comme pour les 4xx/5xx du tronc, calibrer une fois le littéral exact sur le code
+> avant toute assertion textuelle. Trois garde-fous propres à cette extension :
+> les blocs nouveaux (`egalim[]`, `srp[]`, `messages[]`) sont **absents** (clé
+> inexistante, pas `null`) quand leur configuration n'est pas in-force — asserter
+> l'absence, c'est le critère de régression ; toute config invalide est **skippée
+> fail-closed** (200 + trace `Skipped configurations`, patron P) ; et les scénarios
+> dépendant de l'heure passent par le `DateTimeProvider` pilotable, jamais par
+> l'horloge réelle.
+
+## R. Déclencheurs & arbitrage (C1/C2)
+
+- **R1 Montant minimum, borne inclusive** : offre `TICKET_DISCOUNT` avec condition
+  `MINIMUM_AMOUNT` scope `TICKET` seuil 50 → panier à 49,99 : pas de remise ;
+  à 50,00 : remise (compareTo ≥ 0, jamais d'epsilon).
+- **R2 Quantité minimum au poids** : condition `MINIMUM_QUANTITY` seuil 3 sur une
+  liste — trois lignes de 1,000 kg déclenchent ; 2,999 kg non (BigDecimal exact).
+- **R3 Code coupon** : offre à condition `COUPON_CODE` → panier sans `couponCodes` :
+  rien ; avec le code : appliquée ; avec un code inconnu de toute offre : toléré,
+  aucun effet, aucune erreur.
+- **R4 `conditions[]` = ET implicite** : deux conditions (montant + coupon), une seule
+  satisfaite → rien ; les deux → appliquée.
+- **R5 Panier ouvert / fermé** : `closed:false` → les avantages AT_TOTAL (remise
+  ticket, promotions carte, gardes) ne s'appliquent PAS ; `closed:true` et champ
+  ABSENT → ils s'appliquent (absent ⇒ fermé, l'e-commerce est fermé par nature).
+- **R6 Politique d'arbitrage** : deux avantages non cumulables sur la même assiette →
+  la priorité basse passe, le refus de l'autre est tracé ; `exclusionGroups` partagé →
+  un seul des deux ; `maxApplicationsPerTicket:1` respecté ;
+  `consumesContributors:true` → les porteurs consommés privent d'assiette l'avantage
+  suivant (ordre = priorité, patron « priorité pilote la consommation »).
+- **R7 Trigger invalide = fail-closed** : `conditions:[{"kind":"UNKNOWN"}]` →
+  configuration skippée, valorisation 200, trace `Skipped configurations`.
+
+## S. Mécaniques de remise C3 & paliers
+
+- **S1 Prix nouveau** : `NEW_PRICE_DISCOUNT` cible → l'écart prix affiché−prix cible
+  sort en remise ; prix cible ≥ prix affiché → rien, silencieux.
+- **S2 Remise ticket** : % sur le net du ticket, plafonnée — jamais de total négatif.
+- **S3 Montant par article** : x € par unité éligible, pesée compte 1.
+- **S4 Article offert** : sélection parmi les CONTRIBUTEURS du trigger, égalité
+  départagée par EAN, quantité non entière exclue de la sélection, une fois par
+  ticket.
+- **S5 Remboursement TVA** : ligne à 20 % → remise = part de TVA (Σ TTC−HT), avantage
+  `VAT Refund: <code>`. ⚠ ÉCART spec/code : la ventilation **N'est PAS gelée** — le
+  remboursement est une remise réelle qui **nette** la ventilation (le taux réel 20 %
+  est conservé, jamais un taux mélangé 0,0000, et Σ ventilation TTC = `totalPrice`), et
+  la bascule DEFAULT→BASE_FOR_DISCOUNT s'y ajoute ; le « la ventilation ne bouge jamais »
+  de `spec-c3-mecaniques.md` §S5 est contredit par le code. Invariants réels asservis.
+- **S6 Anti-gaspi** : `bestBeforeDate` par ligne — deux lots du même EAN = deux
+  lignes, remises différentes ; date dépassée = tranche la plus stricte ; ligne sans
+  date = pas de remise.
+- **S7 Paliers** : `TIERED_DISCOUNT` métrique `QUANTITY` + `perProduct:true` →
+  paliers par EAN ; `PER_MULTIPLE` → multiples exacts (BigDecimal) ; tranches
+  chevauchantes ou vides à l'import → config rejetée/skippée fail-closed.
+
+## T. Promotions carte (configuration portée par le panier)
+
+- **T1 AMOUNT nominal** : `cardPromotions:[{ean, promotionType:"AMOUNT", value:0.50}]`,
+  ligne au poids 0,738 kg → remise 0,50 (la pesée compte UN), plafonnée au net de la
+  ligne ; sortie type `Card Promotion: CARD_PROMO:<ean>`, `cardNumber` repris au
+  détail.
+- **T2 PERCENT sur le net** : promotion magasin cumulable d'abord, puis PERCENT carte
+  calculé sur le net résiduel (jamais le brut).
+- **T3 CAGNOTTE ignorée** : entrée `benefit:"CAGNOTTE"` → RIEN dans `advantages[]`
+  (défense anti-double : c'est le monopole imfid).
+- **T4 Doublon d'EAN** : deux entrées même EAN → ⚠ CALIBRÉ **500** `FAILED`
+  `Duplicate card promotion for EAN '<ean>'` (l'unicité n'est pas exprimable au schéma du
+  panier : le contrôle lève une `IllegalArgumentException` dans
+  `CardPromotionDiscountFactory.buildAppliers` → `engine.evaluate()`, après la validation,
+  et ressort en 500 tracé — pas le 400 qu'annonçaient le tronc et `spec-card-promotions.md`
+  §2.3). Erreur d'appelant, jamais d'arbitrage silencieux.
+- **T5 Bornes de valeur** : PERCENT `value:1.5` → 400 (max 1) ; `value:0` → 400
+  (exclusiveMinimum) ; AMOUNT négatif → 400.
+- **T6 EAN absent du panier** : promotion sans assiette → rien, silencieux.
+- **T7 Arrondi unique** : deux lignes du même EAN → une remise, base sommée, arrondi
+  une fois, résidu sur la dernière ligne ; Σ quotes-parts = montant affiché.
+- **T8 Régression** : panier identique sans `cardPromotions` → réponse bit à bit
+  identique au tronc.
+
+## U. Gardes de conformité — EGAlim & SRP
+
+- **U1 Correction EGAlim nominale** : produit `FOOD_34`, remises cumulées 50 % →
+  contre-avantage négatif `EGAlim Adjustment: <code>` remontant la ligne à 34 %
+  exactement (plafond autorisé arrondi au centime INFÉRIEUR) ; bloc `egalim[]` :
+  une entrée PAR ligne initiale, `remainingBeforeCap: 0.00` sur la ligne corrigée,
+  renseigné sur les conformes, ABSENT pour `EXEMPT`.
+- **U2 Régimes** : `DPH_40` corrigé à 40 % ; `EXEMPT` jamais corrigé (70 % de remise
+  légale).
+- **U3 Exclusions structurelles** : remise anti-gaspi 60 % sur périssable + geste
+  manuel → `excludedGenerosity` les porte, générosité comptée 0, pas de correction.
+- **U4 Exemption par promotion** : configuration `compliance.egalimExempt:true` →
+  ses remises comptent en exclu (cas soldes).
+- **U5 Ciblage PDV du garde** : configuration `EGALIM_GUARD` ciblée PDV A → panier
+  PDV B : ni correction ni bloc `egalim[]`, réponse bit à bit identique au tronc.
+- **U6 Panier ouvert** : `closed:false` → ni correction ni record (AT_TOTAL).
+- **U7 Plafonds administrés** : flux `EGALIM_REGIMES` abaisse FOOD_34 à 0,3000 →
+  la correction suivante calcule à 30 % (la donnée, pas le code) ; cap > 1 dans le
+  CSV → ligne rejetée avec message.
+- **U8 SRP nominal** : ligne à plancher `SRP_FLOOR` 11,00, net après remises 10,00 →
+  correction +1,00 `SRP Adjustment: <code>`, net final = plancher ; bloc `srp[]`
+  avec `marginAboveFloor` sur les lignes contrôlées conformes ; article SANS ligne
+  `SRP_FLOOR` : non contrôlé, absent du record.
+- **U9 Ordre des gardes** : EGAlim corrige d'abord (MAX−1), SRP verrouille ensuite
+  (MAX) — sur un même ticket les deux records sont cohérents entre eux et avec le
+  total.
+- **U10 `srpExempt`** : la ligne remisée par une configuration exemptée passe sous le
+  plancher sans correction (soldes), tracé.
+- **U11 Écrêtage tracé (geste manuel)** : `manualDiscountAmount` 1,00 sur `…016`
+  (rayon 2,40, plancher 2,40) → net 1,40 sous le plancher : le garde écrête et
+  l'entrée `srp[]` dit POURQUOI pas plus — `reasonCode: SRP_FLOOR_CLAMPED`,
+  `correction` +1,00, `requestedDiscount` (2,64 − 1,40 = 1,24) et `grantedDiscount`
+  (2,64 − 2,40 = 0,24) mesurés sur le prix de vente de référence.
+- **U12 Paliers d'alerte** : `SRP_GUARD` porte `warningThresholds:[0.5,0.8]` ; remise
+  20 % sur le jambon EXEMPT `…008` (rayon 2,40, plancher 1,80, référence 2,64) →
+  descente dans la bande d'alerte SANS franchir le plancher : entrée `srp[]`
+  `reasonCode: SRP_MARGIN_WARNING`, `warningThreshold` et `descentFraction`
+  renseignés, AUCUNE correction, AUCUN `SRP Adjustment`. Trois niveaux distincts :
+  accordé (rien), averti (U12), écrêté (U8/U11).
+- **U13 Dérogation « produit dégradé »** : la remise 40 % qui écrêtait `…016` en U8,
+  mais la ligne porte `srpOverride:true` + `srpOverrideReason` → le plancher est
+  contourné (ni correction ni `SRP Adjustment`), le contournement est tracé dans
+  `srp[]` (`reasonCode: SRP_OVERRIDE`, `overrideReason` recopié) pour le journal
+  électronique et les exports. Distinct de `compliance.srpExempt` (exemption de
+  l'article), ici ponctuel sur une ligne du ticket.
+
+## V. Groupes budgétaires & consommation
+
+- **V1 Ingestion nominale** : `POST /consumptions` (ADMIN ; MANAGER → 403) SALE avec
+  deux avantages → compteurs `(offerCode, storeCode)` incrémentés en montant ET en
+  tickets.
+- **V2 Idempotence** : rejeu strict du même `(storeCode, ticketId, direction)` →
+  200 `duplicate:true`, compteurs INCHANGÉS.
+- **V3 Annulation** : `CANCELLATION` symétrique → compteurs décrémentés, l'avantage
+  redevient applicable ; CANCELLATION sans SALE préalable → acceptée (relais dans le
+  désordre), tracée.
+- **V4 Budget d'offre épuisé** : `maxAmount 10`, consommation 9 → ticket à 1,50 de
+  remise APPLIQUÉ (dépassement borné : jamais de remise partielle) ; ticket suivant :
+  avantage absent, refus tracé `BUDGET_EXHAUSTED` ; `maxApplications 2` → 3e ticket
+  sans l'avantage.
+- **V5 Enveloppe de groupe** : deux offres du même `BUDGET_GROUP` — la consommation
+  de l'une épuise le droit des deux (`GROUP_BUDGET_EXHAUSTED`) ; offre budgétée ET
+  membre d'un groupe → le plus contraint refuse.
+- **V6 `perStore`** : PDV A épuisé, PDV B vierge → refusé en A, appliqué en B ;
+  enveloppe globale → la somme tous PDV contrôle.
+- **V7 Période de groupe** : groupe hors `validFrom`/`validTo` → ses offres ne sont
+  plus servies par les finders in-force.
+- **V8 Flux** : `POST /budget-groups/import` nominal + idempotence checksum ;
+  `OFFERS` avec `BUDGET_GROUP_CODE` inconnu → ligne rejetée avec message.
+- **V9 Suivi** : GraphQL `budgetStatus`/`groupBudgetStatus` (MANAGER) → consommé /
+  restant / `byStore` cohérents avec les déclarations ; compteur en erreur simulée →
+  l'avantage S'APPLIQUE quand même (fail-open borné), trace posée.
+- **V10 Régression** : aucun budget nulle part → réponse bit à bit identique.
+
+## W. Ciblage, créneaux horaires & sorties enrichies
+
+> ✅ `spec-ciblage-saisie.md` est désormais IMPLÉMENTÉE (chantier ciblage à la saisie) :
+> fragments partagés `targetFamilyCodes`/`excludedEans` injectés là où `targetEans`
+> existe (union sous-arbre familles − exclusions, résolus à l'évaluation via le helper
+> commun `EngineTrait.resolveTargetEans`, famille inconnue → skip fail-closed) ;
+> exclusions PDV `excludedStores`/`excludedStoreGroups` sur `Offer` (colonnes OFFERS
+> `EXCLUDED_STORE_CODES`/`EXCLUDED_STORE_GROUP_CODES`, code inconnu → ligne rejetée ;
+> soustraites par les finders in-force après résolution des groupes) ; bouton d'import
+> de fichier du widget `ean-list` (`schema-form.js`, parsing 100 % client). W1–W4 sont
+> couverts (GroupWIT), plus un contrôle de déterminisme 50×.
+
+- **W1 Familles vivantes** : offre ciblant la famille F → article de F et d'une
+  sous-famille couverts ; article AJOUTÉ à F par un ré-import ensuite → couvert
+  SANS retoucher l'offre (résolution à l'évaluation, jamais compilée).
+- **W2 L'exclusion prime** : `excludedEans` retire un EAN pourtant présent dans
+  `targetEans` ET dans une famille ciblée.
+- **W3 Famille inconnue** : code inexistant → configuration skippée fail-closed,
+  200 + trace.
+- **W4 Exclusion de PDV** : `EXCLUDED_STORE_CODES` sur l'offre → non servie dans ce
+  PDV même si un groupe ciblé le contient.
+- **W5 Créneau horaire** : condition `TIME_WINDOW` 17:00–19:00 → 18:30 (via
+  `DateTimeProvider`) déclenché, 12:00 non ; fenêtre 22:00–02:00 : 23:50 et 00:10
+  dedans, 12:00 dehors ; `days` respecté ; composée en ET avec `MINIMUM_AMOUNT`
+  (happy hour conditionnelle).
+- **W6 Champs recopiés** : `accountingCode` et `printMode` ressortent tels quels sur
+  la `DiscountApplication` ; absents de la spec → sortie bit à bit identique.
+- **W7 Offres message** : `MESSAGE` `WHEN_TRIGGERED` → présent dans `messages[]`
+  avec variables résolues quand le seuil est atteint, absent sinon ;
+  `BELOW_TRIGGER` → `{{missingAmount}}` exact au centime sous le seuil, absent
+  au-dessus ; variable inconnue → config skippée ; aucun message applicable →
+  PAS de clé `messages` dans la réponse.
+
+## X. Exports financiers
+
+- **X1 Détail** : `GET /consumptions/export?from=&to=&format=csv` → colonnes exactes
+  `TICKET_ID|STORE_CODE|FINALIZED_AT|DIRECTION|OFFER_CODE|OFFER_TYPE|BUDGET_GROUP_CODE|EAN|AMOUNT`,
+  bornes de période respectées, montants échelle 2 plain ; le même contenu en
+  `format=json`.
+- **X2 Agrégats** : `groupBy=offer` → sommes exactes, CANCELLATION nettée dans les
+  agrégats mais lignes négatives distinctes dans le détail.
+- **X3 Vérité comptable** : offre supprimée après consommation → la ligne sort,
+  `OFFER_TYPE` et `BUDGET_GROUP_CODE` vides.
+- **X4 Détail article** : déclaration portant `lines:[{ean,amount}]` → EAN renseigné ;
+  sans → EAN vide, totaux identiques.
+- **X5 RBAC** : VIEWER → 403 sur l'endpoint ET l'écran `/ui/consumptions` ; l'écran
+  MANAGER affiche des agrégats égaux au CSV téléchargé avec les mêmes filtres.
+
+## Y. Droits par PDV & durcissement web
+
+- **Y1 Périmètre PDV** : utilisateur `storeScope=[0101]` → liste des offres filtrée
+  (intersection) ; création d'une offre ciblant `0102` → refus explicite côté
+  serveur, en UI ET en GraphQL (le filtre d'écran n'est qu'un confort) ; retirer un
+  PDV hors périmètre d'une offre mixte : accepté ; en ajouter un : refusé.
+- **Y2 Mécaniques autorisées** : `allowedOfferTypes=[TICKET_DISCOUNT]` → le
+  formulaire ne propose que ce type, la création d'un `N+M` en direct → refus
+  serveur.
+- **Y3 Menus masqués** : entrée absente du layout ET accès direct à l'URL refusé.
+- **Y4 Régression** : les trois champs vides → comportement d'aujourd'hui bit à bit
+  (listes, formulaires, GraphQL).
+- **Y5 CSRF** : formulaire UI sans jeton → 403 ; avec → 200 ; les clients machine en
+  Basic (`/valuation`, les 9 imports, `/consumptions`) passent SANS jeton ;
+  `SameSite=Lax` toujours posé (défense en profondeur, pas remplacée).
