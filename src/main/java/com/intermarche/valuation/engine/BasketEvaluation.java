@@ -176,7 +176,7 @@ public class BasketEvaluation {
             // nothing is a configuration error, not a NullPointerException raised later
             // when the (null) store is dereferenced for pricing.
             if (this.store == null) {
-                throw new IllegalStateException(
+                throw new ReferentialException(
                         "Configuration Error: Store not found for code '" + this.basket.storeCode + "'");
             }
         } else {
@@ -975,6 +975,14 @@ public class BasketEvaluation {
         public AmountEvaluation amount;
 
         /**
+         * The catalog name of the product (digital sheet DG-01-01-01), read from the product the
+         * engine already resolved to price the slice; omitted when the slice carries no resolved
+         * product (an unknown article valued on its pushed price alone).
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public String label;
+
+        /**
          * Default constructor for JSON serialization.
          */
         public Item() {
@@ -991,6 +999,7 @@ public class BasketEvaluation {
             this.produceEan = source.produceEan;
             this.quantity = source.quantity == null ? BigDecimal.ZERO : source.quantity;
             this.amount = amount;
+            this.label = source.product == null ? null : source.product.name;
         }
     }
 

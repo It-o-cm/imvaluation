@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
+import com.intermarche.valuation.domain.ProductType;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.VatRate;
 import com.intermarche.valuation.domain.util.DateTimeProvider;
@@ -200,6 +201,11 @@ public class Basket {
               { "required": ["produceEan"] },
               { "required": ["pricePerUnitExclTax", "pricePerUnitInclTax", "vatRate"] }
             ],
+            "dependencies": {
+              "pricePerUnitExclTax": { "required": ["pricePerUnitInclTax", "vatRate"] },
+              "pricePerUnitInclTax": { "required": ["pricePerUnitExclTax", "vatRate"] },
+              "vatRate": { "required": ["pricePerUnitExclTax", "pricePerUnitInclTax"] }
+            },
             "properties": {
               "lineId": {
                 "type": "string",
@@ -684,15 +690,52 @@ public class Basket {
 
         /**
          * Get Product by EAN with validation.
+         * <p>
+         * An article the referential does not know is valued all the same when the line pushes
+         * its complete price (digital sheet, spec §3 and §4): the pushed price is authoritative
+         * and the referential is not needed to price it, so the line gets a TRANSIENT product
+         * carrying only its EAN — never persisted, without label nor family, which the answer
+         * then states as {@code null}. Without a pushed price an unknown article stays a
+         * configuration error.
          *
-         * @return The validated Product.
+         * @return The validated Product, or the transient product of an unknown pushed article.
+         * @throws IllegalStateException when the article is unknown and its price is not pushed.
          */
         @JsonIgnore
         public Product getProduct() {
             if (this.product == null) {
-                this.product = getProduct(this.produceEan, "Configuration Error: Product not found for EAN '%s'");
+                Product known = Product.findByEan(this.produceEan);
+                if (known == null && !hasPushedPrice()) {
+                    throw new ReferentialException(String.format(
+                            "Configuration Error: Product not found for EAN '%s'", this.produceEan));
+                }
+                this.product = known != null ? known : unknownArticle(this.produceEan);
             }
             return this.product;
+        }
+
+        /**
+         * Whether the line pushes its complete price: tax excluded, tax included and VAT rate.
+         *
+         * @return true when the three fields are present.
+         */
+        @JsonIgnore
+        public boolean hasPushedPrice() {
+            return this.pricePerUnitExclTax != null && this.pricePerUnitInclTax != null && this.vatRate != null;
+        }
+
+        /**
+         * Builds the transient product of an article the referential does not know: its EAN,
+         * sold by the unit as its pushed unit price states, nothing else.
+         *
+         * @param ean the article's EAN.
+         * @return the product, never persisted.
+         */
+        private static Product unknownArticle(String ean) {
+            Product unknown = new Product();
+            unknown.ean = ean;
+            unknown.productType = ProductType.UNIT;
+            return unknown;
         }
 
         /**
@@ -721,7 +764,7 @@ public class Basket {
          */
         public Price getPrice(Store store, PriceUsage priceUsage) throws IllegalStateException {
             // 1. Check if pricing info is defined directly on the item (Manual Pricing Override)
-            if (this.pricePerUnitExclTax != null && this.pricePerUnitInclTax != null && this.vatRate != null) {
+            if (hasPushedPrice()) {
                 Price manualPrice = new Price();
                 manualPrice.priceExcludingTax = this.pricePerUnitExclTax;
                 manualPrice.priceIncludingTax = this.pricePerUnitInclTax;
@@ -755,7 +798,7 @@ public class Basket {
                 price = Price.findActivePriceAtDate(product.id, store.id, dateToUse, PriceUsage.DEFAULT);
             }
             if (price == null) {
-                throw new IllegalStateException(String.format(
+                throw new ReferentialException(String.format(
                         "Configuration Error: No active price found for Product '%s' (ID: %d) in Store '%s' (Checked at date: %s)",
                         product.name, product.id, store.code, dateToUse
                 ));
