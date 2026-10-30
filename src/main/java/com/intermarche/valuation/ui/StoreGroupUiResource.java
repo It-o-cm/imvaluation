@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intermarche.valuation.domain.AppUser;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
+import com.intermarche.valuation.i18n.Messages;
 import io.quarkus.qute.CheckedTemplate;
 import io.quarkus.qute.TemplateInstance;
 import io.smallrye.common.annotation.RunOnVirtualThread;
@@ -52,6 +53,12 @@ public class StoreGroupUiResource {
      * Mapper used to exchange the hierarchy with the browser.
      */
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /**
+     * Localised interface labels for the workbench error messages shown back in the screen.
+     */
+    @jakarta.inject.Inject
+    Messages messages;
 
     /**
      * Type-safe declarations of the Qute templates used by this resource.
@@ -110,7 +117,7 @@ public class StoreGroupUiResource {
         LOGGER.debug("Entering method save");
         if (payload == null || payload.groups == null) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(Map.of("error", "Nothing to save.")).build();
+                    .entity(Map.of("error", messages.get("storeGroups.error.nothingToSave"))).build();
         }
         String error = apply(payload);
         if (error != null) {
@@ -136,7 +143,7 @@ public class StoreGroupUiResource {
         //    reference another one created in the same submission.
         for (GroupPayload declared : payload.groups) {
             if (declared.code == null || declared.code.isBlank()) {
-                return "A group is missing its code.";
+                return messages.get("storeGroups.error.missingCode");
             }
             String code = declared.code.trim();
             String name = declared.name == null || declared.name.isBlank() ? code : declared.name.trim();
@@ -174,7 +181,7 @@ public class StoreGroupUiResource {
                 for (String code : declared.storeCodes) {
                     Store store = Store.findByCode(code);
                     if (store == null) {
-                        return "Unknown store code: " + code;
+                        return messages.format("storeGroups.error.unknownStore", code);
                     }
                     stores.add(store);
                 }
@@ -184,7 +191,7 @@ public class StoreGroupUiResource {
                 for (String code : declared.childCodes) {
                     StoreGroup child = byCode.get(code);
                     if (child == null) {
-                        return "Unknown group code: " + code;
+                        return messages.format("storeGroups.error.unknownGroup", code);
                     }
                     children.add(child);
                 }
@@ -200,7 +207,7 @@ public class StoreGroupUiResource {
         //    the end state is not.
         for (StoreGroup group : byCode.values()) {
             if (reaches(group, group, new HashSet<>())) {
-                return "Group '" + group.code + "' ends up containing itself.";
+                return messages.format("storeGroups.error.cycle", group.code);
             }
         }
         return null;

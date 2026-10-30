@@ -136,6 +136,46 @@ public class Offer extends BaseEntity {
     )
     public Set<StoreGroup> storeGroups = new HashSet<>();
 
+    /**
+     * The set of Stores this offer is EXCLUDED from (spec-ciblage-saisie §3).
+     * <p>
+     * Targeting-level, not specification-level: the in-force finders subtract these after the
+     * store-group resolution, so an offer served through a targeted group is still withheld from an
+     * excluded store. Empty by default — an offer without exclusions behaves exactly as today.
+     */
+    @ManyToMany
+    @JoinTable(
+            name = "offer_excluded_stores",
+            joinColumns = @JoinColumn(name = "offer_id"),
+            inverseJoinColumns = @JoinColumn(name = "store_id")
+    )
+    public Set<Store> excludedStores = new HashSet<>();
+
+    /**
+     * The set of StoreGroups this offer is EXCLUDED from (spec-ciblage-saisie §3): a store in any
+     * of these groups is not served the offer, even if another targeted group contains it. Empty by
+     * default.
+     */
+    @ManyToMany
+    @JoinTable(
+            name = "offer_excluded_store_groups",
+            joinColumns = @JoinColumn(name = "offer_id"),
+            inverseJoinColumns = @JoinColumn(name = "store_group_id")
+    )
+    public Set<StoreGroup> excludedStoreGroups = new HashSet<>();
+
+    /**
+     * The budget group this offer belongs to, or null when the offer carries no group (spec §2).
+     * <p>
+     * An offer out of any group is exactly what it is today. A grouped offer shares the group's
+     * common envelope and is bounded by the group's period — the finders below stop serving it
+     * once the group is out of period (spec §5.4). Joined by numeric id, resolved by business
+     * code at import time.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "budget_group_id")
+    public BudgetGroup budgetGroup;
+
     // --------------------------------------------------
     // Lifecycle Callbacks
     // --------------------------------------------------
@@ -307,12 +347,18 @@ public class Offer extends BaseEntity {
     }
 
     /**
-     * The in-force predicate shared by the engine finders: active, and inside the
-     * validity window at the given instant (null bounds are open).
+     * The in-force predicate shared by the engine finders: active, inside the offer's own
+     * validity window, AND — when the offer belongs to a budget group — inside the group's
+     * period at the given instant (null bounds are open). The group period bounds the offer's
+     * period, never the other way round (spec §5.4); the group is reached through the {@code bg}
+     * alias every finder LEFT JOINs, so an offer without a group ({@code bg is null}) is never
+     * filtered out.
      */
     private static final String IN_FORCE = " and o.active = true"
             + " and (o.validFrom is null or o.validFrom <= ?IN_FORCE_AT)"
-            + " and (o.validTo is null or o.validTo > ?IN_FORCE_AT)";
+            + " and (o.validTo is null or o.validTo > ?IN_FORCE_AT)"
+            + " and (bg is null or ((bg.validFrom is null or bg.validFrom <= ?IN_FORCE_AT)"
+            + " and (bg.validTo is null or bg.validTo > ?IN_FORCE_AT)))";
 
     /**
      * Finds the offers of a type linked to a store and in force at the given instant —
@@ -324,7 +370,7 @@ public class Offer extends BaseEntity {
      * @return A list of matching Offer entities.
      */
     public static List<Offer> findInForceByStoreAndType(Store store, String type, java.time.LocalDateTime at) {
-        return list("select distinct o from Offer o where exists (select 1 from o.stores s where s = ?1) and o.type = ?2"
+        return list("select distinct o from Offer o left join o.budgetGroup bg where exists (select 1 from o.stores s where s = ?1) and o.type = ?2"
                 + IN_FORCE.replace("?IN_FORCE_AT", "?3"), store, type, at);
     }
 
@@ -338,7 +384,7 @@ public class Offer extends BaseEntity {
      * @return A list of matching Offer entities.
      */
     public static List<Offer> findInForceByStoreGroupsAndType(Collection<StoreGroup> storeGroups, String type, java.time.LocalDateTime at) {
-        return list("select distinct o from Offer o where exists (select 1 from o.storeGroups g where g in ?1) and o.type = ?2"
+        return list("select distinct o from Offer o left join o.budgetGroup bg where exists (select 1 from o.storeGroups g where g in ?1) and o.type = ?2"
                 + IN_FORCE.replace("?IN_FORCE_AT", "?3"), storeGroups, type, at);
     }
 
@@ -354,7 +400,7 @@ public class Offer extends BaseEntity {
      * @return A list of matching Offer entities.
      */
     public static List<Offer> findInForceByEansAndStoreAndType(Collection<String> eans, Store store, String type, java.time.LocalDateTime at) {
-        return list("select distinct o from Offer o where exists (select 1 from o.eans e where e in ?1) and exists (select 1 from o.stores s where s = ?2) and o.type = ?3"
+        return list("select distinct o from Offer o left join o.budgetGroup bg where exists (select 1 from o.eans e where e in ?1) and exists (select 1 from o.stores s where s = ?2) and o.type = ?3"
                 + IN_FORCE.replace("?IN_FORCE_AT", "?4"), eans, store, type, at);
     }
 
@@ -370,8 +416,79 @@ public class Offer extends BaseEntity {
      * @return A list of matching Offer entities.
      */
     public static List<Offer> findInForceByEansAndStoreGroupsAndType(Collection<String> eans, Collection<StoreGroup> storeGroups, String type, java.time.LocalDateTime at) {
-        return list("select distinct o from Offer o where exists (select 1 from o.eans e where e in ?1) and exists (select 1 from o.storeGroups g where g in ?2) and o.type = ?3"
+        return list("select distinct o from Offer o left join o.budgetGroup bg where exists (select 1 from o.eans e where e in ?1) and exists (select 1 from o.storeGroups g where g in ?2) and o.type = ?3"
                 + IN_FORCE.replace("?IN_FORCE_AT", "?4"), eans, storeGroups, type, at);
+    }
+
+    /**
+     * Finds every in-force offer linked to a store, whatever its type — the type-agnostic variant
+     * of {@link #findInForceByStoreAndType(Store, String, java.time.LocalDateTime)}.
+     * <p>
+     * Introduced for the display valuation context (spec-valorisation-affichage-ecommerce §2bis):
+     * that endpoint resolves the whole in-force offer set of a store ONCE per call — across every
+     * type — then classifies and applies it to each product, instead of letting each offer type run
+     * its own finder per product. The in-force predicate is the very one the typed finders use.
+     *
+     * @param store The store entity.
+     * @param at    The instant the offers must be in force at.
+     * @return A list of every matching Offer entity, all types confounded.
+     */
+    public static List<Offer> findInForceByStore(Store store, java.time.LocalDateTime at) {
+        return list("select distinct o from Offer o left join o.budgetGroup bg where exists (select 1 from o.stores s where s = ?1)"
+                + IN_FORCE.replace("?IN_FORCE_AT", "?2"), store, at);
+    }
+
+    /**
+     * Finds every in-force offer linked to any of the store groups, whatever its type — the
+     * type-agnostic variant of
+     * {@link #findInForceByStoreGroupsAndType(Collection, String, java.time.LocalDateTime)}.
+     *
+     * @param storeGroups A list of StoreGroup entities.
+     * @param at          The instant the offers must be in force at.
+     * @return A list of every matching Offer entity, all types confounded.
+     */
+    public static List<Offer> findInForceByStoreGroups(Collection<StoreGroup> storeGroups, java.time.LocalDateTime at) {
+        if (storeGroups == null || storeGroups.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return list("select distinct o from Offer o left join o.budgetGroup bg where exists (select 1 from o.storeGroups g where g in ?1)"
+                + IN_FORCE.replace("?IN_FORCE_AT", "?2"), storeGroups, at);
+    }
+
+    /**
+     * Finds every in-force offer targeting any of the EANs and linked to a store, whatever its
+     * type — the type-agnostic variant of
+     * {@link #findInForceByEansAndStoreAndType(Collection, Store, String, java.time.LocalDateTime)}.
+     *
+     * @param eans  The list of EANs the offer must target.
+     * @param store The store entity.
+     * @param at    The instant the offers must be in force at.
+     * @return A list of every matching Offer entity, all types confounded.
+     */
+    public static List<Offer> findInForceByEansAndStore(Collection<String> eans, Store store, java.time.LocalDateTime at) {
+        if (eans == null || eans.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return list("select distinct o from Offer o left join o.budgetGroup bg where exists (select 1 from o.eans e where e in ?1) and exists (select 1 from o.stores s where s = ?2)"
+                + IN_FORCE.replace("?IN_FORCE_AT", "?3"), eans, store, at);
+    }
+
+    /**
+     * Finds every in-force offer targeting any of the EANs and linked to any of the store groups,
+     * whatever its type — the type-agnostic variant of
+     * {@link #findInForceByEansAndStoreGroupsAndType(Collection, Collection, String, java.time.LocalDateTime)}.
+     *
+     * @param eans        The list of EANs the offer must target.
+     * @param storeGroups A list of StoreGroup entities.
+     * @param at          The instant the offers must be in force at.
+     * @return A list of every matching Offer entity, all types confounded.
+     */
+    public static List<Offer> findInForceByEansAndStoreGroups(Collection<String> eans, Collection<StoreGroup> storeGroups, java.time.LocalDateTime at) {
+        if (eans == null || eans.isEmpty() || storeGroups == null || storeGroups.isEmpty()) {
+            return new java.util.ArrayList<>();
+        }
+        return list("select distinct o from Offer o left join o.budgetGroup bg where exists (select 1 from o.eans e where e in ?1) and exists (select 1 from o.storeGroups g where g in ?2)"
+                + IN_FORCE.replace("?IN_FORCE_AT", "?3"), eans, storeGroups, at);
     }
 
     // --------------------------------------------------
@@ -393,6 +510,39 @@ public class Offer extends BaseEntity {
                 .map(g -> g.code)
                 .sorted()
                 .collect(Collectors.joining("|"));
-        return Objects.hash(code, type, specification, storeCodes, groupCodes, active, validFrom, validTo);
+        String excludedStoreCodes = String.join("|", getExcludedStoreCodes());
+        String excludedGroupCodes = String.join("|", getExcludedStoreGroupCodes());
+        return Objects.hash(code, type, specification, storeCodes, groupCodes, active, validFrom, validTo,
+                getBudgetGroupCode(), excludedStoreCodes, excludedGroupCodes);
+    }
+
+    /**
+     * Returns the code of the budget group this offer belongs to, flattened for the API and the
+     * checksum, or null when the offer carries no group.
+     *
+     * @return the budget group code, or null.
+     */
+    public String getBudgetGroupCode() {
+        return budgetGroup == null ? null : budgetGroup.code;
+    }
+
+    /**
+     * Returns the codes of the stores this offer is excluded from (spec-ciblage-saisie §3),
+     * flattened for the API in a deterministic sorted order.
+     *
+     * @return the sorted excluded store codes, possibly empty.
+     */
+    public List<String> getExcludedStoreCodes() {
+        return excludedStores.stream().map(s -> s.code).sorted().collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Returns the codes of the store groups this offer is excluded from (spec-ciblage-saisie §3),
+     * flattened for the API in a deterministic sorted order.
+     *
+     * @return the sorted excluded store group codes, possibly empty.
+     */
+    public List<String> getExcludedStoreGroupCodes() {
+        return excludedStoreGroups.stream().map(g -> g.code).sorted().collect(java.util.stream.Collectors.toList());
     }
 }

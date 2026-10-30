@@ -123,16 +123,16 @@ class GroupBIT {
                 .header("Location", containsString("/ui/login?error=true"));
         given().when().get("/ui/login?error=true")
                 .then().statusCode(200)
-                .body(containsString("Invalid username or password."));
+                .body(containsString("mot de passe invalide."));
         given().when().get("/ui/login?error=false")
                 .then().statusCode(200)
-                .body(not(containsString("Invalid username or password.")));
+                .body(not(containsString("mot de passe invalide.")));
         given().when().get("/ui/login?error=")
                 .then().statusCode(200)
-                .body(not(containsString("Invalid username or password.")));
+                .body(not(containsString("mot de passe invalide.")));
         given().when().get("/ui/login")
                 .then().statusCode(200)
-                .body(not(containsString("Invalid username or password.")));
+                .body(not(containsString("mot de passe invalide.")));
     }
 
     /**
@@ -147,7 +147,7 @@ class GroupBIT {
                 .cookie(SESSION_COOKIE, session)
                 .when().post("/ui/logout")
                 .then().statusCode(303)
-                .header("Location", containsString("/ui/login?notice=You+have+been+signed+out."))
+                .header("Location", containsString("notice=Vous+avez"))
                 .extract().detailedCookie(SESSION_COOKIE);
         assertEquals(0, cleared.getMaxAge());
         assertTrue(cleared.getValue() == null || cleared.getValue().isEmpty());
@@ -221,15 +221,15 @@ class GroupBIT {
         ensureUser("b8user", "initpass1", true, false, AppUser.ROLE_ADMIN);
         String session = signIn("b8user", "initpass1");
         changePassword(session, "wrong-one", "newpass12", "newpass12")
-                .body(containsString("The current password is incorrect."));
+                .body(containsString("Le mot de passe actuel est incorrect."));
         changePassword(session, "initpass1", "", "")
                 .body(containsString("The password is mandatory."));
         changePassword(session, "initpass1", "short", "short")
                 .body(containsString("The password must be at least 8 characters long."));
         changePassword(session, "initpass1", "newpass12", "different1")
-                .body(containsString("The two passwords do not match."));
+                .body(containsString("Les deux mots de passe ne correspondent pas."));
         changePassword(session, "initpass1", "initpass1", "initpass1")
-                .body(containsString("The new password must differ from the current one."));
+                .body(containsString("doit être différent de"));
         given().redirects().follow(false)
                 .cookie(SESSION_COOKIE, session)
                 .formParam("currentPassword", "initpass1")
@@ -237,7 +237,7 @@ class GroupBIT {
                 .formParam("confirmation", "brandnew12")
                 .when().post("/ui/password")
                 .then().statusCode(303)
-                .header("Location", containsString("/ui/offers?notice=Password+updated."));
+                .header("Location", containsString("notice=Mot+de+passe+mis"));
         boolean[] applied = new boolean[1];
         QuarkusTransaction.requiringNew().run(() -> {
             AppUser user = AppUser.findByUsername("b8user");

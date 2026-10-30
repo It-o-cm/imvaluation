@@ -114,9 +114,31 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         },
         "unit": {
           "type": "string",
-          "enum": ["EUR", "POINTS"],
-          "description": "Unit of the granted amount. Defaults to EUR; POINTS amounts are rounded to whole points.",
+          "enum": ["EUR", "POINTS", "VIGNETTES"],
+          "description": "Unit of the granted amount. Defaults to EUR; POINTS and VIGNETTES amounts are rounded to whole units.",
           "x-label": "Grant unit"
+        },
+        "accrual": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional attribution caps: this mechanic clips its own computed grant, it never refuses it in block. Each clip is traced in the output so the ticket can explain 'why not more'.",
+          "x-widget": "object",
+          "x-label": "Attribution caps",
+          "properties": {
+            "maxPerTicket": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Maximum number of points/vignettes (or euros) this mechanic grants on one ticket; the computed grant is clipped down to it.",
+              "x-label": "Max per ticket"
+            },
+            "maxTicketAmountBase": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "description": "Ceiling of the ticket amount taken into the calculation base; a 250 EUR ticket with a 100 EUR ceiling grants as a 100 EUR ticket.",
+              "x-widget": "money",
+              "x-label": "Max ticket amount base"
+            }
+          }
         },
         "tiers": {
           "type": "array",
@@ -274,7 +296,25 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         /** The grant is a monetary amount, rounded to the cent. */
         EUR,
         /** The grant is a number of points, rounded to the whole point. */
-        POINTS
+        POINTS,
+        /** The grant is a number of vignettes attributed by the ticket, rounded to the whole vignette. */
+        VIGNETTES
+    }
+
+    /**
+     * The optional attribution caps of a grant (spec-plafonds-attribution §2).
+     * <p>
+     * Both caps clip the mechanic's own computed grant — they never refuse it in block:
+     * {@code maxPerTicket} clips the attributed count itself, {@code maxTicketAmountBase} clips
+     * the ticket amount taken into the calculation base. A {@code null} field is an absent cap,
+     * so a grant with no {@code accrual} block behaves exactly as before (bit-for-bit).
+     *
+     * @param maxPerTicket        the maximum number of points/vignettes (or euros) granted on one
+     *                            ticket, or {@code null} for no cap.
+     * @param maxTicketAmountBase the ceiling of the ticket amount taken into the base, or
+     *                            {@code null} for no cap.
+     */
+    public record Accrual(Integer maxPerTicket, BigDecimal maxTicketAmountBase) {
     }
 
     /**
@@ -342,12 +382,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             Metric metric = Metric.valueOf(spec.get("metric").asText());
             Mode mode = Mode.valueOf(spec.get("mode").asText());
             Unit unit = spec.has("unit") ? Unit.valueOf(spec.get("unit").asText()) : Unit.EUR;
-            Set<String> targetEans = new LinkedHashSet<>();
-            if (spec.has("targetEans")) {
-                for (JsonNode ean : spec.get("targetEans")) {
-                    targetEans.add(ean.asText());
-                }
-            }
+            Set<String> targetEans = resolveTargetEans(spec, offer.code);
             validateCrossRules(offer.code, scope, metric, mode, targetEans, spec);
             TierTable<Award> table = null;
             BigDecimal step = null;
@@ -369,8 +404,9 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                     ? Product.findByEans(targetEans)
                     : List.of();
             JsonNode usage = spec.has("usage") ? spec.get("usage") : null;
+            Accrual accrual = parseAccrual(spec);
             InstrumentGrantApplier applier = new InstrumentGrantApplier(offer.code, scope, metric, mode, unit,
-                    table, step, stepAward, targetProducts, usage);
+                    table, step, stepAward, targetProducts, usage, accrual);
             applier.configuration = offer;
             appliers.add(applier);
         });
@@ -414,6 +450,23 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                     getOfferType(), offerCode));
         }
         return new Award(type, value);
+    }
+
+    /**
+     * Parses the optional {@code accrual} block into the attribution caps (spec §2).
+     *
+     * @param spec the parsed specification.
+     * @return the caps, or {@code null} when the specification carries no {@code accrual} block.
+     */
+    private Accrual parseAccrual(JsonNode spec) {
+        if (!spec.has("accrual")) {
+            return null;
+        }
+        JsonNode accrual = spec.get("accrual");
+        Integer maxPerTicket = accrual.hasNonNull("maxPerTicket") ? accrual.get("maxPerTicket").asInt() : null;
+        BigDecimal maxTicketAmountBase = accrual.hasNonNull("maxTicketAmountBase")
+                ? accrual.get("maxTicketAmountBase").decimalValue() : null;
+        return new Accrual(maxPerTicket, maxTicketAmountBase);
     }
 
     /**
@@ -532,6 +585,11 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         private final JsonNode usage;
 
         /**
+         * The optional attribution caps; null when the offer declares no {@code accrual} block.
+         */
+        private final Accrual accrual;
+
+        /**
          * Creates the applier for one offer.
          *
          * @param code           the offer code.
@@ -544,10 +602,11 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
          * @param stepAward      the award of the repeating step; null unless PER_MULTIPLE.
          * @param targetProducts the targeted products; empty in TICKET scope.
          * @param usage          the echoed usage constraints; may be null.
+         * @param accrual        the optional attribution caps; null when none is declared.
          */
         public InstrumentGrantApplier(String code, Scope scope, Metric metric, Mode mode, Unit unit,
                                       TierTable<Award> table, BigDecimal step, Award stepAward,
-                                      List<Product> targetProducts, JsonNode usage) {
+                                      List<Product> targetProducts, JsonNode usage, Accrual accrual) {
             this.code = code;
             this.scope = scope;
             this.metric = metric;
@@ -558,6 +617,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             this.stepAward = stepAward;
             this.targetProducts = targetProducts;
             this.usage = usage;
+            this.accrual = accrual;
         }
 
         /**
@@ -598,8 +658,10 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
          * <p>
          * The base is gathered from the product-aware offer applications, the tier
          * mode computes the granted amount, and a single informational application is
-         * emitted when the amount is strictly positive. Nothing is capped: the RFP
-         * explicitly allows instruments larger than the base.
+         * emitted when the amount is strictly positive. The optional {@code accrual} caps
+         * (spec-plafonds-attribution §2) then clip the result: {@code maxTicketAmountBase}
+         * caps the ticket amount taken into the base, {@code maxPerTicket} caps the attributed
+         * count. Each clip is traced; absent caps leave the grant bit-for-bit identical.
          *
          * @param evaluation the evaluation context containing the applied offers.
          * @return zero or one {@link InstrumentGrantApplication}.
@@ -622,7 +684,21 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             if (baseAmount.signum() <= 0) {
                 return applications;
             }
-            BigDecimal base = (metric == Metric.AMOUNT) ? baseAmount : baseQuantity;
+            // maxTicketAmountBase (spec §2): the ticket amount taken into the calculation base is
+            // capped, so a 250€ ticket with a 100€ ceiling grants as a 100€ ticket. The base VAT is
+            // scaled with the same ratio so a VAT_AMOUNT award stays the VAT of the capped base.
+            BigDecimal rawBaseAmount = baseAmount;
+            BigDecimal effectiveBaseAmount = baseAmount;
+            BigDecimal effectiveBaseVat = baseVat;
+            boolean baseCapped = false;
+            if (accrual != null && accrual.maxTicketAmountBase() != null
+                    && baseAmount.compareTo(accrual.maxTicketAmountBase()) > 0) {
+                effectiveBaseAmount = accrual.maxTicketAmountBase();
+                effectiveBaseVat = baseVat.multiply(effectiveBaseAmount)
+                        .divide(baseAmount, 2, RoundingMode.HALF_UP);
+                baseCapped = true;
+            }
+            BigDecimal base = (metric == Metric.AMOUNT) ? effectiveBaseAmount : baseQuantity;
             BigDecimal amount;
             String detail;
             switch (mode) {
@@ -631,7 +707,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                     if (tier.isEmpty()) {
                         return applications;
                     }
-                    amount = awardValue(tier.get().award(), baseAmount, baseVat, baseQuantity, 1);
+                    amount = awardValue(tier.get().award(), effectiveBaseAmount, effectiveBaseVat, baseQuantity, 1);
                     detail = "tier " + tier.get().threshold();
                 }
                 case PROGRESSIVE -> {
@@ -639,7 +715,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                     if (slices.isEmpty()) {
                         return applications;
                     }
-                    BigDecimal avgUnit = averageUnit(baseAmount, baseQuantity);
+                    BigDecimal avgUnit = averageUnit(effectiveBaseAmount, baseQuantity);
                     BigDecimal total = BigDecimal.ZERO;
                     for (TierTable.Slice<Award> slice : slices) {
                         if (slice.award().type() == AwardType.PERCENTAGE) {
@@ -664,7 +740,7 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
                         case PERCENTAGE -> {
                             BigDecimal coveredAmount = (metric == Metric.AMOUNT)
                                     ? covered
-                                    : covered.multiply(averageUnit(baseAmount, baseQuantity));
+                                    : covered.multiply(averageUnit(effectiveBaseAmount, baseQuantity));
                             yield coveredAmount.multiply(percent(stepAward.value()));
                         }
                         case AMOUNT -> stepAward.value().multiply(BigDecimal.valueOf(multiples));
@@ -679,14 +755,40 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
             if (amount == null) {
                 return applications;
             }
-            amount = (unit == Unit.POINTS)
-                    ? amount.setScale(0, RoundingMode.HALF_UP)
-                    : amount.setScale(2, RoundingMode.HALF_UP);
+            // EUR grants keep the cent; POINTS and VIGNETTES are whole units.
+            amount = (unit == Unit.EUR)
+                    ? amount.setScale(2, RoundingMode.HALF_UP)
+                    : amount.setScale(0, RoundingMode.HALF_UP);
             if (amount.signum() <= 0) {
                 return applications;
             }
+            // maxPerTicket (spec §2): the computed attribution is clipped down to the cap — never
+            // refused in block. The cap keeps the unit's scale so the clip is exact to the cent
+            // (EUR) or to the whole unit (POINTS/VIGNETTES).
+            BigDecimal rawAmount = amount;
+            boolean amountCapped = false;
+            if (accrual != null && accrual.maxPerTicket() != null) {
+                BigDecimal cap = (unit == Unit.EUR)
+                        ? BigDecimal.valueOf(accrual.maxPerTicket()).setScale(2, RoundingMode.HALF_UP)
+                        : BigDecimal.valueOf(accrual.maxPerTicket());
+                if (amount.compareTo(cap) > 0) {
+                    amount = cap;
+                    amountCapped = true;
+                }
+            }
+            // Each clip is traced so the ticket can explain 'why not more' (spec §2). No clip means
+            // no trace, so a grant valued below its caps is bit-for-bit identical to an uncapped one.
+            AccrualTrace trace = (baseCapped || amountCapped)
+                    ? new AccrualTrace(
+                            accrual.maxPerTicket(),
+                            accrual.maxTicketAmountBase(),
+                            baseCapped ? rawBaseAmount.setScale(2, RoundingMode.HALF_UP) : null,
+                            baseCapped ? effectiveBaseAmount.setScale(2, RoundingMode.HALF_UP) : null,
+                            rawAmount,
+                            amount)
+                    : null;
             applications.add(new InstrumentGrantApplication(displayLabel(), code, detail,
-                    new Grant(instrument(), unit.name(), amount, usage)));
+                    new Grant(instrument(), unit.name(), amount, usage), trace));
             return applications;
         }
 
@@ -785,6 +887,28 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
     }
 
     /**
+     * The trace of an attribution clip (spec-plafonds-attribution §2): what the mechanic would have
+     * granted and what it granted once the caps applied, so the ticket can explain "why not more".
+     * <p>
+     * Emitted only when a cap actually clipped the grant; {@code null} fields (a cap that was not
+     * declared, or a base that was not capped) are omitted from the JSON.
+     *
+     * @param maxPerTicket        the declared per-ticket cap, or {@code null} when none.
+     * @param maxTicketAmountBase the declared base cap, or {@code null} when none.
+     * @param rawBaseAmount       the ticket amount before the base cap, or {@code null} when the base
+     *                            was not capped.
+     * @param cappedBaseAmount    the ticket amount after the base cap, or {@code null} when the base
+     *                            was not capped.
+     * @param rawAmount           the attribution computed before the per-ticket cap.
+     * @param grantedAmount       the attribution actually granted.
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record AccrualTrace(Integer maxPerTicket, BigDecimal maxTicketAmountBase,
+                               BigDecimal rawBaseAmount, BigDecimal cappedBaseAmount,
+                               BigDecimal rawAmount, BigDecimal grantedAmount) {
+    }
+
+    /**
      * The informational application describing the granted instrument.
      * <p>
      * Deliberately not a {@link com.intermarche.valuation.engine.DiscountApplication}:
@@ -819,6 +943,139 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         }
 
         /**
+         * Accounting ventilation key copied verbatim from the configuration (spec-divers-offre §3).
+         */
+        private String accountingCode;
+
+        /**
+         * Ticket print mode ({@code LINE} or {@code FOOTER}) copied verbatim from the
+         * configuration (spec-divers-offre §3).
+         */
+        private String printMode;
+
+        /**
+         * Whether the source configuration flags its discounts EGAlim-exempt (spec-divers-offre §2).
+         */
+        private boolean egalimExempt;
+
+        /**
+         * Whether the source configuration flags its discounts SRP-exempt (spec-divers-offre §2).
+         */
+        private boolean srpExempt;
+
+        /**
+         * Returns the accounting ventilation key restituted verbatim in the response.
+         *
+         * @return the accounting code, or {@code null} when the configuration set none.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        public String getAccountingCode() {
+            return accountingCode;
+        }
+
+        /**
+         * Records the accounting ventilation key copied from the configuration.
+         *
+         * @param accountingCode the accounting code, or {@code null}.
+         */
+        @Override
+        public void setAccountingCode(String accountingCode) {
+            this.accountingCode = accountingCode;
+        }
+
+        /**
+         * Promotion funding copied verbatim from the configuration (spec-exploitation §3).
+         */
+        private String funding;
+
+        /**
+         * Returns the promotion funding restituted verbatim in the response.
+         *
+         * @return the funding, or {@code null} when the configuration set none.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        public String getFunding() {
+            return funding;
+        }
+
+        /**
+         * Records the promotion funding copied from the configuration.
+         *
+         * @param funding the funding, or {@code null}.
+         */
+        @Override
+        public void setFunding(String funding) {
+            this.funding = funding;
+        }
+
+        /**
+         * Returns the ticket print mode restituted verbatim in the response.
+         *
+         * @return the print mode ({@code LINE} or {@code FOOTER}), or {@code null} when unset.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        public String getPrintMode() {
+            return printMode;
+        }
+
+        /**
+         * Records the ticket print mode copied from the configuration.
+         *
+         * @param printMode the print mode ({@code LINE} or {@code FOOTER}), or {@code null}.
+         */
+        @Override
+        public void setPrintMode(String printMode) {
+            this.printMode = printMode;
+        }
+
+        /**
+         * Tells whether the source configuration flags its discounts EGAlim-exempt; read by the
+         * EGAlim guard, never serialized.
+         *
+         * @return {@code true} when the configuration set {@code compliance.egalimExempt}.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public boolean isEgalimExempt() {
+            return egalimExempt;
+        }
+
+        /**
+         * Records the EGAlim-exempt flag copied from the configuration.
+         *
+         * @param egalimExempt whether the configuration is EGAlim-exempt.
+         */
+        @Override
+        public void setEgalimExempt(boolean egalimExempt) {
+            this.egalimExempt = egalimExempt;
+        }
+
+        /**
+         * Tells whether the source configuration flags its discounts SRP-exempt; reserved for the
+         * future SRP guard, never serialized.
+         *
+         * @return {@code true} when the configuration set {@code compliance.srpExempt}.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public boolean isSrpExempt() {
+            return srpExempt;
+        }
+
+        /**
+         * Records the SRP-exempt flag copied from the configuration.
+         *
+         * @param srpExempt whether the configuration is SRP-exempt.
+         */
+        @Override
+        public void setSrpExempt(boolean srpExempt) {
+            this.srpExempt = srpExempt;
+        }
+
+        /**
          * The display label of the granting type ("Voucher Grant" or "Coupon Grant").
          */
         private final String label;
@@ -839,18 +1096,26 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
         private final Grant grant;
 
         /**
+         * The attribution-clip trace; null when no cap clipped the grant.
+         */
+        private final AccrualTrace accrual;
+
+        /**
          * Creates the application.
          *
          * @param label     the display label of the granting type.
          * @param offerCode the offer code.
          * @param detail    the display detail of the applied resolution.
          * @param grant     the granted instrument.
+         * @param accrual   the attribution-clip trace, or null when no cap clipped the grant.
          */
-        public InstrumentGrantApplication(String label, String offerCode, String detail, Grant grant) {
+        public InstrumentGrantApplication(String label, String offerCode, String detail, Grant grant,
+                                          AccrualTrace accrual) {
             this.label = label;
             this.offerCode = offerCode;
             this.detail = detail;
             this.grant = grant;
+            this.accrual = accrual;
         }
 
         /**
@@ -878,6 +1143,16 @@ public abstract class InstrumentGrantFactory implements AdvantageApplierFactory,
          */
         public Grant getGrant() {
             return grant;
+        }
+
+        /**
+         * Returns the attribution-clip trace restituted in the output (spec §2).
+         *
+         * @return the trace, or {@code null} when no cap clipped the grant.
+         */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public AccrualTrace getAccrual() {
+            return accrual;
         }
 
         /**

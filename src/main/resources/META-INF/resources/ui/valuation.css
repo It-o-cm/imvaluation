@@ -210,3 +210,98 @@
 .friendly-table.sub col.col-qty { width: 10%; }
 .friendly-table.sub col.col-amt { width: 12%; }
 .friendly-table.sub col.col-vat { width: 12%; }
+
+/* ---------- Ticket de caisse ---------- */
+
+/*
+ * The receipt renders the response as a till roll: a narrow paper strip in a monospace
+ * face, dashed tear lines, amounts right-aligned on the same baseline.
+ */
+.receipt-paper {
+    max-width: 340px;
+    margin: 0 auto;
+    padding: 18px 16px 22px;
+    background: #fffef8;
+    border: 1px solid var(--im-line);
+    border-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--im-ink);
+}
+
+.receipt-head {
+    text-align: center;
+    font-weight: 700;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.receipt-meta {
+    text-align: center;
+    color: var(--im-ink-soft);
+}
+
+.receipt-rule {
+    border-top: 1px dashed var(--im-line);
+    margin: 8px 0;
+}
+
+.receipt-offer-type {
+    color: var(--im-ink-soft);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    margin-top: 6px;
+}
+
+.receipt-line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.receipt-label {
+    overflow-wrap: anywhere;
+}
+
+.receipt-qty {
+    color: var(--im-ink-soft);
+}
+
+.receipt-amount {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.receipt-discount .receipt-amount {
+    color: var(--im-red);
+    font-weight: 600;
+}
+
+.receipt-total .receipt-amount {
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.receipt-total .receipt-label,
+.receipt-sub .receipt-label {
+    font-weight: 600;
+}
+
+.receipt-sub .receipt-amount {
+    color: var(--im-ink-soft);
+}
+
+.receipt-vat {
+    font-size: 11px;
+    color: var(--im-ink-soft);
+}
+
+.receipt-foot {
+    text-align: center;
+    color: var(--im-ink-soft);
+}

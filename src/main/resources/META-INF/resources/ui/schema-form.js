@@ -128,6 +128,47 @@
         return spaced.charAt(0).toUpperCase() + spaced.slice(1).trim();
     }
 
+    /**
+     * Resolves every local {@code #/definitions/…} reference of a schema, in place: some
+     * factory schemas (the tiered discount's award) declare their nested objects through a
+     * {@code $ref}, and without this resolution the field builder sees a node without a type
+     * and falls back to a plain text input — which renders an object value as the infamous
+     * "[object Object]". Unresolvable references stay as they are, so the builder keeps
+     * its text fallback rather than crashing.
+     *
+     * @param {*} node The schema node being resolved.
+     * @param {object} root The whole schema, owning the definitions.
+     * @param {string[]} seen The definition names on the current path, against cycles.
+     * @returns {*} The resolved node.
+     */
+    function dereference(node, root, seen) {
+        if (!node || typeof node !== 'object') {
+            return node;
+        }
+        if (Array.isArray(node)) {
+            for (var i = 0; i < node.length; i += 1) {
+                node[i] = dereference(node[i], root, seen);
+            }
+            return node;
+        }
+        if (typeof node.$ref === 'string' && node.$ref.indexOf('#/definitions/') === 0) {
+            var name = node.$ref.substring('#/definitions/'.length);
+            var target = (root.definitions || {})[name];
+            if (target && seen.indexOf(name) === -1) {
+                seen.push(name);
+                // A deep copy keeps the definition intact for the next reference.
+                var copy = dereference(JSON.parse(JSON.stringify(target)), root, seen);
+                seen.pop();
+                return copy;
+            }
+            return node;
+        }
+        Object.keys(node).forEach(function (key) {
+            node[key] = dereference(node[key], root, seen);
+        });
+        return node;
+    }
+
     // --------------------------------------------------
     // DOM helpers
     // --------------------------------------------------
@@ -186,6 +227,32 @@
     // --------------------------------------------------
 
     /**
+     * Parses the text of a one-column EAN file into a de-duplicated, order-stable list of EANs
+     * (spec-ciblage-saisie §4). A leading UTF-8 BOM is stripped, blank lines are ignored, a single
+     * comma/semicolon/tab-delimited column is tolerated (only the first field is kept), and
+     * duplicates are dropped. A file containing a NUL byte is treated as binary and rejected by
+     * returning {@code null}. Parsing is entirely client-side; the file is never sent to the server.
+     *
+     * @param {string} text The raw file text.
+     * @returns {?string[]} The parsed EANs, or {@code null} when the file looks binary.
+     */
+    function parseEanList(text) {
+        if (text == null) { return null; }
+        var content = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
+        if (content.indexOf('\u0000') !== -1) { return null; }
+        var seen = {};
+        var result = [];
+        content.split(/\r\n|\r|\n/).forEach(function (line) {
+            var value = String(line).split(/[,;\t]/)[0].trim();
+            if (!value) { return; }
+            if (Object.prototype.hasOwnProperty.call(seen, value)) { return; }
+            seen[value] = true;
+            result.push(value);
+        });
+        return result;
+    }
+
+    /**
      * Builds an autocomplete input bound to a lookup endpoint.
      *
      * Values that do not resolve to a known entity remain usable: they are flagged with a
@@ -215,6 +282,49 @@
         root.appendChild(inputRow);
 
         var labelCache = {};
+
+        /**
+         * Adds the "Import a file" control to an EAN-list widget (spec-ciblage-saisie §4): a text or
+         * one-column CSV file is read and parsed entirely in the browser through {@link parseEanList}
+         * and its EANs fill the field; a binary file is refused with a message. The file is never
+         * sent to the server.
+         */
+        function attachFileImport() {
+            if (!multiple || endpoint !== LOOKUP['ean-list']) { return; }
+            var importRow = el('div', 'ac-file-import');
+            var importButton = el('button', 'btn btn-ghost ac-file-button', 'Import a file');
+            importButton.type = 'button';
+            var fileInput = el('input', 'ac-file-input');
+            fileInput.type = 'file';
+            fileInput.accept = '.txt,.csv,text/plain,text/csv';
+            fileInput.style.display = 'none';
+            var importError = el('div', 'ac-file-error');
+            importButton.addEventListener('click', function () { fileInput.click(); });
+            fileInput.addEventListener('change', function () {
+                importError.textContent = '';
+                var file = fileInput.files && fileInput.files[0];
+                if (!file) { return; }
+                var reader = new FileReader();
+                reader.onload = function () {
+                    var eans = parseEanList(String(reader.result));
+                    if (eans === null) {
+                        importError.textContent = 'This file is not a readable EAN list.';
+                    } else {
+                        eans.forEach(addValue);
+                    }
+                    fileInput.value = '';
+                };
+                reader.onerror = function () {
+                    importError.textContent = 'This file could not be read.';
+                    fileInput.value = '';
+                };
+                reader.readAsText(file);
+            });
+            importRow.appendChild(importButton);
+            importRow.appendChild(fileInput);
+            importRow.appendChild(importError);
+            root.appendChild(importRow);
+        }
 
         /**
          * Renders the chips of the currently selected values.
@@ -347,6 +457,7 @@
         }
 
         renderChips();
+        attachFileImport();
 
         return {
             node: root,
@@ -970,6 +1081,19 @@
         var grid = el('div', 'field-grid');
         var required = schema.required || [];
         Object.keys(schema.properties || {}).forEach(function (name) {
+            if (name === 'targetEans' && schema.properties.targetWhere) {
+                // The single targeting field: EANs or a condition, never both — see
+                // buildTargetingField.
+                var targeting = buildTargetingField();
+                fields.push(targeting.eans);
+                fields.push(targeting.where);
+                grid.appendChild(targeting.node);
+                grid.appendChild(targeting.note);
+                return;
+            }
+            if (name === 'targetWhere' && schema.properties.targetEans) {
+                return;
+            }
             var propSchema = schema.properties[name];
             var field = buildField(name, propSchema, specification[name],
                 required.indexOf(name) !== -1, onFieldChange);
@@ -977,9 +1101,295 @@
             fields.push(field);
             grid.appendChild(field.node);
         });
+        // Group the family and exclusion fields with the targeting field, whatever their
+        // rank in the injected schema.
+        var targetingNode = grid.querySelector('.field-targeting');
+        ['targetFamilyCodes', 'excludedEans'].forEach(function (name) {
+            var moved = fields.find(function (field) { return field.name === name; });
+            if (targetingNode && moved) {
+                grid.insertBefore(moved.node, targetingNode.nextSibling);
+                targetingNode = moved.node;
+            }
+        });
         formHost.appendChild(grid);
         syncHidden();
         validate();
+    }
+
+    /**
+     * Builds the single product-targeting field: its content is either a list of EANs —
+     * digits, commas and spaces — or a free-form condition, and only the matching
+     * specification key is carried: the exclusivity between {@code targetEans} and
+     * {@code targetWhere} holds by construction, one input can only read as one of them.
+     * <p>
+     * The coverage preview under the field shows, live, what the content covers — the
+     * count and a sample of matching products, for an EAN list (which reveals EANs that
+     * do not exist in the catalog) exactly as for a condition (which reveals an
+     * impossible condition), through the very same grammar endpoint.
+     *
+     * @returns {{node: HTMLElement, note: HTMLElement, eans: object, where: object}}
+     *          The field node, its coverage note and the two read entries.
+     */
+    function buildTargetingField() {
+        var node = el('div', 'field field-text field-wide field-targeting');
+        var label = el('label', 'field-label', 'Eligible products');
+        node.appendChild(label);
+        var wrap = el('div', 'targeting-wrap');
+        var input = el('input');
+        input.type = 'text';
+        input.className = 'targeting-input';
+        input.value = targetingText();
+        input.setAttribute('placeholder', "EANs, or a condition: name like 'pomme%'");
+        // The suggestion dropdown of the list reading: while the content is an EAN list,
+        // the trailing digits being typed drive the product lookup, and picking a
+        // suggestion completes the list with that EAN.
+        var dropdown = el('div', 'ac-dropdown is-hidden');
+        wrap.appendChild(input);
+        wrap.appendChild(dropdown);
+        node.appendChild(wrap);
+        node.appendChild(el('span', 'field-hint',
+            "Either EANs (comma separated) or a condition on brand, ean, egalimRegime, "
+            + "name, productType, referenceVolume, referenceWeight."));
+        var note = el('p', 'placeholder-note field-wide', '');
+        note.classList.add('is-hidden');
+
+        /**
+         * Seeds the field from whichever targeting key the specification carries.
+         */
+        function targetingText() {
+            if (typeof specification.targetWhere === 'string' && specification.targetWhere.trim() !== '') {
+                return specification.targetWhere;
+            }
+            if (Array.isArray(specification.targetEans)) {
+                return specification.targetEans.join(', ');
+            }
+            return '';
+        }
+
+        /**
+         * Splits the field content into its two possible readings.
+         *
+         * @returns {{eans: ?string[], where: ?string}} The parsed targeting.
+         */
+        function parse() {
+            var text = input.value.trim();
+            if (!text) {
+                return { eans: null, where: null };
+            }
+            if (/^[0-9,\s;]+$/.test(text)) {
+                return { eans: text.split(/[,;\s]+/).filter(Boolean), where: null };
+            }
+            return { eans: null, where: text };
+        }
+
+        /**
+         * Builds the grammar expression the coverage preview resolves: an EAN list
+         * becomes an {@code in} condition, so both readings preview identically.
+         *
+         * @returns {string} The expression, empty when the field is empty.
+         */
+        function expression() {
+            var parsed = parse();
+            if (parsed.eans) {
+                return 'ean in (' + parsed.eans.map(function (ean) { return "'" + ean + "'"; }).join(', ') + ')';
+            }
+            return parsed.where || '';
+        }
+
+        // The grammar verdict of the last preview: null while pending, true when the
+        // content parsed, false when the grammar refused it — the third case of the
+        // field's contract is an error, not a condition.
+        var verdict = null;
+
+        /**
+         * Applies the grammar verdict: a refused content is flagged and dropped from the
+         * carried specification; a stale response, arriving after further typing, is
+         * ignored.
+         */
+        function applyVerdict(sent, ok) {
+            if (expression() !== sent) {
+                return;
+            }
+            verdict = ok;
+            input.classList.toggle('is-invalid', !ok);
+            if (!ok) {
+                delete specification.targetWhere;
+                delete specification.targetEans;
+            }
+            onFieldChange();
+        }
+
+        var refreshPreview = debounce(function () {
+            var sent = expression();
+            renderCoveragePreview(sent, note, function (ok) {
+                applyVerdict(sent, ok);
+            });
+        }, 300);
+
+        /**
+         * The last EAN being typed, when the content reads as a list.
+         *
+         * @returns {string} The trailing digits, empty in any other case.
+         */
+        function lastToken() {
+            var parsed = parse();
+            if (!parsed.eans) {
+                return '';
+            }
+            var match = input.value.match(/[0-9]+$/);
+            return match ? match[0] : '';
+        }
+
+        /**
+         * Hides the suggestion dropdown.
+         */
+        function hideSuggestions() {
+            dropdown.classList.add('is-hidden');
+            dropdown.innerHTML = '';
+        }
+
+        /**
+         * Renders the suggestions of the trailing EAN.
+         *
+         * @param {Array} suggestions The products matching the typed digits.
+         */
+        function showSuggestions(suggestions) {
+            dropdown.innerHTML = '';
+            if (!suggestions.length) {
+                dropdown.appendChild(el('div', 'ac-empty', 'No match.'));
+            }
+            suggestions.forEach(function (suggestion) {
+                var item = el('button', 'ac-item');
+                item.type = 'button';
+                item.appendChild(el('span', 'ac-item-value', suggestion.value));
+                item.appendChild(el('span', 'ac-item-label', suggestion.label));
+                if (suggestion.detail) {
+                    item.appendChild(el('span', 'ac-item-detail', suggestion.detail));
+                }
+                item.addEventListener('mousedown', function (event) {
+                    event.preventDefault();
+                    // Completing the last EAN with the picked suggestion, then the usual
+                    // input pipeline re-reads the list and refreshes the coverage.
+                    input.value = input.value.replace(/[0-9]+$/, suggestion.value);
+                    hideSuggestions();
+                    input.dispatchEvent(new window.Event('input'));
+                });
+                dropdown.appendChild(item);
+            });
+            dropdown.classList.remove('is-hidden');
+        }
+
+        var searchSuggestions = debounce(function () {
+            var token = lastToken();
+            if (!token) {
+                hideSuggestions();
+                return;
+            }
+            lookup(LOOKUP['ean-list'], token).then(function (suggestions) {
+                showSuggestions(Array.isArray(suggestions) ? suggestions : []);
+            });
+        }, 180);
+
+        input.addEventListener('input', function () {
+            searchSuggestions();
+        });
+        input.addEventListener('focus', function () {
+            searchSuggestions();
+        });
+        input.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                hideSuggestions();
+            }
+        });
+        input.addEventListener('blur', function () {
+            setTimeout(hideSuggestions, 150);
+        });
+
+        input.addEventListener('input', function () {
+            var parsed = parse();
+            verdict = null;
+            input.classList.remove('is-invalid');
+            if (parsed.eans) {
+                specification.targetEans = parsed.eans;
+                delete specification.targetWhere;
+            } else if (parsed.where) {
+                specification.targetWhere = parsed.where;
+                delete specification.targetEans;
+            } else {
+                delete specification.targetEans;
+                delete specification.targetWhere;
+            }
+            refreshPreview();
+            onFieldChange();
+        });
+
+        if (expression()) {
+            var sent = expression();
+            renderCoveragePreview(sent, note, function (ok) {
+                applyVerdict(sent, ok);
+            });
+        }
+        return {
+            node: node,
+            note: note,
+            eans: {
+                name: 'targetEans',
+                node: node,
+                read: function () {
+                    var parsed = parse();
+                    return parsed.eans && parsed.eans.length ? parsed.eans : undefined;
+                }
+            },
+            where: {
+                name: 'targetWhere',
+                node: node,
+                read: function () {
+                    // A refused content is the error case, not a condition: it does not
+                    // travel to the submitted specification.
+                    return verdict === false ? undefined : (parse().where || undefined);
+                }
+            }
+        };
+    }
+
+    /**
+     * Fetches the coverage preview of a conditional targeting and appends it to the note:
+     * the exact number of covered products and a capped sample as chips, or the grammar
+     * refusal in place. A preview that cannot be fetched degrades to a silent note.
+     *
+     * @param {string} where The condition text.
+     * @param {HTMLElement} note The note element to append the preview to.
+     */
+    function renderCoveragePreview(where, note, onVerdict) {
+        note.innerHTML = '';
+        if (!where) {
+            note.classList.add('is-hidden');
+            return;
+        }
+        note.classList.remove('is-hidden');
+        fetch('/ui/offers/where-preview?where=' + encodeURIComponent(where))
+            .then(function (response) { return response.json(); })
+            .then(function (preview) {
+                if (onVerdict) {
+                    onVerdict(!preview.error);
+                }
+                if (preview.error) {
+                    note.appendChild(el('span', null,
+                        ' The condition was refused: ' + preview.error));
+                    return;
+                }
+                var line = el('span', null,
+                    ' Coverage: ' + preview.count + ' product' + (preview.count === 1 ? '' : 's')
+                    + (preview.count > 0 ? ' — ' : ' — the catalog matches nothing.'));
+                note.appendChild(line);
+                (preview.products || []).forEach(function (product) {
+                    note.appendChild(el('span', 'ac-chip ac-chip-unknown',
+                        (product.name ? product.name + ' ' : '') + '(' + product.ean + ')'));
+                });
+            })
+            .catch(function () {
+                // The note already explains the empty list; a failed preview adds nothing.
+            });
     }
 
     /**
@@ -1016,30 +1426,68 @@
     }
 
     /**
-     * Instantiates the store and store group pickers declared in the markup.
+     * Instantiates the store and store group pickers declared in the markup, one by one.
      */
     function initTargetWidgets() {
-        document.querySelectorAll('[data-widget]').forEach(function (host) {
-            var widget = host.getAttribute('data-widget');
-            var name = host.getAttribute('data-name');
-            var raw = host.getAttribute('data-value') || '';
-            var values = raw.split(',').map(function (v) { return v.trim(); })
-                            .filter(function (v) { return v.length > 0; });
+        document.querySelectorAll('[data-widget]').forEach(buildTargetWidget);
+    }
 
-            var hidden = el('input');
-            hidden.type = 'hidden';
-            hidden.name = name;
+    /**
+     * Builds one store or store group picker onto its host, from the host's attributes.
+     *
+     * @param {HTMLElement} host The declaring element, carrying data-widget, data-name and
+     *                          the current comma-separated data-value.
+     */
+    function buildTargetWidget(host) {
+        var widget = host.getAttribute('data-widget');
+        var name = host.getAttribute('data-name');
+        var raw = host.getAttribute('data-value') || '';
+        var values = raw.split(',').map(function (v) { return v.trim(); })
+                        .filter(function (v) { return v.length > 0; });
 
-            var ac = buildAutocomplete({
-                endpoint: LOOKUP[widget],
-                multiple: true,
-                values: values,
-                placeholder: 'Type a code or a name\u2026',
-                onChange: function () { hidden.value = ac.getValues().join(','); }
+        var hidden = el('input');
+        hidden.type = 'hidden';
+        hidden.name = name;
+
+        var ac = buildAutocomplete({
+            endpoint: LOOKUP[widget],
+            multiple: true,
+            values: values,
+            placeholder: 'Type a code or a name\u2026',
+            onChange: function () { hidden.value = ac.getValues().join(','); }
+        });
+        hidden.value = values.join(',');
+        host.appendChild(ac.node);
+        host.appendChild(hidden);
+    }
+
+    /**
+     * Applies a draft's store targeting to the pickers: the suggested codes merge into the
+     * hosts' current values — the administrator's own picks survive — and the pickers
+     * rebuild, chips included. Dispatched by the AI drafting panel through the
+     * 'offer-targets:apply' event; a host or a list that is absent is simply skipped.
+     */
+    function applyDraftTargets(detail) {
+        ['storeCodes', 'storeGroupCodes'].forEach(function (name) {
+            var incoming = (detail && detail[name]) || [];
+            if (!incoming.length) {
+                return;
+            }
+            var host = document.querySelector("[data-name='" + name + "']");
+            if (!host) {
+                return;
+            }
+            var existing = (host.getAttribute('data-value') || '').split(',')
+                .map(function (v) { return v.trim(); })
+                .filter(function (v) { return v.length > 0; });
+            incoming.forEach(function (code) {
+                if (existing.indexOf(code) === -1) {
+                    existing.push(code);
+                }
             });
-            hidden.value = values.join(',');
-            host.appendChild(ac.node);
-            host.appendChild(hidden);
+            host.setAttribute('data-value', existing.join(','));
+            host.innerHTML = '';
+            buildTargetWidget(host);
         });
     }
 
@@ -1052,6 +1500,11 @@
         } catch (e) {
             schemas = {};
         }
+        // Resolve the local #/definitions references once, so every field builder — this
+        // one and the sub-builders — never sees a $ref node.
+        Object.keys(schemas).forEach(function (type) {
+            schemas[type] = dereference(schemas[type], schemas[type], []);
+        });
         try {
             specification = JSON.parse(document.getElementById('offer-specification').textContent || '{}');
         } catch (e) {
@@ -1060,10 +1513,34 @@
 
         initTargetWidgets();
 
+        // A draft's store targeting lands in the pickers through its own event; the
+        // specification's own apply event is declared just below.
+        document.addEventListener('offer-targets:apply', function (event) {
+            applyDraftTargets(event.detail);
+        });
+
         typeSelect.addEventListener('change', function () {
             // Keep the values already captured so switching type by mistake is not destructive.
             specification = mode === 'json' ? specification : readForm();
             renderForm();
+        });
+
+        // Applied by an external producer (the AI drafting assistant): a validated type and
+        // specification land in the editor without a page reload. An unknown type is ignored,
+        // so a caller can never force the form onto a schema-less value.
+        document.addEventListener('offer-spec:apply', function (event) {
+            var detail = event.detail || {};
+            if (!detail.type || !schemas[detail.type]) {
+                return;
+            }
+            typeSelect.value = detail.type;
+            specification = detail.specification || {};
+            if (mode === 'json') {
+                rawTextarea.value = JSON.stringify(specification, null, 2);
+            } else {
+                renderForm();
+            }
+            syncHidden();
         });
 
         document.querySelectorAll('.mode-switch [data-mode]').forEach(function (button) {

@@ -476,13 +476,15 @@ class GroupNIT {
     @Test
     void n1_failedNoPayloadTraceContent() {
         setRecording(true);
-        valuate(oneLine("N1-fail", "0101", "9999999999999", "1"), 500);
+        // An unknown EAN is a referential gap: 422 since HD_43 lot 1 (commit c59011f), still a
+        // FAILED trace with no response payload (the evaluation is null on this arm).
+        valuate(oneLine("N1-fail", "0101", "9999999999999", "1"), 422);
         TraceView trace = traceFor("N1-fail");
         assertTrue(trace.found, "A FAILED trace must exist");
-        assertEquals(ValuationTrace.STATUS_FAILED, trace.status, "The 500 arm is FAILED");
-        assertEquals(500, trace.httpStatus, "The recorded HTTP status is 500");
+        assertEquals(ValuationTrace.STATUS_FAILED, trace.status, "The 422 referential arm is FAILED");
+        assertEquals(422, trace.httpStatus, "The recorded HTTP status is 422");
         assertNotNull(trace.errorMessage, "A FAILED trace carries the error message");
-        assertFalse(trace.hasResponse, "A 500 FAILED trace carries no response payload");
+        assertFalse(trace.hasResponse, "A 422 referential FAILED trace carries no response payload");
     }
 
     /**
@@ -533,7 +535,7 @@ class GroupNIT {
     /**
      * N2 — disabling recording (the {@code enabled} checkbox unchecked, so its form param is absent)
      * lets valuations run normally but leaves ZERO trace; the list screen shows the banner
-     * {@code Recording is turned off: valuations run normally but leave no trace.}; re-enabling takes
+     * {@code ne laissent aucune trace.}; re-enabling takes
      * effect immediately (the config is re-read on every call, no restart), so the very next
      * valuation records a trace again.
      */
@@ -547,12 +549,12 @@ class GroupNIT {
                     .redirects().follow(false)
                     .when().post("/ui/valuations/config")
                     .then().statusCode(303)
-                    .header("Location", containsString("Tracing+configuration+updated."));
+                    .header("Location", containsString("Configuration+de"));
             assertFalse(recordingEnabled(), "The absent checkbox turns recording off");
             valuate(oneLine("N2OFF", "0101", LAIT_EAN, "1"), 200);
             assertEquals(0, countTracesFor("N2OFF"), "A disabled recorder leaves no trace");
             String list = getHtml("/ui/valuations");
-            assertTrue(list.contains("Recording is turned off: valuations run normally but leave no trace."),
+            assertTrue(list.contains("ne laissent aucune trace."),
                     "The off banner is shown on the list screen");
             given().auth().preemptive().basic("admin", "admin")
                     .contentType(ContentType.URLENC)
@@ -561,7 +563,7 @@ class GroupNIT {
                     .redirects().follow(false)
                     .when().post("/ui/valuations/config")
                     .then().statusCode(303)
-                    .header("Location", containsString("Tracing+configuration+updated."));
+                    .header("Location", containsString("Configuration+de"));
             assertTrue(recordingEnabled(), "The checked box turns recording back on");
             valuate(oneLine("N2ON", "0101", LAIT_EAN, "1"), 200);
             assertTrue(countTracesFor("N2ON") >= 1,
@@ -595,7 +597,7 @@ class GroupNIT {
                     .redirects().follow(false)
                     .when().post("/ui/valuations/config")
                     .then().statusCode(303)
-                    .header("Location", containsString("The+retention+must+be+at+least+one+day."))
+                    .header("Location", containsString("au+moins+un+jour"))
                     .header("Location", containsString("noticeOk=false"));
             given().auth().preemptive().basic("admin", "admin")
                     .contentType(ContentType.URLENC)
@@ -604,7 +606,7 @@ class GroupNIT {
                     .redirects().follow(false)
                     .when().post("/ui/valuations/config")
                     .then().statusCode(303)
-                    .header("Location", containsString("Tracing+configuration+updated."))
+                    .header("Location", containsString("Configuration+de"))
                     .header("Location", containsString("noticeOk=true"));
             assertEquals(7, retentionDays(), "The valid retention is persisted");
             assertTrue(recordingEnabled(), "The enabled flag is persisted");
@@ -643,7 +645,7 @@ class GroupNIT {
                 .redirects().follow(false)
                 .when().post("/ui/valuations/purge")
                 .then().statusCode(303)
-                .header("Location", containsString("deleted."))
+                .header("Location", containsString("supprim"))
                 .header("Location", containsString("noticeOk=true"));
         assertEquals(0, totalTraceCount(), "Purge all empties the trace table");
     }
@@ -696,27 +698,27 @@ class GroupNIT {
      * and a FAILED trace on distinct unique customers are recorded, then: the customer filter finds
      * the SUCCESS row with a {@code Success} badge; the store filter matches by fragment; a
      * mismatched status filter yields the empty state; the FAILED filter shows the {@code FAILED}
-     * badge; an impossible customer yields {@code No valuation recorded yet.} and its hint.
+     * badge; an impossible customer yields {@code Aucune valorisation enregistrée} and its hint.
      */
     @Test
     void n5_listFiltersBadgesAndEmptyState() {
         setRecording(true);
         valuate(oneLine("N5CUSTOK", "0101", LAIT_EAN, "1"), 200);
-        valuate(oneLine("N5CUSTFAIL", "0101", "9999999999999", "1"), 500);
+        valuate(oneLine("N5CUSTFAIL", "0101", "9999999999999", "1"), 422);
         String byCustomer = getHtml("/ui/valuations?customer=N5CUSTOK");
         assertTrue(byCustomer.contains("N5CUSTOK"), "The customer filter finds the row");
-        assertTrue(byCustomer.contains("badge-ok\">Success"), "The SUCCESS trace shows the Success badge");
+        assertTrue(byCustomer.contains("badge-ok\">Succès"), "The SUCCESS trace shows the Success badge");
         String byStore = getHtml("/ui/valuations?store=010&customer=N5CUSTOK");
-        assertTrue(byStore.contains("badge-ok\">Success"),
+        assertTrue(byStore.contains("badge-ok\">Succès"),
                 "The store filter matches 0101 by the fragment 010 and shows the row");
         String mismatch = getHtml("/ui/valuations?customer=N5CUSTOK&status=FAILED");
-        assertTrue(mismatch.contains("No valuation recorded yet."),
+        assertTrue(mismatch.contains("Aucune valorisation enregistrée"),
                 "A strict status mismatch hides the SUCCESS row: the list falls back to the empty state");
         String byFail = getHtml("/ui/valuations?customer=N5CUSTFAIL");
         assertTrue(byFail.contains("badge-error\">FAILED"), "The FAILED trace shows the FAILED badge");
         String empty = getHtml("/ui/valuations?customer=ZZZNOSUCHCUSTOMERZZZ");
-        assertTrue(empty.contains("No valuation recorded yet."), "An impossible filter is empty");
-        assertTrue(empty.contains("Submit a test basket, or wait for a client to call the endpoint."),
+        assertTrue(empty.contains("Aucune valorisation enregistrée"), "An impossible filter is empty");
+        assertTrue(empty.contains("Soumettez un panier de test"),
                 "The empty state shows its hint");
     }
 
@@ -732,7 +734,7 @@ class GroupNIT {
         valuate(oneLine("N5ROWS", "0101", LAIT_EAN, "1"), 200);
         String rows = getHtml("/ui/valuations/rows?customer=N5ROWS");
         assertTrue(rows.contains("N5ROWS"), "The refresh fragment carries the matching row");
-        assertFalse(rows.contains("<h1>Valuations</h1>"), "The fragment omits the page chrome");
+        assertFalse(rows.contains("<h1>Valorisations</h1>"), "The fragment omits the page chrome");
     }
 
     /**
@@ -763,20 +765,20 @@ class GroupNIT {
         valuate(oneLine("N6OK", "0101", LAIT_EAN, "1"), 200);
         Long okId = traceIdFor("N6OK");
         String okDetail = getHtml("/ui/valuations/" + okId);
-        assertTrue(okDetail.contains("badge-ok\">Success"), "The SUCCESS detail shows the Success badge");
+        assertTrue(okDetail.contains("badge-ok\">Succès"), "The SUCCESS detail shows the Success badge");
         assertTrue(okDetail.contains(" ms"), "The duration meta carries the ms unit");
         assertTrue(okDetail.contains("&euro;"), "The total meta carries the euro unit");
-        valuate(oneLine("N6FAIL", "0101", "9999999999999", "1"), 500);
+        valuate(oneLine("N6FAIL", "0101", "9999999999999", "1"), 422);
         Long failId = traceIdFor("N6FAIL");
         String failDetail = getHtml("/ui/valuations/" + failId);
         assertTrue(failDetail.contains("alert alert-error"), "The FAILED detail shows the red error banner");
-        assertTrue(failDetail.contains("No response was produced."),
+        assertTrue(failDetail.contains("Aucune réponse"),
                 "A FAILED trace with no payload shows the no-response placeholder");
         given().auth().preemptive().basic("admin", "admin")
                 .redirects().follow(false)
                 .when().get("/ui/valuations/999999999")
                 .then().statusCode(303)
-                .header("Location", containsString("Valuation+999999999+no+longer+exists."))
+                .header("Location", containsString("valorisation"))
                 .header("Location", containsString("noticeOk=false"));
     }
 
@@ -806,7 +808,7 @@ class GroupNIT {
     void n7_testFormSubmissions() {
         setRecording(true);
         String form = getHtml("/ui/valuations/new");
-        assertTrue(form.contains("Value this basket"), "The form carries the literal submit button");
+        assertTrue(form.contains("Valoriser ce panier"), "The form carries the literal submit button");
         long before = totalTraceCount();
         String emptyResult = given().auth().preemptive().basic("admin", "admin")
                 .contentType(ContentType.URLENC)
@@ -814,7 +816,7 @@ class GroupNIT {
                 .when().post("/ui/valuations/new")
                 .then().statusCode(200)
                 .extract().asString();
-        assertTrue(emptyResult.contains("The basket is empty."), "An empty basket is refused with its message");
+        assertTrue(emptyResult.contains("Le panier est vide."), "An empty basket is refused with its message");
         assertEquals(before, totalTraceCount(), "An empty submission records no trace");
         String rejectedBody = "{\"customerCode\":\"N7-rej\",\"items\":[{\"produceEan\":\"" + LAIT_EAN
                 + "\",\"quantity\":1}]}";
@@ -834,7 +836,7 @@ class GroupNIT {
                 .when().post("/ui/valuations/new")
                 .then().statusCode(200)
                 .extract().asString();
-        assertTrue(validResult.contains("card-title\">Result"), "A valid basket renders the Result card");
+        assertTrue(validResult.contains("card-title\">Résultat"), "A valid basket renders the Result card");
         assertTrue(validResult.contains("totalPrice"), "The Result card holds the pretty-printed evaluation");
         assertEquals(ValuationTrace.STATUS_SUCCESS, traceFor("N7-ok").status,
                 "A valid submission records a SUCCESS trace");
@@ -878,5 +880,49 @@ class GroupNIT {
     @Test
     @Disabled("[W] the Form/JSON mode switch and client schema generation run in schema-form.js")
     void n7_formJsonToggle() {
+    }
+
+    // --------------------------------------------------
+    // N8 — arbitration reasons traced (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * N8 — every arbitration écartement leaves its reason readable in the trace of the concerned
+     * valuation. Two representative paths are pinned: a fail-closed configuration skip (an unknown
+     * trigger kind) and a budget refusal. Both surface on a {@code STATUS_SUCCESS}/200 trace whose
+     * {@code error_message} begins with {@code "Skipped configurations: "} and names the reason —
+     * {@code "N8_BAD"} for the skipped config, {@code "BUDGET_EXHAUSTED: offer N8_BUDGET"} for the
+     * exhausted budget. The reasons live only in the trace column, never in the response body.
+     */
+    @Test
+    void n8_arbitrationReasonsAreTraced() {
+        setRecording(true);
+        importCsv("/offers/import",
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"
+                        + "N8_BAD|TICKET_DISCOUNT|{\"discountType\":\"AMOUNT\",\"value\":1.00,"
+                        + "\"trigger\":{\"conditions\":[{\"kind\":\"UNKNOWN\"}]}}|0102|\n"
+                        + "N8_BUDGET|IMMEDIATE_VOUCHER|{\"targetOfferClass\":[\"BasicOffer\"],"
+                        + "\"targetEans\":[\"3300000000016\"],\"discountType\":\"FIXED_AMOUNT\",\"value\":1.00,"
+                        + "\"budget\":{\"maxAmount\":5.00}}|0101|\n");
+        valuate(oneLine("N8-skip", "0102", "3300000000005", "1"), 200);
+        TraceView skip = traceFor("N8-skip");
+        assertTrue(skip.found, "The skipped-config valuation is traced");
+        assertEquals(ValuationTrace.STATUS_SUCCESS, skip.status, "A fail-closed skip is a SUCCESS");
+        assertNotNull(skip.errorMessage, "The skip reason is recorded");
+        assertTrue(skip.errorMessage.startsWith("Skipped configurations: ")
+                        && skip.errorMessage.contains("N8_BAD"),
+                "The skip reason names the offending config: " + skip.errorMessage);
+        given().auth().preemptive().basic("admin", "admin")
+                .contentType(ContentType.JSON)
+                .body("{\"ticketId\":\"N8-B1\",\"storeCode\":\"0101\",\"direction\":\"SALE\",\"advantages\":"
+                        + "[{\"offerCode\":\"N8_BUDGET\",\"amount\":5.00}]}")
+                .when().post("/consumptions")
+                .then().statusCode(200);
+        valuate(oneLine("N8-budget", "0101", "3300000000016", "1"), 200);
+        TraceView budget = traceFor("N8-budget");
+        assertTrue(budget.found, "The budget-refused valuation is traced");
+        assertNotNull(budget.errorMessage, "The budget refusal is recorded");
+        assertTrue(budget.errorMessage.contains("BUDGET_EXHAUSTED: offer N8_BUDGET"),
+                "The budget refusal reason is readable in the trace: " + budget.errorMessage);
     }
 }

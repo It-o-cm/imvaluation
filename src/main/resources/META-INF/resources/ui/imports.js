@@ -17,13 +17,17 @@
 
     // Ordered patterns: first match wins. The order is significant — 'store-group' must be
     // tested before 'store', 'famil' and 'categ' before 'product' (product-families and
-    // product-category-storages carry both tokens), and 'price' after 'product'.
+    // product-category-storages carry both tokens), and 'price' after 'product'. The two
+    // referential feeds delivered before the flows that name them ('egalim' before products,
+    // 'vat' before prices) carry tokens of their own that collide with none of the others.
     var DOMAINS = [
         ['store-group', 'STORE_GROUPS'],
         ['store', 'STORES'],
+        ['egalim', 'EGALIM_REGIMES'],
         ['famil', 'PRODUCT_FAMILIES'],
         ['categ', 'CATEGORIES'],
         ['product', 'PRODUCTS'],
+        ['vat', 'VAT_RATES'],
         ['price', 'PRICES'],
         ['offer', 'OFFERS']
     ];

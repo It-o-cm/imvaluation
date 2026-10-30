@@ -387,42 +387,49 @@ class GroupGIT {
     /**
      * G4 — configuration errors mapped to 500 with a {@code FAILED} trace and a null
      * {@code responsePayload}. Four literals from the catalog are pinned: an unknown EAN
-     * (wrapped by the factory prefix), an unknown store (raised in the evaluation constructor,
-     * so NOT wrapped), a date-only {@code priceDate} that fails ISO-8601 parsing, and a price
-     * looked up before the seed's start date (no active price).
+     * (an {@code IllegalStateException} that is NOT a {@code ConfigurationException}, so since the
+     * A2/H1a fail-closed doctrine it propagates unwrapped, no factory prefix — see
+     * rapport-remediation-imvaluation.md:50-52,145), an unknown store (raised in the evaluation
+     * constructor, so NOT wrapped), a date-only {@code priceDate} that fails ISO-8601 parsing, and
+     * a price looked up before the seed's start date (no active price).
      */
     @Test
     void g4_configurationErrorsAreFailedAndTraced() {
+        // A referential gap (unknown EAN/store, no active price) is answered 422 since HD_43 lot 1
+        // (commit c59011f); a malformed request value that is NOT a referential gap — here the
+        // invalid date format — still surfaces as a 500.
         assertFailed("G4-unknown-ean",
                 oneLine("G4-unknown-ean", "0101", "9999999999999", "1"),
-                "Error building appliers from factory: Configuration Error: "
-                        + "Product not found for EAN '9999999999999'");
+                "Configuration Error: Product not found for EAN '9999999999999'", 422);
         assertFailed("G4-unknown-store",
                 oneLine("G4-unknown-store", "ZZZZ", "3300000000002", "1"),
-                "Configuration Error: Store not found for code 'ZZZZ'");
+                "Configuration Error: Store not found for code 'ZZZZ'", 422);
         assertFailed("G4-bad-date",
                 "{\"customerCode\":\"G4-bad-date\",\"storeCode\":\"0101\",\"items\":"
                         + "[{\"produceEan\":\"3300000000002\",\"quantity\":1,\"priceDate\":\"2026-01-12\"}]}",
-                "Invalid date format '2026-01-12' for item EAN '3300000000002'. Expected ISO-8601 format.");
+                "Invalid date format '2026-01-12' for item EAN '3300000000002'. Expected ISO-8601 format.", 500);
         assertFailed("G4-expired-price",
                 "{\"customerCode\":\"G4-expired-price\",\"storeCode\":\"0101\",\"items\":"
                         + "[{\"produceEan\":\"3300000000002\",\"quantity\":1,\"priceDate\":\"2026-01-11T23:59:59\"}]}",
-                "Configuration Error: No active price found for Product 'Lait UHT 1L'");
+                "Configuration Error: No active price found for Product 'Lait UHT 1L'", 422);
     }
 
     /**
-     * Posts a basket expected to fail with a 500 and asserts the trace carries the literal.
+     * Posts a basket expected to fail and asserts the trace carries the literal. A referential gap
+     * is answered 422 (commit c59011f), any other runtime failure 500; the caller passes the
+     * expected HTTP status, which the FAILED trace must also carry.
      *
      * @param customer         The unique customer code for the probe.
      * @param body             The basket JSON.
      * @param expectedFragment The literal that {@code error_message} must contain.
+     * @param httpStatus       The expected HTTP status (422 for a referential gap, 500 otherwise).
      */
-    private void assertFailed(String customer, String body, String expectedFragment) {
-        valuate(body, 500);
+    private void assertFailed(String customer, String body, String expectedFragment, int httpStatus) {
+        valuate(body, httpStatus);
         TraceView trace = traceFor(customer);
         assertTrue(trace.found, "A FAILED trace must exist for " + customer);
         assertEquals(ValuationTrace.STATUS_FAILED, trace.status, "Status for " + customer);
-        assertEquals(500, trace.httpStatus, "HTTP status for " + customer);
+        assertEquals(httpStatus, trace.httpStatus, "HTTP status for " + customer);
         assertFalse(trace.hasResponsePayload, "A FAILED trace carries no response payload: " + customer);
         assertNotNull(trace.errorMessage, "Error message for " + customer);
         assertTrue(trace.errorMessage.contains(expectedFragment),
@@ -596,6 +603,99 @@ class GroupGIT {
                 .then().statusCode(400);
         assertEquals(before, traceCount(),
                 "Neither a 415 nor a provider 400 may record a valuation trace");
+    }
+
+    // --------------------------------------------------
+    // G8 — schema rejections of the extension (27/09)
+    // --------------------------------------------------
+
+    /**
+     * G8 — the card-promotion schema rejections follow the G2 pattern: each malformed
+     * {@code cardPromotions} or basket field is a 400 with a {@code REJECTED} trace whose message
+     * starts with {@code "Error validating offer:"}. Covered: an off-enum {@code promotionType},
+     * a PERCENT {@code value} above 1 (the cross-rule {@code maximum:1}), a {@code value} at zero
+     * ({@code exclusiveMinimum:0}), an empty {@code couponCodes} entry ({@code minLength:1}) and a
+     * non-boolean {@code closed}.
+     * <p>
+     * CALIBRATION — the duplicate-EAN case the catalog lists here is NOT a 400: uniqueness is
+     * enforced inside the engine and surfaces as a 500 (pinned in {@link GroupTIT}), so it is
+     * excluded from this schema-reject batch.
+     */
+    @Test
+    void g8_extensionSchemaRejections() {
+        String milk = "3300000000002";
+        String[][] cases = {
+                {"G8-type-enum",
+                        "{\"customerCode\":\"G8-type-enum\",\"storeCode\":\"0101\",\"cardPromotions\":"
+                                + "[{\"ean\":\"" + milk + "\",\"promotionType\":\"BOGUS\",\"value\":0.5}],"
+                                + "\"items\":[{\"produceEan\":\"" + milk + "\",\"quantity\":1}]}"},
+                {"G8-percent-high",
+                        "{\"customerCode\":\"G8-percent-high\",\"storeCode\":\"0101\",\"cardPromotions\":"
+                                + "[{\"ean\":\"" + milk + "\",\"promotionType\":\"PERCENT\",\"value\":1.5}],"
+                                + "\"items\":[{\"produceEan\":\"" + milk + "\",\"quantity\":1}]}"},
+                {"G8-value-zero",
+                        "{\"customerCode\":\"G8-value-zero\",\"storeCode\":\"0101\",\"cardPromotions\":"
+                                + "[{\"ean\":\"" + milk + "\",\"promotionType\":\"AMOUNT\",\"value\":0}],"
+                                + "\"items\":[{\"produceEan\":\"" + milk + "\",\"quantity\":1}]}"},
+                {"G8-coupon-empty",
+                        "{\"customerCode\":\"G8-coupon-empty\",\"storeCode\":\"0101\",\"couponCodes\":[\"\"],"
+                                + "\"items\":[{\"produceEan\":\"" + milk + "\",\"quantity\":1}]}"},
+        };
+        for (String[] probe : cases) {
+            valuate(probe[1], 400);
+            TraceView trace = traceFor(probe[0]);
+            assertTrue(trace.found, "A REJECTED trace must exist for " + probe[0]);
+            assertEquals(ValuationTrace.STATUS_REJECTED, trace.status, "Status for " + probe[0]);
+            assertEquals(400, trace.httpStatus, "HTTP status for " + probe[0]);
+            assertNotNull(trace.errorMessage, "Error message for " + probe[0]);
+            assertTrue(trace.errorMessage.startsWith("Error validating offer:"),
+                    "Reject prefix for " + probe[0] + ": " + trace.errorMessage);
+        }
+        // CALIBRATION — a non-boolean `closed` is a Jackson provider 400 (a string cannot be
+        // coerced to Boolean), raised BEFORE the method like G7: it is a 400 with NO trace, not a
+        // schema REJECTED.
+        valuate("{\"customerCode\":\"G8-closed-string\",\"storeCode\":\"0101\",\"closed\":\"yes\","
+                + "\"items\":[{\"produceEan\":\"" + milk + "\",\"quantity\":1}]}", 400);
+        assertFalse(traceFor("G8-closed-string").found,
+                "A provider-level 400 on a non-boolean closed records no trace");
+    }
+
+    // --------------------------------------------------
+    // G9 — enriched response shape (27/09)
+    // --------------------------------------------------
+
+    /**
+     * G9 — the enriched blocks {@code egalim}, {@code srp} and {@code messages} appear ONLY when
+     * their configuration is in force; the mirror catalog carries no guard nor message offer, so a
+     * plain valued basket omits all three keys — that absence is the regression criterion. On the
+     * same response, {@code accountingCode}/{@code printMode} are absent from advantages that do
+     * not carry them (the base immediate voucher does not), while the G6 invariant Σ breakdown TTC
+     * = totalPrice still holds.
+     */
+    @Test
+    void g9_enrichedResponseShape() {
+        io.restassured.response.Response response = valuate(
+                oneLine("G9-plain", "0101", "3300000000001", "2"), 200);
+        JsonPath body = response.jsonPath();
+        assertNull(body.get("egalim"), "No guard in force: the egalim key is absent");
+        assertNull(body.get("srp"), "No guard in force: the srp key is absent");
+        assertNull(body.get("messages"), "No message in force: the messages key is absent");
+        List<Map<String, Object>> advantages = body.getList("advantages");
+        assertNotNull(advantages, "The apples basket produces advantages");
+        for (Map<String, Object> advantage : advantages) {
+            assertNull(advantage.get("accountingCode"),
+                    "A base advantage carries no accountingCode key: " + advantage.get("type"));
+            assertNull(advantage.get("printMode"),
+                    "A base advantage carries no printMode key: " + advantage.get("type"));
+        }
+        int rateCount = body.getList("vatBreakdown").size();
+        BigDecimal breakdownTtc = BigDecimal.ZERO;
+        for (int i = 0; i < rateCount; i++) {
+            breakdownTtc = breakdownTtc.add(
+                    new BigDecimal(body.getString("vatBreakdown[" + i + "].amountIncludingTax")));
+        }
+        assertEquals(0, breakdownTtc.compareTo(new BigDecimal(body.getString("totalPrice.amountIncludingTax"))),
+                "The G6 breakdown-sums-to-total invariant still holds");
     }
 
     /**

@@ -620,6 +620,17 @@
     }
 
     /**
+     * Reads the CSRF token from its cookie so a state-changing fetch can echo it in a header
+     * (spec-durcissement-web §1). Returns an empty string when the cookie is absent.
+     *
+     * @returns {string} the CSRF token, or an empty string.
+     */
+    function csrfToken() {
+        var match = document.cookie.match(/(?:^|;\s*)csrf-token=([^;]+)/);
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    /**
      * Submits the whole hierarchy.
      */
     function save() {
@@ -628,7 +639,11 @@
         button.disabled = true;
         fetch('/ui/store-groups', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken()
+            },
             credentials: 'same-origin',
             body: JSON.stringify({ groups: model.groups })
         }).then(function (response) {

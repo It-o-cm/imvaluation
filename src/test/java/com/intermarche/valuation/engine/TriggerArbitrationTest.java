@@ -5,6 +5,7 @@ import com.intermarche.valuation.domain.PriceUsage;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.ProductType;
 import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.domain.util.DateTimeProvider;
 import com.intermarche.valuation.domain.util.DomainUtils;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -17,6 +18,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -725,5 +728,111 @@ public class TriggerArbitrationTest {
                 DomainUtils.createItem("ARB_OTHER", 1.0)));
         // Consuming advantage 6€ + 10% on the non-consumed ARB_OTHER only (2€, not 7€) = 8€.
         assertEquals(0, new BigDecimal("8.00").compareTo(totalDiscount(evaluation)));
+    }
+
+    /**
+     * spec-divers-offre §3: {@code accountingCode} and {@code printMode} declared on a
+     * configuration are restituted verbatim on its produced advantage, stamped centrally by the
+     * engine from the parsed configuration.
+     */
+    @Test
+    void testAccountingCodeAndPrintModeRestituted() {
+        seedStore();
+        seedProduct("ARB_TICK", "50.00");
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"tiers\": [ { \"threshold\": 0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10 } } ], "
+                + "\"accountingCode\": \"VENTIL-42\", \"printMode\": \"FOOTER\" }";
+        DomainUtils.createAndPersistOffer("ARB_PASSTHRU", store, "TIERED_DISCOUNT", spec);
+        BasketEvaluation evaluation = engine.evaluate(basket(DomainUtils.createItem("ARB_TICK", 1.0)));
+        AdvantageApplication advantage = evaluation.getAdvantages().stream()
+                .filter(a -> a.getAccountingCode() != null).findFirst().orElse(null);
+        assertNotNull(advantage, "the produced advantage must carry the accounting code");
+        assertEquals("VENTIL-42", advantage.getAccountingCode());
+        assertEquals("FOOTER", advantage.getPrintMode());
+    }
+
+    /**
+     * spec-divers-offre §5.3: with no passthrough declared, every advantage restitutes {@code null}
+     * for both fields, so the output is unchanged.
+     */
+    @Test
+    void testPassthroughAbsentByDefault() {
+        seedStore();
+        seedProduct("ARB_TICK", "50.00");
+        DomainUtils.createAndPersistOffer("ARB_NOPASS", store, "TIERED_DISCOUNT",
+                ticketSpec("PERCENTAGE", "10", null, null, null));
+        BasketEvaluation evaluation = engine.evaluate(basket(DomainUtils.createItem("ARB_TICK", 1.0)));
+        assertFalse(evaluation.getAdvantages().isEmpty(), "the discount must apply");
+        for (AdvantageApplication advantage : evaluation.getAdvantages()) {
+            assertNull(advantage.getAccountingCode(), "no accounting code when none is declared");
+            assertNull(advantage.getPrintMode(), "no print mode when none is declared");
+        }
+    }
+
+    /**
+     * spec-divers-offre §2, §3: {@link ValuationEngine#parseArbitrationConfig} reads the shared
+     * passthrough fields and the {@code compliance} block from a configuration's specification.
+     */
+    @Test
+    void testParseArbitrationConfigReadsPassthroughAndCompliance() {
+        seedStore();
+        Offer offer = new Offer();
+        offer.code = "ARB_COMPLIANCE";
+        offer.specification = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"tiers\": [ { \"threshold\": 0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10 } } ], "
+                + "\"accountingCode\": \"VENTIL-42\", \"printMode\": \"LINE\", "
+                + "\"compliance\": { \"egalimExempt\": true, \"srpExempt\": true } }";
+        BasketEvaluation evaluation = engine.evaluate(basket());
+        ValuationEngine.ArbitrationConfig config = engine.parseArbitrationConfig(offer, evaluation);
+        assertEquals("VENTIL-42", config.accountingCode());
+        assertEquals("LINE", config.printMode());
+        assertTrue(config.egalimExempt());
+        assertTrue(config.srpExempt());
+    }
+
+    /**
+     * spec-divers-offre §1, §5.1: a TIME_WINDOW trigger gates its advantage end to end — the 10%
+     * happy-hour discount applies at a moment inside the window (Monday 18:00) and is withheld at a
+     * moment outside it (12:00), the same basket and configuration otherwise. The clock is driven
+     * through {@link DateTimeProvider}, never the wall clock.
+     */
+    @Test
+    void testTimeWindowTriggerGatesAdvantageEndToEnd() {
+        seedStore();
+        seedProduct("ARB_TICK", "50.00");
+        DomainUtils.createAndPersistOffer("ARB_HAPPY", store, "TIERED_DISCOUNT",
+                ticketSpec("PERCENTAGE", "10",
+                        "{ \"conditions\": [ { \"kind\": \"TIME_WINDOW\", \"from\": \"17:00\", "
+                                + "\"to\": \"19:00\" } ] }", null, null));
+        try {
+            DateTimeProvider.setFixedDateTime(java.time.LocalDateTime.of(2024, 1, 1, 18, 0));
+            BasketEvaluation inside = engine.evaluate(basket(DomainUtils.createItem("ARB_TICK", 1.0)));
+            assertEquals(0, new BigDecimal("5.00").compareTo(totalDiscount(inside)),
+                    "inside the window the happy-hour discount applies");
+            DateTimeProvider.setFixedDateTime(java.time.LocalDateTime.of(2024, 1, 1, 12, 0));
+            BasketEvaluation outside = engine.evaluate(basket(DomainUtils.createItem("ARB_TICK", 1.0)));
+            assertTrue(outside.getAdvantages().isEmpty(),
+                    "outside the window the trigger is not satisfied and nothing applies");
+        } finally {
+            DateTimeProvider.clear();
+        }
+    }
+
+    /**
+     * spec-divers-offre §2: an absent {@code compliance} block leaves both exemption flags false
+     * and both passthrough fields null — the current behaviour.
+     */
+    @Test
+    void testParseArbitrationConfigDefaultsWhenAbsent() {
+        seedStore();
+        Offer offer = new Offer();
+        offer.code = "ARB_PLAIN";
+        offer.specification = ticketSpec("PERCENTAGE", "10", null, null, null);
+        BasketEvaluation evaluation = engine.evaluate(basket());
+        ValuationEngine.ArbitrationConfig config = engine.parseArbitrationConfig(offer, evaluation);
+        assertNull(config.accountingCode());
+        assertNull(config.printMode());
+        assertFalse(config.egalimExempt());
+        assertFalse(config.srpExempt());
     }
 }

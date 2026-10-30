@@ -90,7 +90,8 @@ public class ValuationResourceCoverageTest {
 
     /**
      * Covers the success path: an empty working map yields a 200 response carrying the
-     * evaluation.
+     * evaluation, serialized by the application mapper (digital sheet DG-01-01-01 adds the family
+     * codes of its valued lines, none here).
      */
     @Test
     void calculateReturns200WhenAllItemsProcessed() {
@@ -99,6 +100,7 @@ public class ValuationResourceCoverageTest {
         when(engine.evaluate(any(Basket.class))).thenReturn(evaluation);
         Response response = resource.calculate(validBasket());
         assertEquals(Response.Status.OK.getStatusCode(), response.getStatus());
-        assertEquals(evaluation, response.getEntity());
+        assertTrue(response.getEntity() instanceof com.fasterxml.jackson.databind.JsonNode,
+                "the answer is the serialized evaluation");
     }
 }

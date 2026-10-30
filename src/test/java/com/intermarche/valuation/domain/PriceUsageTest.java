@@ -19,12 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class PriceUsageTest {
 
     /**
-     * Verifies that {@code values()} returns exactly the two declared constants
+     * Verifies that {@code values()} returns exactly the three declared constants
      * in declaration order.
      */
     @Test
     void valuesReturnsAllConstantsInDeclarationOrder() {
-        PriceUsage[] expected = {PriceUsage.DEFAULT, PriceUsage.BASE_FOR_DISCOUNT};
+        PriceUsage[] expected = {PriceUsage.DEFAULT, PriceUsage.BASE_FOR_DISCOUNT, PriceUsage.SRP_FLOOR};
         assertArrayEquals(expected, PriceUsage.values());
     }
 
@@ -50,6 +50,17 @@ class PriceUsageTest {
     @Test
     void valueOfResolvesBaseForDiscount() {
         assertSame(PriceUsage.BASE_FOR_DISCOUNT, PriceUsage.valueOf("BASE_FOR_DISCOUNT"));
+    }
+
+    /**
+     * Verifies that {@code valueOf} resolves the {@code SRP_FLOOR} constant, last in declaration
+     * order (spec-srp-guard §1).
+     */
+    @Test
+    void valueOfResolvesSrpFloor() {
+        assertSame(PriceUsage.SRP_FLOOR, PriceUsage.valueOf("SRP_FLOOR"));
+        assertEquals(2, PriceUsage.SRP_FLOOR.ordinal());
+        assertEquals("SRP_FLOOR", PriceUsage.SRP_FLOOR.name());
     }
 
     /**

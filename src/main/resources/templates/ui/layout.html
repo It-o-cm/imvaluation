@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{inject:i18n.lang}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{#insert title}Valuation admin{/}</title>
+    <title>{#insert title}{inject:i18n.get('layout.title')}{/}</title>
     <link rel="stylesheet" href="/ui/base.css">
     <link rel="stylesheet" href="/ui/auth.css">
     <link rel="stylesheet" href="/ui/offer.css">
@@ -19,20 +19,38 @@
         <span class="app-brand-text">Valuation<b>admin</b></span>
     </a>
     <nav class="app-nav">
-        <a href="/ui/offers">Offers</a>
-        <a href="/ui/store-groups">Store groups</a>
-        <a href="/ui/valuations">Valuations</a>
-        <a href="/ui/imports">Imports</a>
-        {#if inject:currentUser.admin}
-        <a href="/ui/users">Users</a>
+        {#if !inject:currentUser.isMenuHidden('offers')}
+        <a href="/ui/offers">{inject:i18n.get('nav.offers')}</a>
+        {/if}
+        {#if !inject:currentUser.isMenuHidden('store-groups')}
+        <a href="/ui/store-groups">{inject:i18n.get('nav.storeGroups')}</a>
+        {/if}
+        {#if !inject:currentUser.isMenuHidden('valuations')}
+        <a href="/ui/valuations">{inject:i18n.get('nav.valuations')}</a>
+        {/if}
+        {#if !inject:currentUser.isMenuHidden('egalim-ceilings')}
+        <a href="/ui/egalim-ceilings">{inject:i18n.get('nav.egalimCeilings')}</a>
+        {/if}
+        {#if inject:currentUser.manager && !inject:currentUser.isMenuHidden('consumptions')}
+        <a href="/ui/consumptions">{inject:i18n.get('nav.consumptions')}</a>
+        {/if}
+        {#if inject:currentUser.manager && !inject:currentUser.isMenuHidden('anomalies')}
+        <a href="/ui/anomalies">{inject:i18n.get('nav.anomalies')}</a>
+        {/if}
+        {#if !inject:currentUser.isMenuHidden('imports')}
+        <a href="/ui/imports">{inject:i18n.get('nav.imports')}</a>
+        {/if}
+        {#if inject:currentUser.admin && !inject:currentUser.isMenuHidden('users')}
+        <a href="/ui/users">{inject:i18n.get('nav.users')}</a>
         {/if}
     </nav>
     {#if inject:currentUser.authenticated}
     <div class="app-identity">
         <span class="app-identity-name">{inject:currentUser.name}</span>
-        <a class="app-identity-link" href="/ui/password">Password</a>
+        <a class="app-identity-link" href="/ui/password">{inject:i18n.get('nav.password')}</a>
         <form method="post" action="/ui/logout" class="app-identity-form">
-            <button class="app-identity-link" type="submit">Sign out</button>
+            {#csrf /}
+            <button class="app-identity-link" type="submit">{inject:i18n.get('nav.signOut')}</button>
         </form>
     </div>
     {/if}
@@ -43,7 +61,7 @@
 </main>
 
 <footer class="app-footer">
-    <span>Offer specifications are validated against the schema declared by the valuation engine.</span>
+    <span>{inject:i18n.get('layout.footer')}</span>
 </footer>
 <script src="/ui/confirm.js"></script>
 </body>

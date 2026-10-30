@@ -202,20 +202,22 @@ class GroupHIT {
     }
 
     /**
-     * Posts a basket expected to fail with a 500 and asserts the FAILED trace carries the
-     * literal fragment; the fragment is a substring match, tolerant of any engine wrapping
-     * prefix ({@code Error building appliers from factory: ...}).
+     * Posts a basket expected to fail and asserts the FAILED trace carries the literal fragment;
+     * the fragment is a substring match, tolerant of any engine wrapping prefix ({@code Error
+     * building appliers from factory: ...}). A referential gap is answered 422 (commit c59011f),
+     * any other runtime failure 500; the caller passes the expected HTTP status.
      *
      * @param customer         The unique customer code for the probe.
      * @param body             The basket JSON.
      * @param expectedFragment The literal that {@code error_message} must contain.
+     * @param httpStatus       The expected HTTP status (422 for a referential gap, 500 otherwise).
      */
-    private void assertFailed(String customer, String body, String expectedFragment) {
-        valuate(body, 500);
+    private void assertFailed(String customer, String body, String expectedFragment, int httpStatus) {
+        valuate(body, httpStatus);
         TraceView trace = traceFor(customer);
         assertTrue(trace.found, "A FAILED trace must exist for " + customer);
         assertEquals(ValuationTrace.STATUS_FAILED, trace.status, "Status for " + customer);
-        assertEquals(500, trace.httpStatus, "HTTP status for " + customer);
+        assertEquals(httpStatus, trace.httpStatus, "HTTP status for " + customer);
         assertFalse(trace.hasResponsePayload, "A FAILED trace carries no response payload: " + customer);
         assertNotNull(trace.errorMessage, "Error message for " + customer);
         assertTrue(trace.errorMessage.contains(expectedFragment),
@@ -359,7 +361,7 @@ class GroupHIT {
 
     /**
      * H1 — a simple line. One milk {@code 002} on store {@code 0101} yields exactly one standard
-     * offer typed {@code Standard: EAN=3300000000002, Qty=1.0} at the 20 % catalog rate, and the
+     * offer typed {@code Standard: EAN=3300000000002, Qty=1} at the 20 % catalog rate, and the
      * VAT breakdown is a single 20 % line summing to the total. CALIBRATION: the offer total is
      * the observed {@code 2.76} (the priority-1 DEFAULT winner), where the catalog quotes the
      * superseded priority-0 {@code 3.00}.
@@ -370,8 +372,8 @@ class GroupHIT {
         List<Integer> standards = standardOffers(body, "3300000000002");
         assertEquals(1, standards.size(), "A single milk line yields exactly one standard offer");
         int idx = standards.get(0);
-        assertEquals("Standard: EAN=3300000000002, Qty=1.0", body.getString("offers[" + idx + "].type"),
-                "The literal standard type carries the EAN and the 1.0 quantity");
+        assertEquals("Standard: EAN=3300000000002, Qty=1", body.getString("offers[" + idx + "].type"),
+                "The literal standard type carries the EAN and the integer quantity 1 (A5 BigDecimal: 1.000 renders 1)");
         assertMoney("2.76", offerTtc(body, idx), "Milk resolves to the priority-1 DEFAULT winner");
         assertMoney("0.2000", new BigDecimal(body.getString("offers[" + idx + "].amount.vatRate")),
                 "The line keeps the product's real 20% rate");
@@ -447,10 +449,10 @@ class GroupHIT {
         assertMoney("3.00", offerTtc(within, standards.get(0)), "The bounded price is used within the window");
         assertFailed("H3-at-end",
                 basket("H3-at-end", "0103", dated("3300000000002", "1", "2026-06-01T00:00:00")),
-                "No active price found for Product 'Lait UHT 1L'");
+                "No active price found for Product 'Lait UHT 1L'", 422);
         assertFailed("H3-past-end",
                 basket("H3-past-end", "0103", plain("3300000000002", "1")),
-                "No active price found for Product 'Lait UHT 1L'");
+                "No active price found for Product 'Lait UHT 1L'", 422);
         JsonPath future = valuate(
                 basket("H3-null-end", "0101", dated("3300000000002", "1", "2030-01-01T00:00:00")), 200).jsonPath();
         assertEquals(1, standardOffers(future, "3300000000002").size(),
@@ -472,7 +474,7 @@ class GroupHIT {
     void h4_explicitPriceDate() {
         assertFailed("H4-before-start",
                 basket("H4-before-start", "0101", dated("3300000000002", "1", "2026-01-11T23:59:59")),
-                "No active price found for Product 'Lait UHT 1L'");
+                "No active price found for Product 'Lait UHT 1L'", 422);
         JsonPath atStart = valuate(
                 basket("H4-at-start", "0101", dated("3300000000002", "1", "2026-01-12T00:00:00")), 200).jsonPath();
         List<Integer> standards = standardOffers(atStart, "3300000000002");
@@ -480,7 +482,7 @@ class GroupHIT {
         assertMoney("2.76", offerTtc(atStart, standards.get(0)), "At the start boundary the price is active");
         assertFailed("H4-date-only",
                 basket("H4-date-only", "0101", dated("3300000000002", "1", "2026-01-12")),
-                "Invalid date format '2026-01-12' for item EAN '3300000000002'. Expected ISO-8601 format.");
+                "Invalid date format '2026-01-12' for item EAN '3300000000002'. Expected ISO-8601 format.", 500);
     }
 
     // --------------------------------------------------
@@ -495,7 +497,9 @@ class GroupHIT {
      * {@code 001} basket, which registers an IMMEDIATE_VOUCHER on the standard applier, is valued
      * at the ported {@code 2.40} (the reference price is the ported price, not the seed's +10 %
      * {@code 1.19}), and the discount is computed on it. Supplying only one or two of the three
-     * fields is silently ignored: three partial baskets fall back to the catalog {@code 2.76}.
+     * fields is refused (digital sheet DG-01-02-03, the former silent fallback to the catalog
+     * {@code 2.76} was a defect): the basket answers 400 and its REJECTED trace names every
+     * missing price field.
      */
     @Test
     void h5_lineBornePrice() {
@@ -515,18 +519,23 @@ class GroupHIT {
                 "The immediate voucher discount is computed on the ported price: " + advantages);
         String[][] partials = {
                 {"H5-partial-incl",
-                        "{\"produceEan\":\"3300000000002\",\"quantity\":1,\"pricePerUnitInclTax\":99.99}"},
+                        "{\"produceEan\":\"3300000000002\",\"quantity\":1,\"pricePerUnitInclTax\":99.99}",
+                        "pricePerUnitExclTax", "vatRate"},
                 {"H5-partial-excl-incl",
-                        "{\"produceEan\":\"3300000000002\",\"quantity\":1,\"pricePerUnitExclTax\":88.88,\"pricePerUnitInclTax\":99.99}"},
+                        "{\"produceEan\":\"3300000000002\",\"quantity\":1,\"pricePerUnitExclTax\":88.88,\"pricePerUnitInclTax\":99.99}",
+                        "vatRate", "vatRate"},
                 {"H5-partial-excl-vat",
-                        "{\"produceEan\":\"3300000000002\",\"quantity\":1,\"pricePerUnitExclTax\":88.88,\"vatRate\":0.5}"},
+                        "{\"produceEan\":\"3300000000002\",\"quantity\":1,\"pricePerUnitExclTax\":88.88,\"vatRate\":0.5}",
+                        "pricePerUnitInclTax", "pricePerUnitInclTax"},
         };
         for (String[] partial : partials) {
-            JsonPath fallback = valuate(basket(partial[0], "0101", partial[1]), 200).jsonPath();
-            List<Integer> std = standardOffers(fallback, "3300000000002");
-            assertEquals(1, std.size(), "The partial-price line still yields one standard offer for " + partial[0]);
-            assertMoney("2.76", offerTtc(fallback, std.get(0)),
-                    "A partial ported price is ignored, the catalog price is used for " + partial[0]);
+            valuate(basket(partial[0], "0101", partial[1]), 400);
+            TraceView trace = traceFor(partial[0]);
+            assertTrue(trace.found, "A REJECTED trace must exist for " + partial[0]);
+            assertEquals(ValuationTrace.STATUS_REJECTED, trace.status, "Status for " + partial[0]);
+            assertEquals(400, trace.httpStatus, "HTTP status for " + partial[0]);
+            assertTrue(trace.errorMessage.contains(partial[2]) && trace.errorMessage.contains(partial[3]),
+                    "The rejection of " + partial[0] + " names the missing fields, was: " + trace.errorMessage);
         }
     }
 
@@ -550,8 +559,8 @@ class GroupHIT {
         List<Integer> mergedStd = standardOffers(merged, "3300000000002");
         assertEquals(1, mergedStd.size(), "Same EAN and profile aggregate into one standard offer");
         int idx = mergedStd.get(0);
-        assertEquals("Standard: EAN=3300000000002, Qty=2.0", merged.getString("offers[" + idx + "].type"),
-                "The merged quantity is the sum of the two lines");
+        assertEquals("Standard: EAN=3300000000002, Qty=2", merged.getString("offers[" + idx + "].type"),
+                "The merged quantity is the sum of the two lines (A5 BigDecimal: 1+1 renders 2)");
         assertMoney("5.52", offerTtc(merged, idx), "Two units at the 2.76 winner sum to 5.52");
         List<Map<String, Object>> items = merged.getList("offers[" + idx + "].items");
         assertEquals(2, items.size(), "The merge preserves both source lines, restored line by line");
@@ -612,10 +621,10 @@ class GroupHIT {
                         + "3300000000903|0101|5.50|6.60|0.2000|BASE_FOR_DISCOUNT|0|2026-01-12T00:00:00|\n");
         assertFailed("H7-weight-no-ref",
                 basket("H7-weight-no-ref", "0101", plain("3300000000901", "1")),
-                "is typed as WEIGHT but has no valid reference weight defined.");
+                "is typed as WEIGHT but has no valid reference weight defined.", 500);
         assertFailed("H7-volume-no-ref",
                 basket("H7-volume-no-ref", "0101", plain("3300000000902", "1")),
-                "is typed as VOLUME but has no valid reference volume defined.");
+                "is typed as VOLUME but has no valid reference volume defined.", 500);
         JsonPath vol = valuate(basket("H7-volume", "0101", plain("3300000000903", "1.0")), 200).jsonPath();
         List<Integer> volStd = standardOffers(vol, "3300000000903");
         assertEquals(1, volStd.size(), "The volume product yields one standard offer");
@@ -650,5 +659,33 @@ class GroupHIT {
         assertEquals(1, milkStd.size(), "The undiscounted milk yields one standard offer");
         assertMoney("2.76", offerTtc(milk, milkStd.get(0)),
                 "With no discount registered the line stays at the plain DEFAULT price");
+    }
+
+    // --------------------------------------------------
+    // H9 — SRP_FLOOR is not a selling price (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * H9 — an {@code SRP_FLOOR} row never tarifies. Purée {@code 016} gets an {@code SRP_FLOOR}
+     * price on {@code 0103} where it has NO other price, and on {@code 0101} at a HIGH priority
+     * alongside its existing {@code DEFAULT}. Valued on {@code 0103} the article is unpriced —
+     * {@code Configuration Error: No active price found} — because the floor is not a sale price;
+     * valued on {@code 0101} it is the {@code DEFAULT} (2.40 TTC) that prices it, whatever the
+     * priority of the {@code SRP_FLOOR} row.
+     */
+    @Test
+    void h9_srpFloorIsNotASellingPrice() {
+        importCsv("/prices/import",
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
+                        + "3300000000016|0103|2.00|2.40|0.2000|SRP_FLOOR|0|2026-01-12T00:00:00|\n"
+                        + "3300000000016|0101|2.00|2.40|0.2000|SRP_FLOOR|9|2026-01-12T00:00:00|\n");
+        assertFailed("H9-floor-only",
+                basket("H9-floor-only", "0103", plain("3300000000016", "1")),
+                "No active price found", 422);
+        JsonPath onDefault = valuate(basket("H9-default-wins", "0101", plain("3300000000016", "1")), 200).jsonPath();
+        List<Integer> std = standardOffers(onDefault, "3300000000016");
+        assertEquals(1, std.size(), "The article yields one standard offer priced by its DEFAULT");
+        assertMoney("2.40", offerTtc(onDefault, std.get(0)),
+                "The DEFAULT prices the line, whatever the priority of the SRP_FLOOR row");
     }
 }

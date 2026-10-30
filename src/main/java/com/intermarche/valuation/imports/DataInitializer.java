@@ -1,6 +1,10 @@
 package com.intermarche.valuation.imports;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.domain.ValuationTrace;
+import com.intermarche.valuation.engine.Basket;
+import com.intermarche.valuation.engine.ValuationResource;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.event.Observes;
@@ -16,7 +20,8 @@ import java.io.InputStream;
 /**
  * Seeds the reference data (stores, groups, products, families, categories, prices and
  * offers) when the database is empty, so a freshly started instance is usable without any
- * manual import.
+ * manual import, then replays a few sample baskets through the valuation funnel so the
+ * Valuations screen is not empty either.
  * <p>
  * The database is in-memory and recreated at every start, so without this initializer every
  * restart (including a dev-mode live reload) would leave the application without a single
@@ -97,6 +102,13 @@ public class DataInitializer {
     OfferCsvResource offerCsvResource;
 
     /**
+     * Resource replaying the seed baskets through the real valuation funnel, so a freshly
+     * seeded instance carries a few traces on the Valuations screen.
+     */
+    @Inject
+    ValuationResource valuationResource;
+
+    /**
      * Seeds the reference data on startup when enabled and the database is empty.
      * <p>
      * The imports run in dependency order (stores before groups, products before families
@@ -141,6 +153,7 @@ public class DataInitializer {
                     stream, PriceCsvResource.COL_EAN, PriceCsvResource.REQUIRED_COLUMNS));
             seed("offers.csv", stream -> offerCsvResource.importCsvStream(
                     stream, OfferCsvResource.COL_CODE, OfferCsvResource.REQUIRED_COLUMNS));
+            seedValuations();
             LOGGER.info("Reference data seed completed.");
         } catch (Exception e) {
             // Report §3: a partial seed must not survive. The guard on the next boot is
@@ -152,11 +165,47 @@ public class DataInitializer {
     }
 
     /**
+     * Replays the embedded sample baskets through the real valuation funnel.
+     * <p>
+     * Every basket of {@code baskets.json} goes through
+     * {@link ValuationResource#calculate(Basket)}: schema validation, engine, and trace
+     * recording, so the seeded Valuations screen shows traces that are exactly what a
+     * caller would have obtained over HTTP — same statuses, same payloads.
+     * <p>
+     * Each basket runs in its own transaction: a basket the funnel refuses throws, which
+     * rolls back that transaction (and its own trace) but leaves the other baskets intact.
+     * A refusal is logged and skipped rather than failing the seed: the traces are derived
+     * demonstration data, and one unhappy basket must not wipe the referential.
+     *
+     * @throws IOException           if the basket file cannot be read.
+     * @throws IllegalStateException if the basket file is missing or malformed.
+     */
+    private void seedValuations() throws IOException {
+        try (InputStream stream = DataInitializer.class.getResourceAsStream(SEED_FOLDER + "baskets.json")) {
+            if (stream == null) {
+                throw new IllegalStateException("Seed file not found on the classpath: "
+                        + SEED_FOLDER + "baskets.json");
+            }
+            Basket[] baskets = new ObjectMapper().readValue(stream, Basket[].class);
+            for (Basket basket : baskets) {
+                try {
+                    QuarkusTransaction.requiringNew().run(() -> valuationResource.calculate(basket));
+                } catch (Exception e) {
+                    LOGGER.warn("Seed basket for store " + basket.storeCode
+                            + " was refused by the funnel; skipped.", e);
+                }
+            }
+            LOGGER.info("Replayed " + baskets.length + " seed basket(s) through the valuation funnel.");
+        }
+    }
+
+    /**
      * Deletes every seeded reference row, in reverse dependency order, so a failed seed leaves no
      * partial state behind (report §3). Runs in its own transaction, like the seed itself.
      */
     private void wipeSeededData() {
         QuarkusTransaction.requiringNew().run(() -> {
+            ValuationTrace.deleteAll();
             com.intermarche.valuation.domain.Offer.deleteAll();
             com.intermarche.valuation.domain.Price.deleteAll();
             com.intermarche.valuation.domain.ProductCategoryStorage.deleteAll();

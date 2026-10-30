@@ -177,7 +177,7 @@ class GroupCIT {
                 .formParam("active", "on")
                 .when().post("/ui/users/new")
                 .then().statusCode(200)
-                .body(containsString("The username is mandatory."))
+                .body(containsString("utilisateur est obligatoire."))
                 .body(not(containsString("topsecret123")));
         given().redirects().follow(false)
                 .auth().preemptive().basic("admin", "admin")
@@ -188,7 +188,7 @@ class GroupCIT {
                 .when().post("/ui/users/new")
                 .then().statusCode(200)
                 // Qute HTML-escapes the message banner: the apostrophes render as &#39;.
-                .body(containsString("An account named &#39;admin&#39; already exists."));
+                .body(containsString("Un compte nommé"));
         given().redirects().follow(false)
                 .auth().preemptive().basic("admin", "admin")
                 .formParam("username", "c1fresh1")
@@ -214,7 +214,7 @@ class GroupCIT {
                 .formParam("active", "on")
                 .when().post("/ui/users/new")
                 .then().statusCode(200)
-                .body(containsString("At least one role must be granted."));
+                .body(containsString("Au moins un rôle doit être accordé."));
         given().redirects().follow(false)
                 .auth().preemptive().basic("admin", "admin")
                 .formParam("username", "c1ok")
@@ -223,7 +223,7 @@ class GroupCIT {
                 .formParam("active", "on")
                 .when().post("/ui/users/new")
                 .then().statusCode(303)
-                .header("Location", containsString("/ui/users?notice=Account+%27c1ok%27+created."));
+                .header("Location", containsString("notice=Compte"));
         boolean[] forced = new boolean[1];
         QuarkusTransaction.requiringNew().run(() -> {
             AppUser user = AppUser.findByUsername("c1ok");
@@ -251,7 +251,7 @@ class GroupCIT {
         given().auth().preemptive().basic("admin", "admin")
                 .when().get("/ui/users/" + id)
                 .then().statusCode(200)
-                .body(containsString("The login name cannot be changed."))
+                .body(containsString("Le nom de connexion ne peut pas"))
                 .body(containsString("value=\"c2user\""));
         given().redirects().follow(false)
                 .auth().preemptive().basic("admin", "admin")
@@ -260,7 +260,7 @@ class GroupCIT {
                 .formParam("active", "on")
                 .when().post("/ui/users/" + id)
                 .then().statusCode(303)
-                .header("Location", containsString("/ui/users?notice=Account+%27c2user%27+updated."));
+                .header("Location", containsString("notice=Compte"));
         boolean[] unchanged = new boolean[1];
         QuarkusTransaction.requiringNew().run(() -> {
             AppUser user = AppUser.findByUsername("c2user");
@@ -275,7 +275,7 @@ class GroupCIT {
                 .formParam("active", "on")
                 .when().post("/ui/users/" + id)
                 .then().statusCode(303)
-                .header("Location", containsString("/ui/users?notice=Account+%27c2user%27+updated."));
+                .header("Location", containsString("notice=Compte"));
         boolean[] reset = new boolean[1];
         QuarkusTransaction.requiringNew().run(() -> {
             AppUser user = AppUser.findByUsername("c2user");
@@ -323,20 +323,20 @@ class GroupCIT {
                     .when().post("/ui/users/" + targetId)
                     .then().statusCode(200)
                     .body(containsString(
-                            "This is the last administrator: keep the role and the account enabled."));
+                            "dernier administrateur"));
             given().redirects().follow(false)
                     .auth().preemptive().basic("c3caller", "callerpass1")
                     .formParam("roles", "ADMIN")
                     .when().post("/ui/users/" + targetId)
                     .then().statusCode(200)
                     .body(containsString(
-                            "This is the last administrator: keep the role and the account enabled."));
+                            "dernier administrateur"));
             given().redirects().follow(false)
                     .auth().preemptive().basic("c3caller", "callerpass1")
                     .when().post("/ui/users/" + targetId + "/delete")
                     .then().statusCode(303)
                     .header("Location",
-                            containsString("The+last+administrator+cannot+be+deleted."))
+                            containsString("dernier+administrateur"))
                     .header("Location", containsString("noticeOk=false"));
         } finally {
             restoreActive(restored);
@@ -346,13 +346,13 @@ class GroupCIT {
                 .auth().preemptive().basic("admin", "admin")
                 .when().post("/ui/users/" + adminId + "/delete")
                 .then().statusCode(303)
-                .header("Location", containsString("You+cannot+delete+your+own+account."))
+                .header("Location", containsString("propre+compte"))
                 .header("Location", containsString("noticeOk=false"));
         given().redirects().follow(false)
                 .auth().preemptive().basic("admin", "admin")
                 .when().post("/ui/users/999999/delete")
                 .then().statusCode(303)
-                .header("Location", containsString("Account+not+found."))
+                .header("Location", containsString("introuvable"))
                 .header("Location", containsString("noticeOk=false"));
         boolean[] adminSurvives = new boolean[1];
         QuarkusTransaction.requiringNew().run(() -> {
@@ -435,8 +435,8 @@ class GroupCIT {
         given().auth().preemptive().basic("c5viewer", "viewerpass1")
                 .when().get("/ui/offers")
                 .then().statusCode(200)
-                .body(containsString("Export CSV"))
-                .body(not(containsString("New offer")))
+                .body(containsString("Exporter en CSV"))
+                .body(not(containsString("Nouvelle offre")))
                 .body(not(containsString("Import CSV")))
                 .body(not(containsString("href=\"/ui/users\"")));
         given().auth().preemptive().basic("c5viewer", "viewerpass1")
@@ -445,7 +445,7 @@ class GroupCIT {
         given().auth().preemptive().basic("c5viewer", "viewerpass1")
                 .when().get("/ui/valuations")
                 .then().statusCode(200)
-                .body(containsString("New test"))
+                .body(containsString("Nouveau test"))
                 .body(not(containsString("action=\"/ui/valuations/config\"")));
         given().redirects().follow(false)
                 .auth().preemptive().basic("c5viewer", "viewerpass1")
@@ -478,7 +478,7 @@ class GroupCIT {
                 .formParam("active", "on")
                 .when().post("/ui/users/new")
                 .then().statusCode(200)
-                .body(containsString("At least one role must be granted."));
+                .body(containsString("Au moins un rôle doit être accordé."));
         boolean[] hackerAbsent = new boolean[1];
         QuarkusTransaction.requiringNew().run(() -> {
             hackerAbsent[0] = AppUser.findByUsername("c6hacker") == null;
@@ -492,7 +492,7 @@ class GroupCIT {
                 .formParam("active", "on")
                 .when().post("/ui/users/new")
                 .then().statusCode(303)
-                .header("Location", containsString("/ui/users?notice=Account+%27c6mix%27+created."));
+                .header("Location", containsString("notice=Compte"));
         QuarkusTransaction.requiringNew().run(() -> {
             AppUser user = AppUser.findByUsername("c6mix");
             assertNotNull(user);
@@ -505,7 +505,7 @@ class GroupCIT {
                 .formParam("roles", "VIEWER")
                 .when().post("/ui/users/new")
                 .then().statusCode(303)
-                .header("Location", containsString("/ui/users?notice=Account+%27c6disabled%27+created."));
+                .header("Location", containsString("notice=Compte"));
         boolean[] disabled = new boolean[1];
         QuarkusTransaction.requiringNew().run(() -> {
             AppUser user = AppUser.findByUsername("c6disabled");

@@ -1,17 +1,17 @@
 {#include ui/layout}
 
-{#title}Offers{/title}
+{#title}{inject:i18n.get('offers.title')}{/title}
 
 {#body}
 <div class="page-head">
     <div>
-        <h1>Offers</h1>
+        <h1>{inject:i18n.get('offers.title')}</h1>
         <p class="page-sub">{view.summary}</p>
     </div>
     <div class="page-actions">
-        <a class="btn" href="{view.actionUrl('export')}">Export CSV</a>
+        <a class="btn" href="{view.actionUrl('export')}">{inject:i18n.get('offers.action.exportCsv')}</a>
         {#if view.canWrite}
-        <a class="btn btn-primary" href="/ui/offers/new">New offer</a>
+        <a class="btn btn-primary" href="/ui/offers/new">{inject:i18n.get('offers.action.new')}</a>
         {/if}
     </div>
 </div>
@@ -25,14 +25,14 @@
     <input type="hidden" name="dir" value="{view.direction}">
 
     <label class="filter-field">
-        <span class="filter-label">Code</span>
-        <input type="search" name="q" placeholder="Any fragment" value="{view.filter('q')}">
+        <span class="filter-label">{inject:i18n.get('offers.filter.code')}</span>
+        <input type="search" name="q" placeholder="{inject:i18n.get('offers.filter.codePlaceholder')}" value="{view.filter('q')}">
     </label>
 
     <label class="filter-field">
-        <span class="filter-label">Type</span>
+        <span class="filter-label">{inject:i18n.get('offers.filter.type')}</span>
         <select name="type">
-            <option value="">All types</option>
+            <option value="">{inject:i18n.get('offers.filter.allTypes')}</option>
             {#for type in types}
             <option value="{type}" {#if type == view.filter('type')}selected{/if}>{type}</option>
             {/for}
@@ -40,42 +40,47 @@
     </label>
 
     <div class="filter-field">
-        <span class="filter-label">Target</span>
+        <span class="filter-label">{inject:i18n.get('offers.filter.target')}</span>
         <div data-lookup="store-any" data-name="target" data-value="{view.filter('target')}"></div>
     </div>
 
     <div class="filter-field">
-        <span class="filter-label">EAN</span>
+        <span class="filter-label">{inject:i18n.get('offers.filter.ean')}</span>
         <div data-lookup="ean" data-name="ean" data-value="{view.filter('ean')}"></div>
     </div>
 
+    <div class="filter-field">
+        <span class="filter-label">{inject:i18n.get('offers.filter.article')}</span>
+        <div data-lookup="ean" data-name="article" data-value="{view.filter('article')}"></div>
+    </div>
+
     <div class="filter-actions">
-        <button class="btn btn-primary" type="submit">Filter</button>
+        <button class="btn btn-primary" type="submit">{inject:i18n.get('offers.filter.apply')}</button>
         {#if view.filtered}
-        <a class="btn btn-ghost" href="/ui/offers">Reset</a>
+        <a class="btn btn-ghost" href="/ui/offers">{inject:i18n.get('offers.filter.reset')}</a>
         {/if}
     </div>
 </form>
 
 {#if view.rows.isEmpty()}
 <div class="empty-state">
-    <p>No offer matches the current filters.</p>
-    <p class="empty-hint">The in-memory database is reset at every restart &mdash; run the CSV imports to load a catalog.</p>
+    <p>{inject:i18n.get('offers.empty.title')}</p>
+    <p class="empty-hint">{inject:i18n.get('offers.empty.hint')}</p>
 </div>
 {#else}
 <table class="data-table">
     <thead>
     <tr>
         <th class="{#if view.isSortedOn('code')}is-sorted{/if}">
-            <a class="col-sort" href="{view.sortUrl('code')}">Code <span class="sort-arrow">{view.sortIndicator('code')}</span></a>
+            <a class="col-sort" href="{view.sortUrl('code')}">{inject:i18n.get('offers.column.code')} <span class="sort-arrow">{view.sortIndicator('code')}</span></a>
         </th>
         <th class="{#if view.isSortedOn('type')}is-sorted{/if}">
-            <a class="col-sort" href="{view.sortUrl('type')}">Type <span class="sort-arrow">{view.sortIndicator('type')}</span></a>
+            <a class="col-sort" href="{view.sortUrl('type')}">{inject:i18n.get('offers.column.type')} <span class="sort-arrow">{view.sortIndicator('type')}</span></a>
         </th>
-        <th>Targets</th>
-        <th>Status</th>
+        <th>{inject:i18n.get('offers.column.targets')}</th>
+        <th>{inject:i18n.get('offers.column.status')}</th>
         <th class="{#if view.isSortedOn('eans')}is-sorted{/if}">
-            <a class="col-sort" href="{view.sortUrl('eans')}">EANs <span class="sort-arrow">{view.sortIndicator('eans')}</span></a>
+            <a class="col-sort" href="{view.sortUrl('eans')}">{inject:i18n.get('offers.column.eans')} <span class="sort-arrow">{view.sortIndicator('eans')}</span></a>
         </th>
         <th class="col-actions"></th>
     </tr>
@@ -93,19 +98,20 @@
             {#for group in offer.storeGroups}<span class="chip chip-group">{group.code}</span>{/for}
         </td>
         <td>
-            {#if !offer.active}<span class="badge badge-off">Inactive</span>
-            {#else if !offer.isInForceAt(null)}<span class="badge badge-error">Out of window</span>
-            {#else}<span class="badge badge-ok">Active</span>{/if}
+            {#if !offer.active}<span class="badge badge-off">{inject:i18n.get('offers.status.inactive')}</span>
+            {#else if !offer.isInForceAt(null)}<span class="badge badge-error">{inject:i18n.get('offers.status.outOfWindow')}</span>
+            {#else}<span class="badge badge-ok">{inject:i18n.get('offers.status.active')}</span>{/if}
         </td>
         <td class="col-muted">
-            {#if offer.eans.isEmpty()}&mdash;{#else}{offer.eans.size} product{#if offer.eans.size != 1}s{/if}{/if}
+            {#if offer.eans.isEmpty()}&mdash;{#else}{inject:i18n.format('offers.column.productCount', offer.eans.size)}{/if}
         </td>
         <td class="col-actions">
             {#if view.canWrite}
-            <a class="btn btn-small" href="/ui/offers/{offer.id}">Edit</a>
+            <a class="btn btn-small" href="/ui/offers/{offer.id}">{inject:i18n.get('offers.action.edit')}</a>
             <form method="post" action="/ui/offers/{offer.id}/delete"
-                  data-confirm="Delete offer {offer.code} ?">
-                <button class="btn btn-small btn-danger" type="submit">Delete</button>
+                  data-confirm="{inject:i18n.format('offers.confirm.delete', offer.code)}">
+                {#csrf /}
+                <button class="btn btn-small btn-danger" type="submit">{inject:i18n.get('offers.action.delete')}</button>
             </form>
             {/if}
         </td>
@@ -115,26 +121,26 @@
 </table>
 
 {#if view.paged}
-<nav class="pager" aria-label="Pagination">
+<nav class="pager" aria-label="{inject:i18n.get('offers.pager.aria')}">
     {#if view.hasPrevious}
-    <a class="btn btn-small" href="{view.pageUrl(1)}">First</a>
-    <a class="btn btn-small" href="{view.pageUrl(view.currentPage - 1)}">Previous</a>
+    <a class="btn btn-small" href="{view.pageUrl(1)}">{inject:i18n.get('offers.pager.first')}</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.currentPage - 1)}">{inject:i18n.get('offers.pager.previous')}</a>
     {#else}
-    <span class="btn btn-small is-disabled">First</span>
-    <span class="btn btn-small is-disabled">Previous</span>
+    <span class="btn btn-small is-disabled">{inject:i18n.get('offers.pager.first')}</span>
+    <span class="btn btn-small is-disabled">{inject:i18n.get('offers.pager.previous')}</span>
     {/if}
 
     <span class="pager-status">
-        Page {view.currentPage} of {view.pageCount}
+        {inject:i18n.format('offers.pager.pageOf', view.currentPage, view.pageCount)}
         <span class="pager-range">{view.rangeLabel}</span>
     </span>
 
     {#if view.hasNext}
-    <a class="btn btn-small" href="{view.pageUrl(view.currentPage + 1)}">Next</a>
-    <a class="btn btn-small" href="{view.pageUrl(view.pageCount)}">Last</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.currentPage + 1)}">{inject:i18n.get('offers.pager.next')}</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.pageCount)}">{inject:i18n.get('offers.pager.last')}</a>
     {#else}
-    <span class="btn btn-small is-disabled">Next</span>
-    <span class="btn btn-small is-disabled">Last</span>
+    <span class="btn btn-small is-disabled">{inject:i18n.get('offers.pager.next')}</span>
+    <span class="btn btn-small is-disabled">{inject:i18n.get('offers.pager.last')}</span>
     {/if}
 </nav>
 {/if}

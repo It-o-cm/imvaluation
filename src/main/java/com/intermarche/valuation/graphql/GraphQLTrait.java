@@ -52,6 +52,11 @@ public interface GraphQLTrait {
             // Re-throw "Not Found" exceptions without wrapping
             // so that GraphQL API returns a clean specific error (404-like behavior)
             throw nsee;
+        } catch (ScopeViolationException sve) {
+            // Perimeter violation (spec §2): surface the reason as a clean GraphQL error rather
+            // than the masked generic message the catch-all below would produce.
+            logger.warn("Scope violation in " + operationName + ": " + sve.getMessage());
+            throw new GraphQLException(sve.getMessage(), sve);
         } catch (Exception e) {
             // Handle any other unexpected errors (including H2 raw exceptions or runtime issues)
             logger.error("Unexpected error in " + operationName, e);

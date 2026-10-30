@@ -25,7 +25,9 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -168,6 +170,12 @@ class OfferUiResourceTest {
     private OfferUiResource resource(OfferSchemaRegistry registry, OfferCsvResource csv) {
         OfferUiResource resource = new OfferUiResource();
         resource.schemaRegistry = registry;
+        // The localized notices resolve through the i18n bean; wire a real one (French default,
+        // no CDI needed) so the resource does not NPE before reaching the assertion under test.
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
+        // The drafting assistant is mocked unavailable by default, matching a deployment
+        // without an API key; the ai-draft tests stub the outcomes they assert.
+        resource.draftService = mock(com.intermarche.valuation.ai.OfferDraftService.class);
         return resource;
     }
 
@@ -195,7 +203,7 @@ class OfferUiResourceTest {
             when(query.pageCount()).thenReturn(1);
             when(query.list()).thenReturn(List.of(offer("C", "PROMO", "{}")));
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.list(null, null, null, null, "code", "asc", 1, null, true, context));
+                    () -> resource.list(null, null, null, null, null, "code", "asc", 1, null, true, context));
         }
     }
 
@@ -220,7 +228,7 @@ class OfferUiResourceTest {
             when(query.pageCount()).thenReturn(3);
             when(query.list()).thenReturn(List.of());
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.list(null, null, null, null, "bogus", "desc", 100, "hi", false, context));
+                    () -> resource.list(null, null, null, null, null, "bogus", "desc", 100, "hi", false, context));
         }
     }
 
@@ -242,7 +250,7 @@ class OfferUiResourceTest {
             when(query.pageCount()).thenReturn(0);
             when(query.list()).thenReturn(List.of());
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.list(null, null, null, null, "eans", "ASC", 0, null, true, null));
+                    () -> resource.list(null, null, null, null, null, "eans", "ASC", 0, null, true, null));
         }
     }
 
@@ -262,7 +270,7 @@ class OfferUiResourceTest {
             PanacheQuery<Offer> query = mock(PanacheQuery.class);
             mocked.when(() -> PanacheEntityBase.<Offer>find(anyString(), any(Object[].class))).thenReturn(query);
             when(query.list()).thenReturn(List.of());
-            Response response = resource.export(null, null, null, null, "code", "asc");
+            Response response = resource.export(null, null, null, null, null, "code", "asc");
             assertEquals(200, response.getStatus());
             assertEquals("CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n", response.getEntity());
             assertEquals("attachment; filename=\"offers.csv\"", response.getHeaderString("Content-Disposition"));
@@ -288,7 +296,7 @@ class OfferUiResourceTest {
             PanacheQuery<Offer> query = mock(PanacheQuery.class);
             mocked.when(() -> PanacheEntityBase.<Offer>find(anyString(), any(Object[].class))).thenReturn(query);
             when(query.list()).thenReturn(List.of(offer));
-            Response response = resource.export("milk", null, null, null, "code", "asc");
+            Response response = resource.export("milk", null, null, null, null, "code", "asc");
             String body = (String) response.getEntity();
             assertTrue(body.contains("PROMO1|DISCOUNT|{\"ean\":\"111\"}|S1,S2|G1\n"));
             ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
@@ -311,7 +319,7 @@ class OfferUiResourceTest {
             PanacheQuery<Offer> query = mock(PanacheQuery.class);
             mocked.when(() -> PanacheEntityBase.<Offer>find(anyString(), any(Object[].class))).thenReturn(query);
             when(query.list()).thenReturn(List.of(offer));
-            Response response = resource.export(null, "  ", "lyon", "333", "eans", "DESC");
+            Response response = resource.export(null, "  ", "lyon", "333", null, "eans", "DESC");
             String body = (String) response.getEntity();
             assertTrue(body.contains("A/B C|T|||\n"));
             ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
@@ -336,7 +344,7 @@ class OfferUiResourceTest {
             PanacheQuery<Offer> query = mock(PanacheQuery.class);
             mocked.when(() -> PanacheEntityBase.<Offer>find(anyString(), any(Object[].class))).thenReturn(query);
             when(query.list()).thenReturn(List.of());
-            resource.export(null, null, null, null, "type", "asc");
+            resource.export(null, null, null, null, null, "type", "asc");
             ArgumentCaptor<String> jpql = ArgumentCaptor.forClass(String.class);
             mocked.verify(() -> PanacheEntityBase.find(jpql.capture(), any(Object[].class)));
             assertTrue(jpql.getValue().endsWith("order by o.type asc, o.code asc"));
@@ -387,7 +395,7 @@ class OfferUiResourceTest {
             mocked.when(() -> PanacheEntityBase.findById(7L)).thenReturn(null);
             Response response = resource.edit(7L);
             assertEquals(404, response.getStatus());
-            assertEquals("Offer 7 not found", response.getEntity());
+            assertEquals("Offre 7 introuvable", response.getEntity());
         }
     }
 
@@ -648,7 +656,7 @@ class OfferUiResourceTest {
             mocked.when(() -> PanacheEntityBase.findById(9L)).thenReturn(null);
             Response response = resource.update(9L, "PROMO", "{}", "S1", null, null, null, null);
             assertEquals(404, response.getStatus());
-            assertEquals("Offer 9 not found", response.getEntity());
+            assertEquals("Offre 9 introuvable", response.getEntity());
         }
     }
 
@@ -720,7 +728,106 @@ class OfferUiResourceTest {
             mocked.when(() -> PanacheEntityBase.deleteById(7L)).thenReturn(false);
             Response response = resource.delete(7L);
             assertEquals(404, response.getStatus());
-            assertEquals("Offer 7 not found", response.getEntity());
+            assertEquals("Offre 7 introuvable", response.getEntity());
+        }
+    }
+
+    // --------------------------------------------------
+    // ai-draft
+    // --------------------------------------------------
+
+    /**
+     * The endpoint passes the prompt verbatim to the drafting service and returns its
+     * outcome untouched: a valid draft is the service's result, not a re-derivation.
+     */
+    @Test
+    void aiDraftPassesThePromptThroughAndReturnsTheOutcome() {
+        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
+        com.intermarche.valuation.ai.OfferDraftResult draft =
+                com.intermarche.valuation.ai.OfferDraftResult.ok(
+                        "PERCENT_OFFER", "PROMO_1", null, null, java.util.List.of(),
+                        java.util.List.of(), "{\"percent\":0.2}", "vingt pour cent");
+        when(resource.draftService.draft("une remise")).thenReturn(draft);
+        com.intermarche.valuation.ai.OfferDraftResult result =
+                resource.aiDraft(new OfferUiResource.AiDraftRequest("une remise"));
+        assertSame(draft, result);
+        verify(resource.draftService).draft("une remise");
+    }
+
+    /**
+     * A null request body collapses to a null prompt, which the service turns into the
+     * empty-description error; the endpoint still answers a renderable result.
+     */
+    @Test
+    void aiDraftHandlesANullRequest() {
+        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
+        com.intermarche.valuation.ai.OfferDraftResult refusal =
+                com.intermarche.valuation.ai.OfferDraftResult.error("empty");
+        when(resource.draftService.draft(null)).thenReturn(refusal);
+        com.intermarche.valuation.ai.OfferDraftResult result = resource.aiDraft(null);
+        assertSame(refusal, result);
+    }
+
+    /**
+     * An unexpected service failure is netted into an error result, so the panel always
+     * receives renderable JSON instead of a 500.
+     */
+    @Test
+    void aiDraftNetsAnUnexpectedFailure() {
+        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
+        when(resource.draftService.draft("une remise"))
+                .thenThrow(new RuntimeException("boom"));
+        com.intermarche.valuation.ai.OfferDraftResult result =
+                resource.aiDraft(new OfferUiResource.AiDraftRequest("une remise"));
+        assertEquals(com.intermarche.valuation.ai.OfferDraftResult.ERROR, result.status);
+        assertNotNull(result.message);
+    }
+
+    // --------------------------------------------------
+    // where-preview
+    // --------------------------------------------------
+
+    /**
+     * The coverage preview carries the exact count and the capped sample of covered
+     * products, straight from the targeting grammar's two parameterized queries.
+     */
+    @Test
+    void wherePreviewCarriesTheCountAndTheSample() {
+        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
+        com.intermarche.valuation.domain.Product product = new com.intermarche.valuation.domain.Product();
+        product.ean = "123";
+        product.name = "Pomme Gala";
+        try (org.mockito.MockedStatic<com.intermarche.valuation.engine.TargetWhere> grammar =
+                     mockStatic(com.intermarche.valuation.engine.TargetWhere.class)) {
+            grammar.when(() -> com.intermarche.valuation.engine.TargetWhere.countOf("name like 'pomme%'"))
+                    .thenReturn(42L);
+            grammar.when(() -> com.intermarche.valuation.engine.TargetWhere
+                            .sampleOf("name like 'pomme%'", 20))
+                    .thenReturn(List.of(product));
+            OfferUiResource.WherePreview preview = resource.wherePreview("name like 'pomme%'");
+            assertEquals(42L, preview.count());
+            assertEquals(List.of(Map.of("ean", "123", "name", "Pomme Gala")), preview.products());
+            assertNull(preview.error());
+        }
+    }
+
+    /**
+     * A blank fragment and a fragment the grammar refuses both come back as an error
+     * payload — the preview never fails as a 500.
+     */
+    @Test
+    void wherePreviewRefusesBlankAndMalformedFragments() {
+        OfferUiResource resource = resource(mock(OfferSchemaRegistry.class), mock(OfferCsvResource.class));
+        OfferUiResource.WherePreview blank = resource.wherePreview("   ");
+        assertEquals(0, blank.count());
+        assertNotNull(blank.error());
+        try (org.mockito.MockedStatic<com.intermarche.valuation.engine.TargetWhere> grammar =
+                     mockStatic(com.intermarche.valuation.engine.TargetWhere.class)) {
+            grammar.when(() -> com.intermarche.valuation.engine.TargetWhere.countOf("colour = 'red'"))
+                    .thenThrow(new IllegalArgumentException("Unknown field 'colour' at position 0."));
+            OfferUiResource.WherePreview refused = resource.wherePreview("colour = 'red'");
+            assertEquals(0, refused.count());
+            assertEquals("Unknown field 'colour' at position 0.", refused.error());
         }
     }
 }

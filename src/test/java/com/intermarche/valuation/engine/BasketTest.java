@@ -529,4 +529,199 @@ public class BasketTest {
         assertNotNull(basket.vignettes);
         assertEquals(2, basket.vignettes.get("3124567890123"));
     }
+
+    // --------------------------------------------------
+    // BASKET_SCHEMA: the pushed price trio is all-or-nothing (DG-01-02-03)
+    // --------------------------------------------------
+
+    /**
+     * Validates a single-line basket against {@link Basket#BASKET_SCHEMA} through the engine's
+     * validation funnel.
+     *
+     * @param priceFields the price fields of the line, as JSON members (may be empty).
+     */
+    private void validateLine(String priceFields) {
+        String json = "{\"storeCode\":\"0101\",\"items\":[{\"produceEan\":\"3300000000002\",\"quantity\":1"
+                + priceFields + "}]}";
+        new EngineTrait() { }.processSpecification(Basket.BASKET_SCHEMA, json, node -> { });
+    }
+
+    /**
+     * A pushed price including tax alone is refused with a 400-grade error naming the two
+     * missing fields, instead of being silently ignored.
+     */
+    @Test
+    void testSchema_inclTaxAlone_namesMissingFields() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> validateLine(",\"pricePerUnitInclTax\":1.80"));
+        assertTrue(e.getMessage().contains("pricePerUnitExclTax"), e.getMessage());
+        assertTrue(e.getMessage().contains("vatRate"), e.getMessage());
+    }
+
+    /**
+     * A pushed price excluding tax alone is refused, naming the price including tax and the
+     * rate.
+     */
+    @Test
+    void testSchema_exclTaxAlone_namesMissingFields() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> validateLine(",\"pricePerUnitExclTax\":1.50"));
+        assertTrue(e.getMessage().contains("pricePerUnitInclTax"), e.getMessage());
+        assertTrue(e.getMessage().contains("vatRate"), e.getMessage());
+    }
+
+    /**
+     * A VAT rate alone is refused, naming both prices.
+     */
+    @Test
+    void testSchema_vatRateAlone_namesMissingFields() {
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> validateLine(",\"vatRate\":0.20"));
+        assertTrue(e.getMessage().contains("pricePerUnitExclTax"), e.getMessage());
+        assertTrue(e.getMessage().contains("pricePerUnitInclTax"), e.getMessage());
+    }
+
+    /**
+     * The complete trio, and no price at all, both satisfy the schema.
+     */
+    @Test
+    void testSchema_completeTrioOrNoPrice_accepted() {
+        assertDoesNotThrow(() -> validateLine(
+                ",\"pricePerUnitExclTax\":1.50,\"pricePerUnitInclTax\":1.80,\"vatRate\":0.20"));
+        assertDoesNotThrow(() -> validateLine(""));
+    }
+
+    /**
+     * Builds a line of an EAN with the given pushed price fields.
+     *
+     * @param ean  the EAN.
+     * @param excl the pushed price tax excluded, or null.
+     * @param incl the pushed price tax included, or null.
+     * @param vat  the pushed VAT rate, or null.
+     * @return the line.
+     */
+    private static Basket.Item pushedLine(String ean, String excl, String incl, String vat) {
+        Basket.Item item = new Basket.Item();
+        item.produceEan = ean;
+        item.pricePerUnitExclTax = excl == null ? null : new BigDecimal(excl);
+        item.pricePerUnitInclTax = incl == null ? null : new BigDecimal(incl);
+        item.vatRate = vat == null ? null : new BigDecimal(vat);
+        return item;
+    }
+
+    /**
+     * Spec §3/§4 (digital sheet): an article the referential does not know is valued on its
+     * complete pushed price — the line gets a transient unit product carrying only its EAN,
+     * cached, never looked up twice.
+     */
+    @Test
+    void testItemGetProduct_unknownArticleWithPushedPrice_isTransient() {
+        Basket.Item item = pushedLine("3300000000099", "1.50", "1.80", "0.20");
+        mockedProduct.when(() -> Product.findByEan("3300000000099")).thenReturn(null);
+        Product product = item.getProduct();
+        assertEquals("3300000000099", product.ean);
+        assertNull(product.id);
+        assertNull(product.name);
+        assertEquals(ProductType.UNIT, product.productType);
+        assertSame(product, item.getProduct());
+        mockedProduct.verify(() -> Product.findByEan("3300000000099"), times(1));
+    }
+
+    /**
+     * An unknown article whose price is not pushed completely stays a configuration error: one
+     * case per missing field of the trio (each leg of the pushed-price guard).
+     */
+    @Test
+    void testItemGetProduct_unknownArticleWithoutCompletePushedPrice_isRefused() {
+        mockedProduct.when(() -> Product.findByEan("3300000000099")).thenReturn(null);
+        for (Basket.Item item : List.of(pushedLine("3300000000099", null, "1.80", "0.20"),
+                pushedLine("3300000000099", "1.50", null, "0.20"),
+                pushedLine("3300000000099", "1.50", "1.80", null))) {
+            IllegalStateException e = assertThrows(IllegalStateException.class, item::getProduct);
+            assertEquals("Configuration Error: Product not found for EAN '3300000000099'", e.getMessage());
+        }
+    }
+
+    /**
+     * A known article keeps its referential product even when its price is pushed.
+     */
+    @Test
+    void testItemGetProduct_knownArticleWithPushedPrice_keepsTheReferential() {
+        Product known = new Product();
+        known.id = 4L;
+        known.ean = "3300000000004";
+        mockedProduct.when(() -> Product.findByEan("3300000000004")).thenReturn(known);
+        assertSame(known, pushedLine("3300000000004", "1.50", "1.80", "0.20").getProduct());
+    }
+
+    /**
+     * {@link Basket.Item#hasPushedPrice()}: true only with the three fields.
+     */
+    @Test
+    void testItemHasPushedPrice_eachLeg() {
+        assertTrue(pushedLine("1", "1.50", "1.80", "0.20").hasPushedPrice());
+        assertFalse(pushedLine("1", null, "1.80", "0.20").hasPushedPrice());
+        assertFalse(pushedLine("1", "1.50", null, "0.20").hasPushedPrice());
+        assertFalse(pushedLine("1", "1.50", "1.80", null).hasPushedPrice());
+    }
+
+    /**
+     * {@link Basket.Item#hasManualGesture()}: each gesture alone is one, none is none.
+     */
+    @Test
+    void testItemHasManualGesture_eachLeg() {
+        Basket.Item item = new Basket.Item();
+        assertFalse(item.hasManualGesture());
+        item.manualForcedPrice = new BigDecimal("1.00");
+        assertTrue(item.hasManualGesture());
+        item.manualForcedPrice = null;
+        item.manualDiscountPercent = new BigDecimal("10");
+        assertTrue(item.hasManualGesture());
+        item.manualDiscountPercent = null;
+        item.manualDiscountAmount = new BigDecimal("0.50");
+        assertTrue(item.hasManualGesture());
+    }
+
+    /**
+     * {@link Basket.Item#validateManualGesture()}: one gesture of each kind passes, two are
+     * refused naming the EAN.
+     */
+    @Test
+    void testItemValidateManualGesture_oneOrMore() {
+        Basket.Item item = new Basket.Item();
+        item.produceEan = "3300000000002";
+        item.manualDiscountPercent = new BigDecimal("10");
+        assertDoesNotThrow(item::validateManualGesture);
+        item.manualDiscountPercent = null;
+        item.manualForcedPrice = new BigDecimal("1.00");
+        assertDoesNotThrow(item::validateManualGesture);
+        item.manualDiscountAmount = new BigDecimal("0.50");
+        IllegalStateException e = assertThrows(IllegalStateException.class, item::validateManualGesture);
+        assertEquals("Item EAN '3300000000002' carries more than one manual gesture (amount, percentage, "
+                + "forced price); only one is allowed.", e.getMessage());
+    }
+
+    /**
+     * A reference price asked for an article with no dedicated row falls back to its current
+     * (DEFAULT) price; one with a dedicated row is that row.
+     */
+    @Test
+    void testItemGetPrice_referenceFallsBackToDefault() {
+        Basket.Item item = new Basket.Item();
+        item.produceEan = "333";
+        Product product = new Product();
+        product.id = 300L;
+        mockedProduct.when(() -> Product.findByEan("333")).thenReturn(product);
+        Store store = new Store();
+        store.id = 7L;
+        LocalDateTime now = LocalDateTime.of(2026, 10, 28, 12, 0);
+        mockedDateTimeProvider.when(DateTimeProvider::now).thenReturn(now);
+        Price current = new Price();
+        mockedPrice.when(() -> Price.findActivePriceAtDate(300L, 7L, now, PriceUsage.BASE_FOR_DISCOUNT)).thenReturn(null);
+        mockedPrice.when(() -> Price.findActivePriceAtDate(300L, 7L, now, PriceUsage.DEFAULT)).thenReturn(current);
+        assertSame(current, item.getPrice(store, PriceUsage.BASE_FOR_DISCOUNT));
+        Price reference = new Price();
+        mockedPrice.when(() -> Price.findActivePriceAtDate(300L, 7L, now, PriceUsage.BASE_FOR_DISCOUNT)).thenReturn(reference);
+        assertSame(reference, item.getPrice(store, PriceUsage.BASE_FOR_DISCOUNT));
+    }
 }

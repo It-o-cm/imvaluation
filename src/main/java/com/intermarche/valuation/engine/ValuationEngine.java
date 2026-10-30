@@ -2,6 +2,8 @@ package com.intermarche.valuation.engine;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.intermarche.valuation.domain.BudgetGroup;
+import com.intermarche.valuation.domain.ConsumptionCounter;
 import com.intermarche.valuation.domain.Offer;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -62,8 +64,27 @@ public class ValuationEngine {
      * @return A {@link BasketEvaluation} containing applied offers, discounts, and total price.
      */
     public BasketEvaluation evaluate(Basket basket) {
+        return evaluate(basket, null);
+    }
+
+    /**
+     * Evaluates a basket against an optional shared display context
+     * (spec-valorisation-affichage-ecommerce §2bis).
+     * <p>
+     * When {@code displayContext} is non-null, this is one mini-basket of a
+     * {@code POST /display-valuation} call: the offers come from the context resolved once for the
+     * whole call (through {@link EngineTrait#getOffers}, which consults it), and only the offers
+     * that may shape a one-unit displayed price are applied. When it is {@code null} the evaluation
+     * is a normal basket valuation, byte-for-byte unchanged.
+     *
+     * @param basket         The basket to evaluate.
+     * @param displayContext The shared display context, or {@code null} for a normal valuation.
+     * @return A {@link BasketEvaluation} containing applied offers, discounts, and total price.
+     */
+    public BasketEvaluation evaluate(Basket basket, DisplayContext displayContext) {
         // 1. Initialize evaluation context
         BasketEvaluation evaluation = getBasketEvaluation(basket);
+        evaluation.setDisplayContext(displayContext);
         // 2. Create Discount Appliers
         List<AdvantageApplier> discountAppliers = createDiscountAppliers(evaluation);
         // 3. Create Offer Appliers
@@ -225,6 +246,12 @@ public class ValuationEngine {
                 if (!evaluation.triggerResult(configuration, config.trigger()).satisfied()) {
                     continue;
                 }
+                // Budget control (spec §5): a configuration whose offer budget or budget group is
+                // exhausted is not served — same mechanic as a cumul refusal. The current ticket
+                // increments nothing; only cashing counts.
+                if (budgetExhausted(configuration, evaluation)) {
+                    continue;
+                }
             }
             try {
                 // Apply offer logic to the evaluation context
@@ -347,10 +374,28 @@ public class ValuationEngine {
                 continue;
             }
             for (AdvantageApplication application : kept) {
-                application.setApplicationMoment(configs.get(applier).applicationMoment());
+                stampConfiguration(application, configs.get(applier));
             }
             evaluation.getAdvantages().addAll(kept);
         }
+    }
+
+    /**
+     * Stamps onto a retained advantage the passthrough and compliance values of its
+     * configuration (spec-divers-offre §2, §3), alongside the application moment: the accounting
+     * code and print mode restituted verbatim in the output, and the EGAlim/SRP exemption markers
+     * read later by the guards. Centralised here so no factory copies them one by one.
+     *
+     * @param application the retained advantage application.
+     * @param config      the parsed configuration of the applier that produced it.
+     */
+    private static void stampConfiguration(AdvantageApplication application, ArbitrationConfig config) {
+        application.setApplicationMoment(config.applicationMoment());
+        application.setAccountingCode(config.accountingCode());
+        application.setPrintMode(config.printMode());
+        application.setEgalimExempt(config.egalimExempt());
+        application.setSrpExempt(config.srpExempt());
+        application.setFunding(config.funding());
     }
 
     /**
@@ -468,6 +513,12 @@ public class ValuationEngine {
                 return false;
             }
         }
+        // Budget control (spec §5): an advantage whose offer budget or budget group is exhausted is
+        // not applied — same mechanic as a cumul refusal, reason traced. Fail-open borné: a counter
+        // read error applies the advantage. The current ticket increments nothing.
+        if (budgetExhausted(applier.getConfiguration(), evaluation)) {
+            return false;
+        }
         Collection<AdvantageApplication> produced;
         try {
             produced = applier.apply(evaluation);
@@ -486,7 +537,7 @@ public class ValuationEngine {
             return false;
         }
         for (AdvantageApplication application : kept) {
-            application.setApplicationMoment(config.applicationMoment());
+            stampConfiguration(application, config);
         }
         evaluation.getAdvantages().addAll(kept);
         applied.put(applier, kept);
@@ -559,10 +610,144 @@ public class ValuationEngine {
      *         {@code false} when the block could not be parsed and the configuration must be
      *         skipped (A2, report H1b).
      */
+    /**
+     * Tells whether an offer's generosity budget is exhausted at the arbitration (spec §5).
+     * <p>
+     * The engine consults ITS counters, at home, with no network call. Two independent porters are
+     * checked and the most constrained wins (spec §5.6): the offer's own {@code budget} block (an
+     * amount and/or an application ceiling, scoped per point of sale when {@code perStore}) and the
+     * offer's budget group (the same two ceilings, applied to the summed consumption of every offer
+     * of the group). A reached ceiling refuses the advantage and records the reason
+     * ({@code BUDGET_EXHAUSTED} / {@code GROUP_BUDGET_EXHAUSTED}).
+     * <p>
+     * Fail-open borné (spec §5.5): any error reading the counters applies the advantage and traces
+     * the incident — the budget is a piloting instrument, not a comptable guarantee. The current
+     * ticket increments nothing; only the cashing counts. An offer with no budget and no group is a
+     * strict no-op (bit-for-bit regression, spec §5.6).
+     *
+     * @param offer      the configuration whose budget is checked, or null.
+     * @param evaluation the evaluation, used for the store scope and to record the refusal reason.
+     * @return true when the advantage must be refused for an exhausted budget.
+     */
+    private boolean budgetExhausted(Offer offer, BasketEvaluation evaluation) {
+        if (offer == null) {
+            return false;
+        }
+        String storeCode = evaluation != null && evaluation.getStore() != null
+                ? evaluation.getStore().code : null;
+        String offerCode = offer.code == null ? "" : offer.code;
+        try {
+            JsonNode budget = readBudget(offer);
+            if (budget != null && offerBudgetExhausted(budget, offerCode, storeCode)) {
+                recordBudgetRefusal(evaluation, "BUDGET_EXHAUSTED", "offer " + offerCode);
+                return true;
+            }
+            BudgetGroup group = offer.budgetGroup;
+            if (group != null && groupBudgetExhausted(group, storeCode)) {
+                recordBudgetRefusal(evaluation, "GROUP_BUDGET_EXHAUSTED",
+                        "offer " + offerCode + " group " + group.code);
+                return true;
+            }
+            return false;
+        } catch (RuntimeException e) {
+            // Fail-open borné (spec §5.5): apply and trace, never fail the evaluation on a counter read.
+            LOGGER.warn("Budget counter read failed for offer " + offerCode + "; applying fail-open.", e);
+            recordBudgetRefusal(evaluation, "BUDGET_COUNTER_ERROR", "offer " + offerCode + " (fail-open)");
+            return false;
+        }
+    }
+
+    /**
+     * Reads the optional {@code budget} block off an offer's specification.
+     *
+     * @param offer the offer whose specification is read.
+     * @return the {@code budget} node, or null when the offer carries no budget.
+     */
+    private static JsonNode readBudget(Offer offer) {
+        if (offer.specification == null) {
+            return null;
+        }
+        try {
+            JsonNode node = MAPPER.readTree(offer.specification).get("budget");
+            return node != null && node.isObject() ? node : null;
+        } catch (Exception e) {
+            // A malformed specification was rejected at creation; here it simply carries no budget.
+            return null;
+        }
+    }
+
+    /**
+     * Tells whether the offer's own budget block is exhausted for the relevant scope.
+     *
+     * @param budget    the parsed {@code budget} node.
+     * @param offerCode the offer code.
+     * @param storeCode the basket's point-of-sale code, used when the budget is per-store.
+     * @return true when the amount or the application ceiling is reached.
+     */
+    private static boolean offerBudgetExhausted(JsonNode budget, String offerCode, String storeCode) {
+        boolean perStore = budget.hasNonNull("perStore") && budget.get("perStore").asBoolean();
+        String scope = perStore ? storeCode : null;
+        List<String> single = List.of(offerCode);
+        if (budget.hasNonNull("maxAmount")) {
+            BigDecimal max = budget.get("maxAmount").decimalValue();
+            if (ConsumptionCounter.sumAmount(single, scope).compareTo(max) >= 0) {
+                return true;
+            }
+        }
+        if (budget.hasNonNull("maxApplications")) {
+            long max = budget.get("maxApplications").asLong();
+            return ConsumptionCounter.sumApplications(single, scope) >= max;
+        }
+        return false;
+    }
+
+    /**
+     * Tells whether a budget group's envelope is exhausted for the relevant scope, summing the
+     * consumption of every offer of the group (spec §5.3).
+     *
+     * @param group     the budget group.
+     * @param storeCode the basket's point-of-sale code, used when the group is per-store.
+     * @return true when the group's amount or application ceiling is reached.
+     */
+    private static boolean groupBudgetExhausted(BudgetGroup group, String storeCode) {
+        if (group.maxAmount == null && group.maxApplications == null) {
+            return false;
+        }
+        List<Offer> members = Offer.list("budgetGroup.id = ?1", group.id);
+        List<String> codes = new ArrayList<>();
+        for (Offer member : members) {
+            codes.add(member.code == null ? "" : member.code);
+        }
+        String scope = group.perStore ? storeCode : null;
+        if (group.maxAmount != null
+                && ConsumptionCounter.sumAmount(codes, scope).compareTo(group.maxAmount) >= 0) {
+            return true;
+        }
+        return group.maxApplications != null
+                && ConsumptionCounter.sumApplications(codes, scope) >= group.maxApplications;
+    }
+
+    /**
+     * Records a budget refusal reason on the evaluation so the resource can trace it (spec §5.2,
+     * §5.3), reusing the same audit sink as the fail-closed configuration skips.
+     *
+     * @param evaluation the evaluation to record on, possibly null.
+     * @param reason     the reason code ({@code BUDGET_EXHAUSTED}, {@code GROUP_BUDGET_EXHAUSTED}
+     *                   or {@code BUDGET_COUNTER_ERROR}).
+     * @param detail     the offer (and group) the reason applies to.
+     */
+    private static void recordBudgetRefusal(BasketEvaluation evaluation, String reason, String detail) {
+        String message = reason + ": " + detail;
+        LOGGER.info(message);
+        if (evaluation != null) {
+            evaluation.recordSkippedConfiguration(message);
+        }
+    }
+
     ArbitrationConfig parseArbitrationConfig(Offer offer, BasketEvaluation evaluation) {
         if (offer == null) {
             return new ArbitrationConfig(Trigger.ALWAYS, "AT_TOTAL", 500, true,
-                    List.of(), null, null, false, "", true);
+                    List.of(), null, null, false, "", true, null, null, false, false, null);
         }
         String code = offer.code == null ? "" : offer.code;
         try {
@@ -570,6 +755,24 @@ public class ValuationEngine {
             Trigger trigger = Trigger.of(spec.get("trigger"));
             String moment = spec.hasNonNull("applicationMoment")
                     ? spec.get("applicationMoment").asText() : "AT_TOTAL";
+            // Shared passthrough / compliance fragment (spec-divers-offre §2, §3): copied
+            // verbatim (accountingCode, printMode) or read as behaviour flags (compliance).
+            String accountingCode = spec.hasNonNull("accountingCode")
+                    ? spec.get("accountingCode").asText() : null;
+            String printMode = spec.hasNonNull("printMode")
+                    ? spec.get("printMode").asText() : null;
+            // Funding passthrough (spec-exploitation §3): copied verbatim, never interpreted.
+            String funding = spec.hasNonNull("funding")
+                    ? spec.get("funding").asText() : null;
+            boolean egalimExempt = false;
+            boolean srpExempt = false;
+            JsonNode compliance = spec.get("compliance");
+            if (compliance != null) {
+                egalimExempt = compliance.hasNonNull("egalimExempt")
+                        && compliance.get("egalimExempt").asBoolean();
+                srpExempt = compliance.hasNonNull("srpExempt")
+                        && compliance.get("srpExempt").asBoolean();
+            }
             int priority = 500;
             boolean cumulable = true;
             List<String> groups = new ArrayList<>();
@@ -600,14 +803,15 @@ public class ValuationEngine {
                 }
             }
             return new ArbitrationConfig(trigger, moment, priority, cumulable,
-                    List.copyOf(groups), maxTicket, maxLine, consumes, code, true);
+                    List.copyOf(groups), maxTicket, maxLine, consumes, code, true,
+                    accountingCode, printMode, egalimExempt, srpExempt, funding);
         } catch (Exception e) {
             // Fail-closed (A2, report H1b): an unparseable trigger/arbitration block no longer
             // falls back on Trigger.ALWAYS (fail-open on money); the configuration is marked
             // invalid so its offer/advantage is skipped, and the skip is logged and recorded.
             skip(evaluation, "Configuration " + code, e);
             return new ArbitrationConfig(Trigger.ALWAYS, "AT_TOTAL", 500, true,
-                    List.of(), null, null, false, code, false);
+                    List.of(), null, null, false, code, false, null, null, false, false, null);
         }
     }
 
@@ -639,11 +843,24 @@ public class ValuationEngine {
      * @param code                     the configuration code, the stable ordering tiebreaker.
      * @param valid                    whether the block parsed; a {@code false} configuration is
      *                                 skipped fail-closed (A2, report H1b).
+     * @param accountingCode           the accounting ventilation key copied verbatim to the
+     *                                 output, or {@code null} (spec-divers-offre §3).
+     * @param printMode                the ticket print mode ({@code LINE}/{@code FOOTER}) copied
+     *                                 verbatim to the output, or {@code null} (spec-divers-offre §3).
+     * @param egalimExempt             whether the configuration's discounts are EGAlim-exempt,
+     *                                 counted as excluded generosity (spec-divers-offre §2).
+     * @param srpExempt                whether the configuration's discounts are SRP-exempt,
+     *                                 carried for the future SRP guard (spec-divers-offre §2).
+     * @param funding                  who funds the promotion ({@code STORE}/{@code BANNER}/
+     *                                 {@code SPLIT_50_50}) copied verbatim to the output, or
+     *                                 {@code null} (spec-exploitation §3).
      */
     record ArbitrationConfig(Trigger trigger, String applicationMoment, int priority,
                              boolean cumulable, List<String> exclusionGroups,
                              Integer maxApplicationsPerTicket, Integer maxApplicationsPerLine,
-                             boolean consumesContributors, String code, boolean valid) {
+                             boolean consumesContributors, String code, boolean valid,
+                             String accountingCode, String printMode,
+                             boolean egalimExempt, boolean srpExempt, String funding) {
     }
 
     /**

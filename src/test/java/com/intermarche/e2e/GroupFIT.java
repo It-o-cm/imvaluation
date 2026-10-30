@@ -143,6 +143,21 @@ class GroupFIT {
         });
     }
 
+    /**
+     * Seeds VAT regime 1 (20%) through {@code /vat-rates/import} so a {@code createPrice} naming a
+     * rate resolves its regime: since the EGALIM/VAT chantier {@code PriceResource} rejects a rate the
+     * referential does not carry (a {@code NoSuchElementException} masked as {@code System error}).
+     * Idempotent — the regime NUMBER is the upsert key. Rate {@code 0.2000} matches the tests'
+     * {@code 0.20} by numeric value.
+     */
+    private void seedVatRates() {
+        given().auth().preemptive().basic("admin", "admin")
+                .contentType(ContentType.TEXT)
+                .body("VAT_NUMBER|RATE|LABEL\n1|0.2000|Taux normal\n")
+                .when().post("/vat-rates/import")
+                .then().statusCode(200);
+    }
+
     // --------------------------------------------------
     // F1 — security matrix: queries = MANAGER, mutations = ADMIN
     // --------------------------------------------------
@@ -209,12 +224,15 @@ class GroupFIT {
         assertTrue(dupFamCode.contains("ProductFamily with code 'F2FAM' already exists."), "ProductFamily code conflict: " + dupFamCode);
         String dupFamDesc = admin("mutation { createProductFamily(input: {code: \\\"F2FAM2\\\", description: \\\"F2 Family Desc\\\"}) { id } }");
         assertTrue(dupFamDesc.contains("ProductFamily with description 'F2 Family Desc' already exists."), "ProductFamily description conflict: " + dupFamDesc);
-        // Offer: code (needs a target)
+        // Offer: code (needs a target). Uses the schema-less TYPE_A (as F6 does): createOffer now
+        // validates the specification against the factory schema (report C3), so MEAL_VOUCHER + "{}"
+        // would fail validation before reaching the code-uniqueness check being exercised here.
         admin("mutation { createStore(input: {code: \\\"F2OSTORE\\\", name: \\\"F2 Offer Store\\\"}) { id } }");
-        admin("mutation { createOffer(input: {code: \\\"F2OFF\\\", type: \\\"MEAL_VOUCHER\\\", specification: \\\"{}\\\", storeCodes: [\\\"F2OSTORE\\\"]}) { id } }");
-        String dupOffer = admin("mutation { createOffer(input: {code: \\\"F2OFF\\\", type: \\\"MEAL_VOUCHER\\\", specification: \\\"{}\\\", storeCodes: [\\\"F2OSTORE\\\"]}) { id } }");
+        admin("mutation { createOffer(input: {code: \\\"F2OFF\\\", type: \\\"TYPE_A\\\", specification: \\\"{}\\\", storeCodes: [\\\"F2OSTORE\\\"]}) { id } }");
+        String dupOffer = admin("mutation { createOffer(input: {code: \\\"F2OFF\\\", type: \\\"TYPE_A\\\", specification: \\\"{}\\\", storeCodes: [\\\"F2OSTORE\\\"]}) { id } }");
         assertTrue(dupOffer.contains("Offer with code 'F2OFF' already exists."), "Offer code conflict: " + dupOffer);
-        // Price: composite key (needs product + store ids)
+        // Price: composite key (needs product + store ids). The VAT referential must carry the rate.
+        seedVatRates();
         long pProd = createReturningId("mutation { createProduct(input: {ean: \\\"F2PPRICE\\\", name: \\\"F2 Price Product\\\", productType: \\\"UNIT\\\"}) { id } }", "data.createProduct.id");
         long pStore = createReturningId("mutation { createStore(input: {code: \\\"F2SPRICE\\\", name: \\\"F2 Price Store\\\"}) { id } }", "data.createStore.id");
         String createPrice = "mutation { createPrice(input: {productId: " + pProd + ", storeId: " + pStore
@@ -315,8 +333,11 @@ class GroupFIT {
         });
         long offerStore = createReturningId("mutation { createStore(input: {code: \\\"F5OSTORE\\\", name: \\\"F5 Offer Store\\\"}) { id } }", "data.createStore.id");
         assertTrue(offerStore > 0, "The offer target store must be created");
+        // Schema-less TYPE_A (as F6): createOffer/updateOffer now validate the specification against
+        // the factory schema (report C3), so MEAL_VOUCHER + "{}" would fail validation at creation and
+        // again on the empty-targets update; TYPE_A has no schema, so both proceed as before.
         long offerId = createReturningId(
-                "mutation { createOffer(input: {code: \\\"F5OFF\\\", type: \\\"MEAL_VOUCHER\\\", specification: \\\"{}\\\", storeCodes: [\\\"F5OSTORE\\\"]}) { id } }",
+                "mutation { createOffer(input: {code: \\\"F5OFF\\\", type: \\\"TYPE_A\\\", specification: \\\"{}\\\", storeCodes: [\\\"F5OSTORE\\\"]}) { id } }",
                 "data.createOffer.id");
         String emptied = admin("mutation { updateOffer(id: " + offerId + ", input: {storeCodes: []}) { id } }");
         assertFalse(emptied.contains("\"errors\""), "Emptying the targets must succeed with no revalidation: " + emptied);
@@ -378,12 +399,16 @@ class GroupFIT {
      * {@code Database error while performing deleteStore. Please check your data.}, but the constraint
      * only fires at COMMIT, after {@code execute()} has already returned, so its {@code PersistenceException}
      * handler never catches it; the {@code RollbackException} escapes and SmallRye masks it as
-     * {@code "System error"} (asserted as observed). And the most dangerous behaviour of the API:
-     * {@code deleteProductFamily} cascades {@code ALL} — deleting a throwaway parent family removes its
-     * linked PRODUCTS and its sub-families too, proven through Panache on a disposable set.
+     * {@code "System error"} (asserted as observed). And the calibrated deleteProductFamily cascade:
+     * {@code deleteProductFamily} cascades its sub-families (OneToMany {@code CascadeType.ALL}) but NO
+     * LONGER its linked products — the ManyToMany toward the shared Product catalog dropped
+     * {@code CascadeType.ALL} (rapport-remediation-imvaluation.md:109), removing the former "most
+     * dangerous behaviour" — proven through Panache on a disposable set: the sub-family is gone, the
+     * product survives.
      */
     @Test
     void f7_deletions() {
+        seedVatRates();
         String falseDelete = admin("mutation { deleteStore(id: 987654) }");
         assertFalse(falseDelete.contains("\"errors\""), "Deleting a missing id must not raise an exception: " + falseDelete);
         assertTrue(falseDelete.contains("false"), "Deleting a missing id must answer false: " + falseDelete);
@@ -396,7 +421,9 @@ class GroupFIT {
         assertTrue(fkDelete.contains("\"errors\""), "Deleting a referenced store must fail: " + fkDelete);
         assertTrue(fkDelete.contains("System error"),
                 "The commit-time FK violation escapes execute() and is masked as the generic: " + fkDelete);
-        // deleteProductFamily cascade ALL -> products and sub-families are destroyed
+        // deleteProductFamily cascades ONLY sub-families (OneToMany cascade ALL); the ManyToMany toward
+        // the shared Product catalog dropped CascadeType.ALL (rapport-remediation-imvaluation.md:109),
+        // so linked products SURVIVE a family delete
         admin("mutation { createProduct(input: {ean: \\\"F7CPROD\\\", name: \\\"F7 Cascade Product\\\", productType: \\\"UNIT\\\"}) { id } }");
         admin("mutation { createProductFamily(input: {code: \\\"F7CSUB\\\", description: \\\"F7 Cascade Sub\\\"}) { id } }");
         long parentId = createReturningId(
@@ -407,8 +434,10 @@ class GroupFIT {
         assertTrue(cascade.contains("true"), "The cascade delete must answer true: " + cascade);
         QuarkusTransaction.requiringNew().run(() -> {
             assertNull(ProductFamily.findByCode("F7CPARENT"), "The parent family must be gone");
-            assertNull(ProductFamily.findByCode("F7CSUB"), "The sub-family must have been cascade-deleted");
-            assertNull(Product.findByEan("F7CPROD"), "The linked product must have been cascade-deleted (most dangerous behaviour)");
+            assertNull(ProductFamily.findByCode("F7CSUB"), "The sub-family must have been cascade-deleted (OneToMany cascade ALL)");
+            assertNotNull(Product.findByEan("F7CPROD"),
+                    "The linked product must SURVIVE: the ManyToMany toward the shared Product catalog dropped "
+                            + "CascadeType.ALL (rapport-remediation-imvaluation.md:109) — a family delete never destroys products");
         });
     }
 
@@ -425,6 +454,7 @@ class GroupFIT {
      */
     @Test
     void f8_priceViciousCases() {
+        seedVatRates();
         long prod = createReturningId("mutation { createProduct(input: {ean: \\\"F8PROD\\\", name: \\\"F8 Product\\\", productType: \\\"UNIT\\\"}) { id } }", "data.createProduct.id");
         long store = createReturningId("mutation { createStore(input: {code: \\\"F8STORE\\\", name: \\\"F8 Store\\\"}) { id } }", "data.createStore.id");
         // currentPrice without any active price -> null, no error
@@ -457,25 +487,25 @@ class GroupFIT {
     // --------------------------------------------------
 
     /**
-     * F9 — the {@code createStoreGroup} asymmetry, CALIBRATED. An unknown sub-group code on CREATE is NOT
-     * checked: {@code findByCode} returns null and the code path does {@code group.storeGroups.add(child)}
-     * with that null. CALIBRATION — the catalog expects "a null added to the Set → generic error", but
-     * observed reality is milder: the create SUCCEEDS silently (Hibernate simply skips the null element),
-     * so no sub-group link is persisted and no error is raised. The very same unknown code on UPDATE IS
-     * checked explicitly and throws a {@code NoSuchElementException}; but, exactly like F3, that unwrapped
-     * exception is MASKED by SmallRye as {@code "System error"} (the catalog's "clean message" does not
-     * reproduce). Both observed branches are pinned.
+     * F9 — the {@code createStoreGroup} asymmetry, CALIBRATED. An unknown sub-group code on CREATE is
+     * still not explicitly guarded ({@code findByCode} returns null and the code path does
+     * {@code group.storeGroups.add(child)} with that null), but since the A4 chantier made
+     * {@code StoreGroup.getChecksum()} member-inclusive — it maps {@code g.code} over the sub-groups —
+     * {@code @PrePersist} now dereferences the null child and throws an NPE inside {@code execute()}. The
+     * catch-all masks it as the {@code createStoreGroup} generic and the transaction rolls back, so the
+     * create is now REJECTED (rapport-remediation-imvaluation.md §"Step 6" A4). The very same unknown
+     * code on UPDATE IS checked explicitly and throws a {@code NoSuchElementException}; but, exactly like
+     * F3, that unwrapped exception is MASKED by SmallRye as {@code "System error"}. Both branches pinned.
      */
     @Test
     void f9_createStoreGroupAsymmetry() {
         String createUnknown = admin("mutation { createStoreGroup(input: {code: \\\"F9CRT\\\", name: \\\"F9 Create\\\", storeGroupCodes: [\\\"F9NOSUCH\\\"]}) { id } }");
-        assertFalse(createUnknown.contains("\"errors\""),
-                "Observed reality: an unknown sub-group on create is silently accepted, not rejected: " + createUnknown);
-        QuarkusTransaction.requiringNew().run(() -> {
-            StoreGroup created = StoreGroup.findByCode("F9CRT");
-            assertNotNull(created, "The group must have been created despite the unknown sub-group");
-            assertTrue(created.storeGroups.isEmpty(), "The null child must have been dropped, leaving no sub-group link");
-        });
+        assertTrue(createUnknown.contains("\"errors\""),
+                "An unknown sub-group on create is now rejected (A4 member-inclusive checksum NPEs on the null child): " + createUnknown);
+        assertTrue(createUnknown.contains("An error occurred during createStoreGroup."),
+                "The in-lambda NPE is masked as the createStoreGroup generic: " + createUnknown);
+        QuarkusTransaction.requiringNew().run(() ->
+                assertNull(StoreGroup.findByCode("F9CRT"), "The rejected group must have been rolled back"));
         long grpId = createReturningId("mutation { createStoreGroup(input: {code: \\\"F9UPD\\\", name: \\\"F9 Update\\\"}) { id } }", "data.createStoreGroup.id");
         String updateUnknown = admin("mutation { updateStoreGroup(id: " + grpId + ", input: {storeGroupCodes: [\\\"F9NOSUCH\\\"]}) { id } }");
         assertTrue(updateUnknown.contains("\"errors\""), "An unknown sub-group on update must fail: " + updateUnknown);
@@ -534,5 +564,82 @@ class GroupFIT {
         assertTrue(body.contains("\"errors\""), "A duplicate code must be mistaken for a missing store: " + body);
         assertTrue(body.contains("System error"),
                 "The size-comparison trap raises an error, masked by SmallRye as the generic: " + body);
+    }
+
+    // --------------------------------------------------
+    // F12 — Product.egalimRegime (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * F12 — the product's {@code egalimRegime} is never null (default {@code EXEMPT}), settable to
+     * each valid value, conserved by a partial update that omits it, and an unknown value is masked
+     * as the generic {@code "An error occurred during createProduct."}.
+     */
+    @Test
+    void f12_productEgalimRegime() {
+        long foodId = createReturningId("mutation { createProduct(input: {ean: \\\"3319000000121\\\", "
+                + "name: \\\"F12 Food\\\", productType: \\\"UNIT\\\", egalimRegime: \\\"FOOD_34\\\"}) { id } }",
+                "data.createProduct.id");
+        assertTrue(admin("{ productByEan(ean: \\\"3319000000121\\\") { egalimRegime } }").contains("FOOD_34"),
+                "A set regime is read back");
+        admin("mutation { createProduct(input: {ean: \\\"3319000000122\\\", name: \\\"F12 Default\\\", "
+                + "productType: \\\"UNIT\\\"}) { id } }");
+        assertTrue(admin("{ productByEan(ean: \\\"3319000000122\\\") { egalimRegime } }").contains("EXEMPT"),
+                "An unset regime defaults to EXEMPT, never null");
+        String bad = admin("mutation { createProduct(input: {ean: \\\"3319000000123\\\", name: \\\"F12 Bad\\\", "
+                + "productType: \\\"UNIT\\\", egalimRegime: \\\"BOGUS\\\"}) { id } }");
+        assertTrue(bad.contains("An error occurred during createProduct."),
+                "An unknown regime is masked as the generic create error: " + bad);
+        admin("mutation { updateProduct(id: " + foodId + ", input: {name: \\\"F12 Food Renamed\\\"}) { id } }");
+        assertTrue(admin("{ productByEan(ean: \\\"3319000000121\\\") { egalimRegime } }").contains("FOOD_34"),
+                "A partial update that omits the regime conserves it");
+    }
+
+    // --------------------------------------------------
+    // F13 — BudgetGroup CRUD (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * F13 — {@code BudgetGroup} CRUD by business code with the same RBAC as the other referentials
+     * (queries MANAGER, mutations ADMIN): a created group is listed, a duplicate code is refused
+     * with the verbatim conflict message, and it is retrievable by code.
+     */
+    @Test
+    void f13_budgetGroupCrud() {
+        createReturningId("mutation { createBudgetGroup(input: {code: \\\"F13G\\\", maxAmount: 10.0, "
+                + "perStore: false}) { id } }", "data.createBudgetGroup.id");
+        assertTrue(admin("{ allBudgetGroups { code } }").contains("F13G"), "The created group is listed");
+        String dup = admin("mutation { createBudgetGroup(input: {code: \\\"F13G\\\", maxAmount: 5.0}) { id } }");
+        assertTrue(dup.contains("Budget group with code 'F13G' already exists."),
+                "A duplicate code is refused with the verbatim conflict: " + dup);
+        assertTrue(admin("{ budgetGroupByCode(code: \\\"F13G\\\") { code maxAmount } }").contains("F13G"),
+                "The group is retrievable by code");
+    }
+
+    // --------------------------------------------------
+    // F14 — budget status queries (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * F14 — {@code budgetStatus}/{@code groupBudgetStatus} (MANAGER). An unknown offer or group
+     * code surfaces the SmallRye {@code "System error"} mask (unwrapped {@code NoSuchElementException});
+     * a freshly created group with no consumption reports a zero consumed amount.
+     */
+    @Test
+    void f14_budgetStatusQueries() {
+        ensureUser("f14manager", "managerpass1", java.util.Set.of("MANAGER"));
+        assertTrue(graphql("f14manager", "managerpass1",
+                "{ budgetStatus(offerCode: \\\"NOPE\\\") { consumedAmount } }").contains("System error"),
+                "An unknown offer code surfaces the mask");
+        assertTrue(graphql("f14manager", "managerpass1",
+                "{ groupBudgetStatus(groupCode: \\\"NOPE\\\") { consumedAmount } }").contains("System error"),
+                "An unknown group code surfaces the mask");
+        createReturningId("mutation { createBudgetGroup(input: {code: \\\"F14G\\\", maxAmount: 30.0}) { id } }",
+                "data.createBudgetGroup.id");
+        String status = graphql("f14manager", "managerpass1",
+                "{ groupBudgetStatus(groupCode: \\\"F14G\\\") { maxAmount consumedAmount } }");
+        assertFalse(status.contains("\"errors\""), "A known group returns a status: " + status);
+        assertTrue(status.contains("\"consumedAmount\":0"),
+                "A fresh group reports zero consumption: " + status);
     }
 }

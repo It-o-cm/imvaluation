@@ -363,11 +363,13 @@ cible avant toute assertion textuelle — le message est en revanche garanti dan
 - **H4 `priceDate` explicite** : `2026-01-11T23:59:59` (avant le seed) → 500 ;
   `2026-01-12T00:00:00` → 200 ; format date-seule → 500 (G4). Levier déterministe :
   `DateTimeProvider.setFixedDateTime` pour les scénarios « aujourd'hui ».
-- **H5 Prix porté par la ligne** : `pricePerUnitExclTax` + `pricePerUnitInclTax` +
-  `vatRate` **tous trois** fournis → prix transient, aucun accès base, et
-  `DEFAULT` ≡ `BASE_FOR_DISCOUNT` (les remises se calculent sur le prix porté) ;
-  fournir seulement 1 ou 2 des 3 → **silencieusement ignorés**, retour catalogue
-  (test des 3 combinaisons partielles).
+- **H5 Prix porté par la ligne (révisé lot Digital 28/10)** : `pricePerUnitExclTax` +
+  `pricePerUnitInclTax` + `vatRate` **tous trois** fournis → prix transient, aucun
+  accès base, et `DEFAULT` ≡ `BASE_FOR_DISCOUNT` (les remises se calculent sur le
+  prix porté) ; fournir seulement 1 ou 2 des 3 → **400** nommant le ou les champs
+  manquants ET la ligne concernée (test des 3 combinaisons partielles — l'ancien
+  silence « retour catalogue » est ABROGÉ par spec-digital-ecommerce §4, trace
+  `REJECTED` patron G2).
 - **H6 Fusion de lignes** : deux lignes même EAN même profil → agrégées (une entrée,
   `sourceLines` conservées, restitution ligne à ligne exacte) ; profils différents →
   tranches séparées → **deux** offres `Standard` ; ⚠ `1.0` vs `1.00` dans un champ
@@ -1071,3 +1073,97 @@ workbench et tolérance à l'auto-refresh 1 s des valuations.
 - **Y5 CSRF** : formulaire UI sans jeton → 403 ; avec → 200 ; les clients machine en
   Basic (`/valuation`, les 9 imports, `/consumptions`) passent SANS jeton ;
   `SameSite=Lax` toujours posé (défense en profondeur, pas remplacée).
+
+## Z. Lot Digital — cycle e-commerce sans état & valorisation des retours
+
+> Référence : `spec-digital-ecommerce.md`. Doctrine transverse : le moteur ne
+> conserve JAMAIS de panier — chaque appel porte tout, la réponse est le seul
+> produit de l'appel ; seule persistance : `ConsumptionRecord`.
+
+- **Z1 Cycle de vie complet, zéro état** : ouverture (`closed:false`) → modification
+  (panier complet renvoyé) → mise en attente → reprise → clôture (`closed:true`) →
+  `POST /consumptions` SALE. Les valorisations intermédiaires sont structurellement
+  identiques (mêmes blocs), UNE seule déclaration consomme les budgets, et aucune
+  ligne nouvelle n'apparaît en base hors `ConsumptionRecord` (vérification table à
+  table). La « suppression » d'un panier = aucun appel, rien à libérer.
+- **Z2 Reprise fidèle** : un panier repris avec prix poussés et `priceDate` → le prix
+  poussé reste autoritaire à la reprise ; les promotions carte relues par l'appelant
+  s'appliquent sur l'état du jour.
+- **Z3 Réponse enrichie** : chaque ligne porte `label`, `familyCode`, `familyLabel` —
+  renseignés pour un article du référentiel, `null` tous les trois pour un article
+  inconnu/sans famille, JAMAIS d'erreur ; goldens `/valuation` mis à jour une seule
+  fois, diff limité à ces champs.
+- **Z4 Retour FULL** : `POST /returns/valuation` mode `FULL` avec la photo de
+  clôture → `totalRefund` = total encaissé de la photo au centime,
+  `advantagesTakenBack` = tous les avantages de la photo, `vatBreakdown` cohérent.
+- **Z5 Retour PARTIAL, remise conservée** : ligne rendue remboursée à son prix payé
+  net de sa quote-part des remises globales (répartition identique à la vente,
+  résidu sur la dernière ligne).
+- **Z6 Retour PARTIAL, offre perdue** : le panier restant ne remplit plus la
+  condition d'une offre globale → la remise perdue est REPRISE sur le remboursement
+  et figure dans `advantagesTakenBack`.
+- **Z7 Retours LINES, les trois sources de prix** : `CURRENT` (prix actif du PDV,
+  promotions courantes NON appliquées à un retour), `DATE` (prix historique à
+  `priceDate`), `PUSHED` (triplet complet autoritaire).
+- **Z8 Refus 400, un test par jambe** : photo absente en FULL/PARTIAL ; `lineId`
+  inconnu de la photo ; quantité rendue > quantité de la photo ; prix poussé
+  incomplet ; `priceDate` absente/illisible en DATE ; `priceSource` inconnu ;
+  `priceSource: ORDER` hors photo (mode LINES) — chaque message nomme sa cause.
+  Article inconnu du référentiel en CURRENT/DATE → **422** nommant l'EAN.
+- **Z9 Le retour ne persiste rien** : après une valorisation de retour, aucune
+  écriture en base ; la `CANCELLATION` est déclarée PAR L'APPELANT (ticketId = la
+  référence du retour) et décrémente les compteurs de budget — rejeu idempotent.
+- **Z10 Déterminisme** : la même requête de retour, rejouée, rend la même réponse
+  octet à octet.
+
+## AA. Valorisation d'affichage e-commerce (batch, lecture seule)
+
+> Référence : `spec-valorisation-affichage-ecommerce.md`. Doctrine transverse :
+> `POST /display-valuation` est un panier (multiple) très spécial — n mini-paniers
+> d'une unité, chacun sur son pseudo-ticket, évalués contre un contexte construit
+> UNE fois par appel ; strictement en lecture seule, le moteur n'appelle jamais
+> (promotions carte POUSSÉES par l'appelant).
+
+- **AA1 Prix public nu** : produit sans aucune offre → `displayedPrice` =
+  `basePrice`, `immediateDiscount` absent, `offerBadges` vide, `vatRate` issu de la
+  ligne de prix résolue (référentiel, pas de valeur poussée).
+- **AA2 Démarque inconditionnelle & cohérence panier (critère n° 1)** : produit sous
+  `NEW_PRICE_DISCOUNT` (puis variante `AMOUNT_PER_ITEM_DISCOUNT`) sans déclencheur →
+  reflétée dans `displayedPrice` ; le montant est comparé AU CENTIME au prix
+  unitaire net d'une évaluation `/valuation` mono-ligne (qté 1, sans prix poussé),
+  même magasin/date (règle 6).
+- **AA3 Personnalisation poussée** : avec `cardNumber` + `cardPromotions[]`
+  (`isImmediateDiscount()`) → `displayedPrice` personnalisé ; le même appel SANS le
+  bloc → prix public ; une entrée `benefit: CAGNOTTE` poussée → silencieusement
+  ignorée, comme au panier (spec-card-promotions §2.1).
+- **AA4 Badges panier-dépendants, jamais de prix inventé** : N+M, `TIERED_DISCOUNT`,
+  `MIXED_BUNDLE`, offre à `MINIMUM_QUANTITY` ciblant le produit → `offerBadges`
+  (`type`, `label`, `code`) uniquement, `displayedPrice` = prix hors ces offres ;
+  aucun champ de la réponse ne convertit leur effet en prix unitaire.
+- **AA5 Exclusions de l'affichage** : `TICKET_DISCOUNT` inconditionnel en vigueur →
+  absent de `displayedPrice` (avantage ticket, pas un prix produit) ;
+  `ANTI_WASTE_DISCOUNT` en vigueur → jamais appliqué (pas de `bestBeforeDate` à
+  l'affichage) ; grants d'instruments et fidélité → ni prix ni badge.
+- **AA6 Planchers légaux à l'affichage** : démarque qui percerait le plafond EGAlim
+  (puis le plancher SRP) → `displayedPrice` clampé au plancher, `floorGuard`
+  renseigné ; le prix affiché ne descend jamais sous le plancher, mêmes règles que
+  les gardes du panier.
+- **AA7 Prix à l'unité de mesure** : produit avec `referenceWeight` (puis
+  `referenceVolume`) → `unitPriceMeasure` calculé sur `displayedPrice`, arrondi à
+  2 décimales HALF_UP, unité de `unitName` ; produit sans référence de mesure →
+  champ absent.
+- **AA8 Isolation entre EAN (pas de contamination croisée)** : une offre à
+  `maxApplications` ciblant plusieurs EAN du même appel → chaque produit obtient sa
+  démarque entière (pseudo-ticket dédié) ; la réponse d'un EAN est identique qu'il
+  soit seul dans l'appel ou accompagné, et quel que soit l'ordre des `eans`.
+- **AA9 Refus** : plus de `eans` que le plafond configuré → **400** nommant la
+  limite et le nombre reçu ; `storeCode` inconnu ou `valuationDate` illisible →
+  refus nommant sa cause ; EAN inconnu du référentiel → l'entrée de CET EAN est en
+  erreur nommée, les autres EAN de l'appel sont valorisés normalement.
+- **AA10 Lecture seule & empreinte** : après un appel batch, aucune écriture en base
+  (vérification table à table, aucun `ConsumptionRecord`) ; `priceVersion` est
+  stable pour un même (magasin, date) et change après mise à jour d'un prix ou
+  d'une offre en vigueur de ce magasin.
+- **AA11 Déterminisme** : le même appel batch, rejoué 50 fois, rend 50 réponses
+  identiques octet pour octet ; `/valuation` reste bit-identique sur les goldens
+  existants (le chantier n'altère pas l'évaluation panier).

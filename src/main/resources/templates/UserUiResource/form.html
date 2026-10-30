@@ -1,14 +1,14 @@
 {#include ui/layout}
 
-{#title}{#if user.id}Edit user {user.username}{#else}New user{/if}{/title}
+{#title}{#if user.id}{inject:i18n.format('users.form.titleEdit', user.username)}{#else}{inject:i18n.get('users.form.titleNew')}{/if}{/title}
 
 {#body}
 <div class="page-head">
     <div>
-        <h1>{#if user.id}Edit user{#else}New user{/if}</h1>
-        <p class="page-sub">{#if user.id}{user.username}{#else}Grant only the roles the account actually needs{/if}</p>
+        <h1>{#if user.id}{inject:i18n.get('users.form.headingEdit')}{#else}{inject:i18n.get('users.form.headingNew')}{/if}</h1>
+        <p class="page-sub">{#if user.id}{user.username}{#else}{inject:i18n.get('users.form.subNew')}{/if}</p>
     </div>
-    <a class="btn btn-ghost" href="/ui/users">Back to list</a>
+    <a class="btn btn-ghost" href="/ui/users">{inject:i18n.get('users.action.backToList')}</a>
 </div>
 
 {#if error}
@@ -17,57 +17,69 @@
 
 <form class="stacked-form" method="post"
       action="{#if user.id}/ui/users/{user.id}{#else}/ui/users/new{/if}">
+    {#csrf /}
 
     <section class="card">
-        <h2 class="card-title">Identity</h2>
+        <h2 class="card-title">{inject:i18n.get('users.section.identity')}</h2>
         <div class="field-grid">
             <label class="field">
-                <span class="field-label">Username <em>*</em></span>
+                <span class="field-label">{inject:i18n.get('users.field.username')} <em>*</em></span>
                 {#if user.id}
                 <input type="text" value="{user.username}" disabled>
-                <span class="field-hint">The login name cannot be changed.</span>
+                <span class="field-hint">{inject:i18n.get('users.hint.usernameLocked')}</span>
                 {#else}
                 <input type="text" name="username" value="{user.username ?: ''}" required maxlength="60">
-                <span class="field-hint">Used to sign in.</span>
+                <span class="field-hint">{inject:i18n.get('users.hint.usernameNew')}</span>
                 {/if}
             </label>
 
             <label class="field">
-                <span class="field-label">Display name</span>
+                <span class="field-label">{inject:i18n.get('users.field.displayName')}</span>
                 <input type="text" name="displayName" value="{user.displayName ?: ''}" maxlength="100">
-                <span class="field-hint">Shown in the interface instead of the login name.</span>
+                <span class="field-hint">{inject:i18n.get('users.hint.displayName')}</span>
+            </label>
+
+            <label class="field">
+                <span class="field-label">{inject:i18n.get('users.field.locale')}</span>
+                <select name="locale">
+                    <option value="" {#if !user.locale}selected{/if}>{inject:i18n.get('users.locale.auto')}</option>
+                    <option value="fr" {#if user.locale == 'fr'}selected{/if}>{inject:i18n.get('users.locale.fr')}</option>
+                    <option value="en" {#if user.locale == 'en'}selected{/if}>{inject:i18n.get('users.locale.en')}</option>
+                    <option value="pt" {#if user.locale == 'pt'}selected{/if}>{inject:i18n.get('users.locale.pt')}</option>
+                    <option value="nl" {#if user.locale == 'nl'}selected{/if}>{inject:i18n.get('users.locale.nl')}</option>
+                </select>
+                <span class="field-hint">{inject:i18n.get('users.hint.locale')}</span>
             </label>
         </div>
     </section>
 
     <section class="card">
-        <h2 class="card-title">Password</h2>
+        <h2 class="card-title">{inject:i18n.get('users.section.password')}</h2>
         <div class="field-grid">
             <label class="field">
-                <span class="field-label">{#if user.id}New password{#else}Password <em>*</em>{/if}</span>
+                <span class="field-label">{#if user.id}{inject:i18n.get('users.field.newPassword')}{#else}{inject:i18n.get('users.field.password')} <em>*</em>{/if}</span>
                 <input type="password" name="password" autocomplete="new-password"
                        {#if !user.id}required{/if}>
                 <span class="field-hint">
-                    {#if user.id}Leave empty to keep the current password. Setting one requires
-                    the user to choose a new password at their next sign-in.
-                    {#else}At least 8 characters. The user must replace it at first sign-in.{/if}
+                    {#if user.id}{inject:i18n.get('users.hint.passwordEdit')}
+                    {#else}{inject:i18n.get('users.hint.passwordNew')}{/if}
                 </span>
             </label>
         </div>
     </section>
 
     <section class="card">
-        <h2 class="card-title">Access</h2>
-        <p class="card-sub">Roles are cumulative: grant every level the account needs.</p>
+        <h2 class="card-title">{inject:i18n.get('users.section.access')}</h2>
+        <p class="card-sub">{inject:i18n.get('users.access.rolesSub')}</p>
         <div class="role-grid">
             {#for role in allRoles}
             <label class="role-option">
                 <input type="checkbox" name="roles" value="{role}" {#if user.hasRole(role)}checked{/if}>
                 <span class="role-name">{role}</span>
                 <span class="role-desc">
-                    {#if role == 'VIEWER'}Browse and export, no modification.
-                    {#else if role == 'MANAGER'}Read every administration screen.
-                    {#else}Full access, including import and user management.{/if}
+                    {#if role == 'VIEWER'}{inject:i18n.get('users.role.viewer')}
+                    {#else if role == 'MANAGER'}{inject:i18n.get('users.role.manager')}
+                    {#else}{inject:i18n.get('users.role.admin')}{/if}
                 </span>
             </label>
             {/for}
@@ -75,13 +87,51 @@
 
         <label class="toggle-row">
             <input type="checkbox" name="active" {#if user.active}checked{/if}>
-            <span>Account enabled</span>
+            <span>{inject:i18n.get('users.field.active')}</span>
         </label>
     </section>
 
+    <section class="card">
+        <h2 class="card-title">{inject:i18n.get('users.section.perimeter')}</h2>
+        <p class="card-sub">{inject:i18n.get('users.perimeter.sub')}</p>
+
+        <h3 class="field-label">{inject:i18n.get('users.field.storeScope')}</h3>
+        <p class="field-hint">{inject:i18n.get('users.hint.storeScope')}</p>
+        <div class="role-grid">
+            {#for code in storeCandidates}
+            <label class="role-option">
+                <input type="checkbox" name="storeScope" value="{code}" {#if user.storeScopeSet.contains(code)}checked{/if}>
+                <span class="role-name">{code}</span>
+            </label>
+            {/for}
+        </div>
+
+        <h3 class="field-label">{inject:i18n.get('users.field.allowedOfferTypes')}</h3>
+        <p class="field-hint">{inject:i18n.get('users.hint.allowedOfferTypes')}</p>
+        <div class="role-grid">
+            {#for type in typeCandidates}
+            <label class="role-option">
+                <input type="checkbox" name="allowedOfferTypes" value="{type}" {#if user.allowedOfferTypeSet.contains(type)}checked{/if}>
+                <span class="role-name">{type}</span>
+            </label>
+            {/for}
+        </div>
+
+        <h3 class="field-label">{inject:i18n.get('users.field.hiddenMenus')}</h3>
+        <p class="field-hint">{inject:i18n.get('users.hint.hiddenMenus')}</p>
+        <div class="role-grid">
+            {#for key in menuKeys}
+            <label class="role-option">
+                <input type="checkbox" name="hiddenMenus" value="{key}" {#if user.hiddenMenuSet.contains(key)}checked{/if}>
+                <span class="role-name">{key}</span>
+            </label>
+            {/for}
+        </div>
+    </section>
+
     <div class="form-actions">
-        <button class="btn btn-primary" type="submit">{#if user.id}Save changes{#else}Create user{/if}</button>
-        <a class="btn btn-ghost" href="/ui/users">Cancel</a>
+        <button class="btn btn-primary" type="submit">{#if user.id}{inject:i18n.get('users.action.save')}{#else}{inject:i18n.get('users.action.create')}{/if}</button>
+        <a class="btn btn-ghost" href="/ui/users">{inject:i18n.get('users.action.cancel')}</a>
     </div>
 </form>
 {/body}

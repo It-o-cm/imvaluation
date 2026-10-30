@@ -152,9 +152,9 @@ class GroupAIT {
         given().cookie(SESSION_COOKIE, session)
                 .when().get("/ui/offers")
                 .then().statusCode(200)
-                .body(containsString("No offer matches the current filters."))
-                .body(containsString("The in-memory database is reset at every restart"))
-                .body(containsString("run the CSV imports to load a catalog."));
+                .body(containsString("Aucune offre ne correspond aux filtres actuels."))
+                .body(containsString("La base en mémoire est réinitialisée"))
+                .body(containsString("charger un catalogue."));
     }
 
     // --------------------------------------------------
@@ -162,8 +162,11 @@ class GroupAIT {
     // --------------------------------------------------
 
     /**
-     * A5 — mirror seed &amp; idempotence: the seven imports are replayed in the mandated order
-     * (Stores → StoreGroups → Products → ProductFamilies → Categories → Prices → Offers). The
+     * A5 — mirror seed &amp; idempotence: the imports are replayed in the mandated order
+     * (VatRates → Stores → StoreGroups → Products → ProductFamilies → Categories → Prices → Offers).
+     * The VAT referential is now a prerequisite of {@code /prices/import}: since the EGALIM/VAT
+     * chantier {@code PriceCsvResource.resolveRegime} rejects a rate that names no regime, so the
+     * rate the price seed uses (0.2000) must exist before prices are imported. The
      * first pass creates every row ({@code updatedCount:0}); an immediate second pass is a pure
      * no-op ({@code createdCount:0, updatedCount:0}) everywhere, idempotence being driven by
      * the checksum. The store seed includes {@code 0106}, a store with no address at all: its
@@ -172,7 +175,23 @@ class GroupAIT {
      */
     @Test
     void a5_mirrorSeedIsIdempotentByChecksum() {
+        // Start from a genuinely empty referential, whatever class ran before in the shared H2:
+        // the first-pass "every line created" assertion below is an empty-referential invariant,
+        // and a sibling class seeded earlier (e.g. the alphabetically-earlier GroupAAIT) would
+        // otherwise leave rows that turn creations into no-ops. Wipe in the referential's FK-safe
+        // order, the one DataInitializer.wipeSeededData uses; offers and prices go first through the
+        // shared CatalogReset helper (offers one entity at a time, to clear their owned join rows).
+        CatalogReset.resetMutableCatalog();
+        QuarkusTransaction.requiringNew().run(() -> {
+            com.intermarche.valuation.domain.ProductCategoryStorage.deleteAll();
+            com.intermarche.valuation.domain.ProductFamily.deleteAll();
+            com.intermarche.valuation.domain.VatRate.deleteAll();
+            com.intermarche.valuation.domain.Product.deleteAll();
+            com.intermarche.valuation.domain.StoreGroup.deleteAll();
+            com.intermarche.valuation.domain.Store.deleteAll();
+        });
         // First pass: an empty referential, so every line is created and nothing updated.
+        importSeed("/vat-rates/import", VAT_RATES_CSV, expectedCreated(VAT_RATES_CSV), 0);
         importSeed("/stores/import", STORES_CSV, expectedCreated(STORES_CSV), 0);
         importSeed("/store-groups/import", STORE_GROUPS_CSV, expectedCreated(STORE_GROUPS_CSV), 0);
         importSeed("/products/import", PRODUCTS_CSV, expectedCreated(PRODUCTS_CSV), 0);
@@ -181,6 +200,7 @@ class GroupAIT {
         importSeed("/prices/import", PRICES_CSV, expectedCreated(PRICES_CSV), 0);
         importSeed("/offers/import", OFFERS_CSV, expectedCreated(OFFERS_CSV), 0);
         // Second pass immediately: the checksum makes every re-import a no-op.
+        importSeed("/vat-rates/import", VAT_RATES_CSV, 0, 0);
         importSeed("/stores/import", STORES_CSV, 0, 0);
         importSeed("/store-groups/import", STORE_GROUPS_CSV, 0, 0);
         importSeed("/products/import", PRODUCTS_CSV, 0, 0);
@@ -244,6 +264,21 @@ class GroupAIT {
     // --------------------------------------------------
     // Mirror seed payloads (replayed by A5)
     // --------------------------------------------------
+
+    /**
+     * VAT regimes seed: the referential the prices name by RATE. Since the EGALIM/VAT chantier
+     * {@code PriceCsvResource.resolveRegime} rejects a rate that names no regime, so the rate the
+     * price seed uses (0.2000 normal) must exist before {@code /prices/import} runs — mirrors
+     * {@code src/test/resources/seed/00-vat-rates.csv}.
+     */
+    private static final String VAT_RATES_CSV = """
+            VAT_NUMBER|RATE|LABEL
+            1|0.2000|Taux normal
+            2|0.0550|Taux réduit
+            3|0.1000|Taux intermédiaire
+            4|0.0210|Taux super-réduit
+            5|0.0000|Exonéré
+            """;
 
     /**
      * Stores seed: the five addressed test stores plus {@code 0106}, a deliberately

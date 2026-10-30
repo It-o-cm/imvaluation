@@ -324,7 +324,7 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
                     ? PriceUsage.valueOf(spec.get("priceUsage").asText())
                     : PriceUsage.BASE_FOR_DISCOUNT;
             boolean perProduct = spec.has("perProduct") && spec.get("perProduct").asBoolean();
-            Set<String> targetEans = parseTargetEans(spec);
+            Set<String> targetEans = resolveTargetEans(spec, offer.code);
             validateCrossRules(offer.code, scope, metric, mode, targetEans, spec);
             if (perProduct && (scope != Scope.ITEMS || metric != Metric.QUANTITY)) {
                 throw new IllegalArgumentException(String.format(
@@ -355,22 +355,6 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
             applier.configuration = offer;
             appliers.add(applier);
         });
-    }
-
-    /**
-     * Extracts the target EANs of the specification.
-     *
-     * @param spec the parsed specification.
-     * @return the target EANs, empty when absent.
-     */
-    private Set<String> parseTargetEans(JsonNode spec) {
-        Set<String> eans = new LinkedHashSet<>();
-        if (spec.has("targetEans")) {
-            for (JsonNode ean : spec.get("targetEans")) {
-                eans.add(ean.asText());
-            }
-        }
-        return eans;
     }
 
     /**
@@ -1040,6 +1024,139 @@ public class TieredDiscountFactory implements AdvantageApplierFactory, EngineTra
         @Override
         public void setApplicationMoment(String applicationMoment) {
             this.applicationMoment = applicationMoment;
+        }
+
+        /**
+         * Accounting ventilation key copied verbatim from the configuration (spec-divers-offre §3).
+         */
+        private String accountingCode;
+
+        /**
+         * Ticket print mode ({@code LINE} or {@code FOOTER}) copied verbatim from the
+         * configuration (spec-divers-offre §3).
+         */
+        private String printMode;
+
+        /**
+         * Whether the source configuration flags its discounts EGAlim-exempt (spec-divers-offre §2).
+         */
+        private boolean egalimExempt;
+
+        /**
+         * Whether the source configuration flags its discounts SRP-exempt (spec-divers-offre §2).
+         */
+        private boolean srpExempt;
+
+        /**
+         * Returns the accounting ventilation key restituted verbatim in the response.
+         *
+         * @return the accounting code, or {@code null} when the configuration set none.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        public String getAccountingCode() {
+            return accountingCode;
+        }
+
+        /**
+         * Records the accounting ventilation key copied from the configuration.
+         *
+         * @param accountingCode the accounting code, or {@code null}.
+         */
+        @Override
+        public void setAccountingCode(String accountingCode) {
+            this.accountingCode = accountingCode;
+        }
+
+        /**
+         * Promotion funding copied verbatim from the configuration (spec-exploitation §3).
+         */
+        private String funding;
+
+        /**
+         * Returns the promotion funding restituted verbatim in the response.
+         *
+         * @return the funding, or {@code null} when the configuration set none.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        public String getFunding() {
+            return funding;
+        }
+
+        /**
+         * Records the promotion funding copied from the configuration.
+         *
+         * @param funding the funding, or {@code null}.
+         */
+        @Override
+        public void setFunding(String funding) {
+            this.funding = funding;
+        }
+
+        /**
+         * Returns the ticket print mode restituted verbatim in the response.
+         *
+         * @return the print mode ({@code LINE} or {@code FOOTER}), or {@code null} when unset.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        public String getPrintMode() {
+            return printMode;
+        }
+
+        /**
+         * Records the ticket print mode copied from the configuration.
+         *
+         * @param printMode the print mode ({@code LINE} or {@code FOOTER}), or {@code null}.
+         */
+        @Override
+        public void setPrintMode(String printMode) {
+            this.printMode = printMode;
+        }
+
+        /**
+         * Tells whether the source configuration flags its discounts EGAlim-exempt; read by the
+         * EGAlim guard, never serialized.
+         *
+         * @return {@code true} when the configuration set {@code compliance.egalimExempt}.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public boolean isEgalimExempt() {
+            return egalimExempt;
+        }
+
+        /**
+         * Records the EGAlim-exempt flag copied from the configuration.
+         *
+         * @param egalimExempt whether the configuration is EGAlim-exempt.
+         */
+        @Override
+        public void setEgalimExempt(boolean egalimExempt) {
+            this.egalimExempt = egalimExempt;
+        }
+
+        /**
+         * Tells whether the source configuration flags its discounts SRP-exempt; reserved for the
+         * future SRP guard, never serialized.
+         *
+         * @return {@code true} when the configuration set {@code compliance.srpExempt}.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public boolean isSrpExempt() {
+            return srpExempt;
+        }
+
+        /**
+         * Records the SRP-exempt flag copied from the configuration.
+         *
+         * @param srpExempt whether the configuration is SRP-exempt.
+         */
+        @Override
+        public void setSrpExempt(boolean srpExempt) {
+            this.srpExempt = srpExempt;
         }
 
         /**

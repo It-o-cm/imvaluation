@@ -461,4 +461,29 @@ public class BasketEvaluationTest {
         // Verify that the map remains empty and no exception was thrown
         assertTrue(evaluation.getAvailableToUpcell().isEmpty());
     }
+
+    /**
+     * A result item copies the line identity, reads a missing quantity as zero, and carries the
+     * catalog name of the slice's resolved product as its label (digital sheet DG-01-01-01); the
+     * default constructor leaves every field empty.
+     */
+    @Test
+    void testResultItem_copiesLineAndLabel() {
+        Basket.Item source = new Basket.Item();
+        source.lineId = "L1";
+        source.produceEan = "E1";
+        com.intermarche.valuation.domain.Product product = new com.intermarche.valuation.domain.Product();
+        product.name = "Lait UHT 1L";
+        source.product = product;
+        AmountEvaluation amount = new AmountEvaluation();
+        BasketEvaluation.Item item = new BasketEvaluation.Item(source, amount);
+        assertEquals("L1", item.lineId);
+        assertEquals("E1", item.produceEan);
+        assertEquals(BigDecimal.ZERO, item.quantity);
+        assertEquals("Lait UHT 1L", item.label);
+        assertSame(amount, item.amount);
+        BasketEvaluation.Item empty = new BasketEvaluation.Item();
+        assertNull(empty.label);
+        assertNull(empty.quantity);
+    }
 }

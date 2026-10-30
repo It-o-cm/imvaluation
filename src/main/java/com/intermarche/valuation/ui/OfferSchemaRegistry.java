@@ -47,6 +47,12 @@ public class OfferSchemaRegistry {
     private final Map<String, String> schemasByType = new TreeMap<>();
 
     /**
+     * Mapper used to enrich each schema with the shared fragments at registration.
+     */
+    private static final com.fasterxml.jackson.databind.ObjectMapper MAPPER =
+            new com.fasterxml.jackson.databind.ObjectMapper();
+
+    /**
      * Scans every factory bean and indexes the schemas by offer type.
      * <p>
      * Factories returning a null type or a null schema are skipped, which covers appliers
@@ -65,6 +71,13 @@ public class OfferSchemaRegistry {
     /**
      * Registers a single type/schema pair, ignoring incomplete declarations.
      * <p>
+     * The schema is enriched through the engine's single shared-fragment funnel
+     * ({@link com.intermarche.valuation.engine.EngineTrait#injectSharedFragments}) before it
+     * is stored: the administration form, the AI drafting prompt and the engine validation
+     * then all see the same schema — the one carrying {@code trigger}, the family targeting
+     * and the free-form {@code targetWhere}. The injection is idempotent, so the second
+     * application inside {@code processSpecification} is a no-op.
+     * <p>
      * A type may be claimed by both an offer factory and an advantage factory (N+M,
      * MIXED_BUNDLE). Offer factories are scanned first, so the schema that produces a valid
      * engine offer is registered first; a later duplicate is rejected and logged rather than
@@ -78,7 +91,8 @@ public class OfferSchemaRegistry {
         if (type == null || type.isBlank() || schema == null || schema.isBlank()) {
             return;
         }
-        String existing = schemasByType.putIfAbsent(type, schema);
+        String existing = schemasByType.putIfAbsent(type,
+                com.intermarche.valuation.engine.EngineTrait.injectSharedFragments(MAPPER, schema));
         if (existing != null) {
             LOGGER.warnf("Duplicate schema registration for offer type '%s' ignored; "
                     + "keeping the first (offer-valid) registration.", type);

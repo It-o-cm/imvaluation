@@ -259,7 +259,7 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
             linkSubFamilies(family, requestedSubCodes, subFamilyMap);
             counters[0]++;
             Panache.getEntityManager().persist(family);
-        } else if (family.checksum != incomingChecksum) {
+        } else if (family.changedFrom(incomingChecksum)) {
             // Report C4: the staged fallback clears the persistence context between retries, so the
             // pre-fetched family is detached. Re-attach it with findById — the pattern the other
             // importers use — before mutating, so the update is actually flushed instead of being
@@ -343,7 +343,7 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
             List<ProductFamily> subFamilies = ProductFamily.list("code IN ?1", requestedSubCodes);
             for (ProductFamily sf : subFamilies) subFamilyMap.put(sf.code, sf);
         }
-        return subFamilyMap;
+        return subFamilyMap == null ? Map.of() : subFamilyMap;
     }
 
     /**
@@ -361,7 +361,7 @@ public class ProductFamilyCsvResource extends ImporterCsvResource {
         if (productMap == null && !requestedEans.isEmpty()) {
             productMap = productsByEan(requestedEans);
         }
-        return productMap;
+        return productMap == null ? Map.of() : productMap;
     }
 
     /**

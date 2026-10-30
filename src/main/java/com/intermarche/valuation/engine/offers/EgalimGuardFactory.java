@@ -19,6 +19,7 @@ import com.intermarche.valuation.engine.EngineTrait;
 import com.intermarche.valuation.engine.NetAmounts;
 import com.intermarche.valuation.engine.OfferApplication;
 import com.intermarche.valuation.engine.OfferApplier;
+import com.intermarche.valuation.engine.ProductScopedDiscount;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
@@ -51,9 +52,10 @@ import java.util.Set;
  * <p>
  * Its arbitration position is structural, not configurable (spec §3): whatever the persisted
  * specification carries, {@link EgalimGuardApplier#getConfiguration()} returns a forced synthetic
- * configuration — {@code applicationMoment = AT_TOTAL}, {@code priority = Integer.MAX_VALUE}
- * (last in the ascending order, guaranteed after every other advantage, card promotions at 500
- * included), cumulable, consuming no carrier, with no application limit. On an open basket the
+ * configuration — {@code applicationMoment = AT_TOTAL}, {@code priority = Integer.MAX_VALUE - 1}
+ * (next-to-last in the ascending order, after every other advantage, card promotions at 500
+ * included, and just before the SRP guard at {@code Integer.MAX_VALUE}), cumulable, consuming no
+ * carrier, with no application limit. On an open basket the
  * {@code AT_TOTAL} wave does not run, so the guard neither corrects nor records (spec §3, §8.9).
  * <p>
  * Compute semantics (spec §4), per initial basket line: the nominal is the reference price times
@@ -78,13 +80,17 @@ public class EgalimGuardFactory implements AdvantageApplierFactory, EngineTrait 
     public static final String OFFER_TYPE = "EGALIM_GUARD";
 
     /**
-     * The forced synthetic specification of the guard's configuration (spec §3): AT_TOTAL, last
-     * in the arbitration order, cumulable, consuming nothing. Read by {@code parseArbitrationConfig}
-     * without schema re-validation; {@code 2147483647} is {@link Integer#MAX_VALUE}.
+     * The forced synthetic specification of the guard's configuration (spec §3): AT_TOTAL, cumulable,
+     * consuming nothing. Read by {@code parseArbitrationConfig} without schema re-validation.
+     * <p>
+     * Priority {@code 2147483646} is {@link Integer#MAX_VALUE} minus one: the EGAlim guard corrects
+     * the generosity next-to-last, then the SRP guard ({@code SRP_GUARD}, at {@link Integer#MAX_VALUE})
+     * locks the resulting price last of all (spec-srp-guard §2). EGAlim corrects generosity, SRP
+     * verrous the price it leaves behind.
      */
     private static final String FORCED_SPECIFICATION =
             "{\"applicationMoment\":\"AT_TOTAL\","
-                    + "\"arbitration\":{\"priority\":2147483647,\"cumulable\":true,\"consumesContributors\":false}}";
+                    + "\"arbitration\":{\"priority\":2147483646,\"cumulable\":true,\"consumesContributors\":false}}";
 
     /**
      * JSON Schema for the EGAlim guard specification (spec §3): optional per-regime cap overrides,
@@ -307,7 +313,8 @@ public class EgalimGuardFactory implements AdvantageApplierFactory, EngineTrait 
 
         /**
          * Returns the forced synthetic configuration (spec §3): AT_TOTAL, priority
-         * {@link Integer#MAX_VALUE}, cumulable, consuming nothing.
+         * {@link Integer#MAX_VALUE} minus one (just before the SRP guard), cumulable, consuming
+         * nothing.
          *
          * @return the forced configuration.
          */
@@ -339,6 +346,7 @@ public class EgalimGuardFactory implements AdvantageApplierFactory, EngineTrait 
             }
             Map<String, BigDecimal> netByLine = netTtcByLine(evaluation);
             Map<String, BigDecimal> antiWasteByLine = antiWasteTtcByLine(evaluation, basket);
+            Map<String, BigDecimal> egalimExemptByLine = egalimExemptTtcByLine(evaluation);
             List<CorrectionDetail> corrections = new ArrayList<>();
             BigDecimal totalCorrHt = BigDecimal.ZERO;
             BigDecimal totalCorrTtc = BigDecimal.ZERO;
@@ -369,13 +377,19 @@ public class EgalimGuardFactory implements AdvantageApplierFactory, EngineTrait 
                     excluded = totalGenerosity;
                     counted = BigDecimal.ZERO;
                 } else {
+                    // The excluded generosity is the anti-gaspi share (perishables) plus the share
+                    // of discounts flagged compliance.egalimExempt (the sales case, spec-divers-offre
+                    // §2) — both stay out of the ceiling comparison, capped at the whole delta.
                     BigDecimal antiWaste = item.lineId != null
                             ? antiWasteByLine.getOrDefault(item.lineId, BigDecimal.ZERO) : BigDecimal.ZERO;
-                    if (antiWaste.compareTo(totalGenerosity) > 0) {
-                        antiWaste = totalGenerosity;
+                    BigDecimal exempt = item.lineId != null
+                            ? egalimExemptByLine.getOrDefault(item.lineId, BigDecimal.ZERO) : BigDecimal.ZERO;
+                    BigDecimal excludedRaw = antiWaste.add(exempt);
+                    if (excludedRaw.compareTo(totalGenerosity) > 0) {
+                        excludedRaw = totalGenerosity;
                     }
-                    excluded = antiWaste;
-                    counted = totalGenerosity.subtract(antiWaste);
+                    excluded = excludedRaw;
+                    counted = totalGenerosity.subtract(excludedRaw);
                 }
                 if (counted.signum() < 0) {
                     counted = BigDecimal.ZERO;
@@ -569,6 +583,61 @@ public class EgalimGuardFactory implements AdvantageApplierFactory, EngineTrait 
         }
 
         /**
+         * Builds the EGAlim-exempt discount attributed to each initial line, keyed by line id
+         * (spec-divers-offre §2).
+         * <p>
+         * Every discount whose configuration carries {@code compliance.egalimExempt} is spread
+         * over the valued items of its targeted application by their gross tax-included weight,
+         * exactly as anti-gaspi discounts are — restricted to the discount's own EAN when it is
+         * product-scoped, spread over the whole application otherwise. The resulting per-line
+         * amount is excluded from the counted generosity, like the anti-gaspi exemption.
+         *
+         * @param evaluation the evaluation context.
+         * @return the EGAlim-exempt tax-included discount amount per line id.
+         */
+        private Map<String, BigDecimal> egalimExemptTtcByLine(BasketEvaluation evaluation) {
+            Map<String, BigDecimal> exemptByLine = new HashMap<>();
+            for (AdvantageApplication advantage : evaluation.getAdvantages()) {
+                if (!advantage.isEgalimExempt() || !(advantage instanceof DiscountApplication discount)) {
+                    continue;
+                }
+                if (discount.getDiscountAmount() == null
+                        || discount.getDiscountAmount().amountIncludingTax == null) {
+                    continue;
+                }
+                OfferApplication target = discount.getOfferApplication();
+                if (target == null) {
+                    continue;
+                }
+                String scopedEan = advantage instanceof ProductScopedDiscount scoped
+                        ? scoped.discountedEan() : null;
+                List<BasketEvaluation.Item> eligible = new ArrayList<>();
+                BigDecimal sumGross = BigDecimal.ZERO;
+                for (BasketEvaluation.Item item : target.getValuedItems()) {
+                    if (item.amount == null || item.amount.amountIncludingTax == null
+                            || item.lineId == null) {
+                        continue;
+                    }
+                    if (scopedEan != null && !Objects.equals(scopedEan, item.produceEan)) {
+                        continue;
+                    }
+                    eligible.add(item);
+                    sumGross = sumGross.add(item.amount.amountIncludingTax);
+                }
+                if (sumGross.signum() <= 0) {
+                    continue;
+                }
+                BigDecimal amount = discount.getDiscountAmount().amountIncludingTax.abs();
+                for (BasketEvaluation.Item item : eligible) {
+                    BigDecimal share = amount.multiply(item.amount.amountIncludingTax)
+                            .divide(sumGross, 2, RoundingMode.HALF_UP);
+                    exemptByLine.merge(item.lineId, share, BigDecimal::add);
+                }
+            }
+            return exemptByLine;
+        }
+
+        /**
          * Rounds an amount to the cent.
          *
          * @param value the amount.
@@ -699,6 +768,139 @@ public class EgalimGuardFactory implements AdvantageApplierFactory, EngineTrait 
         @Override
         public void setApplicationMoment(String applicationMoment) {
             this.applicationMoment = applicationMoment;
+        }
+
+        /**
+         * Accounting ventilation key copied verbatim from the configuration (spec-divers-offre §3).
+         */
+        private String accountingCode;
+
+        /**
+         * Ticket print mode ({@code LINE} or {@code FOOTER}) copied verbatim from the
+         * configuration (spec-divers-offre §3).
+         */
+        private String printMode;
+
+        /**
+         * Whether the source configuration flags its discounts EGAlim-exempt (spec-divers-offre §2).
+         */
+        private boolean egalimExempt;
+
+        /**
+         * Whether the source configuration flags its discounts SRP-exempt (spec-divers-offre §2).
+         */
+        private boolean srpExempt;
+
+        /**
+         * Returns the accounting ventilation key restituted verbatim in the response.
+         *
+         * @return the accounting code, or {@code null} when the configuration set none.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        public String getAccountingCode() {
+            return accountingCode;
+        }
+
+        /**
+         * Records the accounting ventilation key copied from the configuration.
+         *
+         * @param accountingCode the accounting code, or {@code null}.
+         */
+        @Override
+        public void setAccountingCode(String accountingCode) {
+            this.accountingCode = accountingCode;
+        }
+
+        /**
+         * Promotion funding copied verbatim from the configuration (spec-exploitation §3).
+         */
+        private String funding;
+
+        /**
+         * Returns the promotion funding restituted verbatim in the response.
+         *
+         * @return the funding, or {@code null} when the configuration set none.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        public String getFunding() {
+            return funding;
+        }
+
+        /**
+         * Records the promotion funding copied from the configuration.
+         *
+         * @param funding the funding, or {@code null}.
+         */
+        @Override
+        public void setFunding(String funding) {
+            this.funding = funding;
+        }
+
+        /**
+         * Returns the ticket print mode restituted verbatim in the response.
+         *
+         * @return the print mode ({@code LINE} or {@code FOOTER}), or {@code null} when unset.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonInclude(com.fasterxml.jackson.annotation.JsonInclude.Include.NON_NULL)
+        public String getPrintMode() {
+            return printMode;
+        }
+
+        /**
+         * Records the ticket print mode copied from the configuration.
+         *
+         * @param printMode the print mode ({@code LINE} or {@code FOOTER}), or {@code null}.
+         */
+        @Override
+        public void setPrintMode(String printMode) {
+            this.printMode = printMode;
+        }
+
+        /**
+         * Tells whether the source configuration flags its discounts EGAlim-exempt; read by the
+         * EGAlim guard, never serialized.
+         *
+         * @return {@code true} when the configuration set {@code compliance.egalimExempt}.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public boolean isEgalimExempt() {
+            return egalimExempt;
+        }
+
+        /**
+         * Records the EGAlim-exempt flag copied from the configuration.
+         *
+         * @param egalimExempt whether the configuration is EGAlim-exempt.
+         */
+        @Override
+        public void setEgalimExempt(boolean egalimExempt) {
+            this.egalimExempt = egalimExempt;
+        }
+
+        /**
+         * Tells whether the source configuration flags its discounts SRP-exempt; reserved for the
+         * future SRP guard, never serialized.
+         *
+         * @return {@code true} when the configuration set {@code compliance.srpExempt}.
+         */
+        @Override
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public boolean isSrpExempt() {
+            return srpExempt;
+        }
+
+        /**
+         * Records the SRP-exempt flag copied from the configuration.
+         *
+         * @param srpExempt whether the configuration is SRP-exempt.
+         */
+        @Override
+        public void setSrpExempt(boolean srpExempt) {
+            this.srpExempt = srpExempt;
         }
 
         /**

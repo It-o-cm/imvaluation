@@ -317,6 +317,31 @@ class GroupJIT {
                         + trace.errorMessage);
     }
 
+    /**
+     * Posts a basket whose only faulty configuration is skipped fail-closed (A2, report H1): the
+     * valuation still succeeds with 200 and the skip is recorded on the SUCCESS trace as a
+     * {@code Skipped configurations: ...} message carrying the configuration's validation error
+     * (rapport-remediation-imvaluation.md §"Step 3", A2/H1 — a corrupted spec among healthy offers
+     * is skipped and recorded, not a 500).
+     *
+     * @param customer         The unique customer code for the probe.
+     * @param body             The basket JSON.
+     * @param expectedFragment The literal the recorded skip message must contain.
+     */
+    private void assertFailClosed(String customer, String body, String expectedFragment) {
+        valuate(body, 200);
+        TraceView trace = traceFor(customer);
+        assertTrue(trace.found, "A trace must exist for " + customer);
+        assertEquals(ValuationTrace.STATUS_SUCCESS, trace.status, "Status for " + customer);
+        assertEquals(200, trace.httpStatus, "HTTP status for " + customer);
+        assertNotNull(trace.errorMessage, "The fail-closed skip must be recorded for " + customer);
+        assertTrue(trace.errorMessage.contains("Skipped configurations:"),
+                "Message for " + customer + " must record a fail-closed skip, was: " + trace.errorMessage);
+        assertTrue(trace.errorMessage.contains(expectedFragment),
+                "Message for " + customer + " must contain <" + expectedFragment + ">, was: "
+                        + trace.errorMessage);
+    }
+
     // --------------------------------------------------
     // JSON + money helpers
     // --------------------------------------------------
@@ -548,7 +573,8 @@ class GroupJIT {
 
     /**
      * J2 — leftover &amp; upsell suggestion. Five apples {@code …001} form one 2+1 bundle
-     * (consuming 3) and leave 2 units priced {@code Standard: EAN=3300000000001, Qty=2.0}. The
+     * (consuming 3) and leave 2 units priced {@code Standard: EAN=3300000000001, Qty=2} (A5
+     * BigDecimal: an integer quantity renders without a trailing {@code .0}). The
      * remaining pool then feeds one N+M upsell advantage suggesting 1 more apple to reach the next
      * bundle: {@code suggestion = {ean:…001, quantity:1.0, offerCode:PROMO_2FOR1_3300}} and the
      * type literal {@code Upsell N+M: PROMO_2FOR1_3300 (Need 1,00 of 3300000000001)}. That literal
@@ -560,7 +586,7 @@ class GroupJIT {
         JsonPath body = valuate(basket("J2", "0101", plain("3300000000001", "5")), 200).jsonPath();
         int nm = soleNplusM(body, "PROMO_2FOR1_3300");
         assertEquals(3.0, offerQty(body, nm), 1e-9, "One bundle consumes exactly 3 of the 5 apples");
-        assertEquals(1, offerIndicesByType(body, "Standard: EAN=3300000000001, Qty=2.0").size(),
+        assertEquals(1, offerIndicesByType(body, "Standard: EAN=3300000000001, Qty=2").size(),
                 "The 2 leftover apples are priced Standard: " + body.getList("offers.type"));
         Map<String, Object> upsell = upsellFor(body, "PROMO_2FOR1_3300");
         assertNotNull(upsell, "An N+M upsell suggestion must be present: " + body.getList("advantages"));
@@ -678,7 +704,7 @@ class GroupJIT {
         JsonPath coffeeAlone = valuate(basket("J7-alone", "0101", plain("3300000000004", "1")), 200).jsonPath();
         assertTrue(offerIndicesByPrefix(coffeeAlone, "MixedBundle: PROMO_COFFEE_PACK").isEmpty(),
                 "Coffee alone builds no bundle applier (missing component): " + coffeeAlone.getList("offers.type"));
-        assertEquals(1, offerIndicesByType(coffeeAlone, "Standard: EAN=3300000000004, Qty=1.0").size(),
+        assertEquals(1, offerIndicesByType(coffeeAlone, "Standard: EAN=3300000000004, Qty=1").size(),
                 "The lone coffee falls back to the standard tariff: " + coffeeAlone.getList("offers.type"));
     }
 
@@ -713,19 +739,20 @@ class GroupJIT {
     // --------------------------------------------------
 
     /**
-     * J9 — a {@code discount}-mode {@code MIXED_BUNDLE} is a global poison, graved as the priority
-     * NEGATIVE test. The offer is valid for the offer factory (its schema allows either a
-     * {@code bundlePrice} or a {@code discount}) so it imports cleanly, but the divergent schema of
-     * {@code MixedBundleUpsellAdvantageFactory} REQUIRES {@code bundlePrice} and forbids
-     * {@code discount}; that factory runs in {@code createDiscountAppliers} — step 2, before any
-     * pricing — so EVERY valuation of its store ({@code 0108}) is refused with a 500 whose trace
-     * carries {@code Error building appliers from factory: Error validating offer: …}. A
+     * J9 — a {@code discount}-mode {@code MIXED_BUNDLE} is a configuration error. The offer is valid
+     * for the offer factory (its schema allows either a {@code bundlePrice} or a {@code discount}) so
+     * it imports cleanly, but the divergent schema of {@code MixedBundleUpsellAdvantageFactory}
+     * REQUIRES {@code bundlePrice} and forbids {@code discount}; that factory runs in
+     * {@code createDiscountAppliers}. Since the A2 fail-closed doctrine (rapport-remediation §"Step 3",
+     * H1) the {@code ConfigurationException} is now SKIPPED and RECORDED rather than aborting the
+     * valuation: the store ({@code 0108}) valuation succeeds with 200 and the SUCCESS trace carries
+     * {@code Skipped configurations: … skipped: Error validating offer: …} — no more
      * configuration-borne denial of service.
      */
     @Test
     void j9_discountBundlePoison() {
-        assertPoison("J9", basket("J9", "0108", plain("3300000000007", "1")),
-                "Error building appliers from factory: Error validating offer:");
+        assertFailClosed("J9", basket("J9", "0108", plain("3300000000007", "1")),
+                "Error validating offer:");
     }
 
     // --------------------------------------------------
@@ -733,22 +760,24 @@ class GroupJIT {
     // --------------------------------------------------
 
     /**
-     * J6 — toxic N+M configurations poison the whole store. {@code quantityToPay:0} is accepted by
-     * the offer schema (minimum 0) but rejected by the upsell schema (minimum 1), and that upsell
-     * guard runs first in {@code createDiscountAppliers}: EVERY valuation of the store returns 500
-     * with {@code Error building appliers from factory: Error validating offer: …}. The second
-     * config ({@code quantityToPay:0} AND {@code discountedQuantity:0}, the catalog's
-     * division-by-zero) is preempted by the SAME {@code quantityToPay} guard, so both quarantined
-     * stores ({@code 0106} for J6A, {@code 0107} for J6B) surface the identical validation
-     * rejection. Poison offers targeting {@code …007}, probed with a priced {@code …007} basket so
-     * the poison — not a missing price — is what fails.
+     * J6 — toxic N+M configurations, now DIVERGENT under A2 fail-closed. J6A ({@code quantityToPay:0},
+     * {@code discountedQuantity:1}) is accepted by the offer schema (minimum 0) but rejected by the
+     * upsell schema (minimum 1); that {@code ConfigurationException} is skipped and recorded, so the
+     * store ({@code 0106}) valuation succeeds with 200 and the SUCCESS trace carries {@code Skipped
+     * configurations: … Error validating offer: …} (rapport-remediation §"Step 3", A2/H1). J6B
+     * ({@code quantityToPay:0} AND {@code discountedQuantity:0}) makes {@code bundleSize = 0}, and
+     * {@code NPlusMOfferFactory} divides by it BEFORE the {@code maxBundles==0} guard — an
+     * {@code ArithmeticException("/ by zero")}, which is NOT a {@code ConfigurationException} and so
+     * still propagates as a 500 on store {@code 0107}. Before A2 the upsell-schema 500 pre-empted this
+     * apply-time division; now it surfaces. Poison offers targeting {@code …007}, probed with a priced
+     * {@code …007} basket so the poison — not a missing price — is what fails.
      */
     @Test
     void j6_toxicConfigurations() {
-        assertPoison("J6A", basket("J6A", "0106", plain("3300000000007", "1")),
-                "Error building appliers from factory: Error validating offer:");
+        assertFailClosed("J6A", basket("J6A", "0106", plain("3300000000007", "1")),
+                "Error validating offer:");
         assertPoison("J6B", basket("J6B", "0107", plain("3300000000007", "1")),
-                "Error building appliers from factory: Error validating offer:");
+                "/ by zero");
     }
 
     // --------------------------------------------------
@@ -763,7 +792,8 @@ class GroupJIT {
      * (catalog says "2" — recalibrated to 3, the only count that also makes the chips a genuine
      * "last resort"). The two biscuits fill bundles 1-2, the single chips falls back for bundle 3.
      * The bundle is {@code MixedBundle: PROMO_COFFEE_PACK x3 for 13.50€}; two leftover coffees are
-     * priced {@code Standard: EAN=3300000000004, Qty=2.0}.
+     * priced {@code Standard: EAN=3300000000004, Qty=2.0} — the MixedBundle leftover path yields a
+     * scale-1 BigDecimal ({@code 2.0}), unlike J2's N+M leftover which renders scale-0 {@code 2}.
      */
     @Test
     void j10_bundleCapacityAndSubstituteOrder() {

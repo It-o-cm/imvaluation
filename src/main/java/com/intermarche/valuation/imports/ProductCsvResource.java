@@ -135,7 +135,7 @@ public class ProductCsvResource extends ImporterCsvResource {
         } else {
             // Update existing if data changed (Checksum Optimization)
             int incomingChecksum = computeIncomingChecksum(data);
-            if (product.checksum != incomingChecksum) {
+            if (product.changedFrom(incomingChecksum)) {
                 product = Product.findById(product.id);
                 feedProduct(data, product);
                 counters[1]++; // Updated

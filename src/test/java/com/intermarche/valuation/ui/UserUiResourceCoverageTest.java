@@ -26,10 +26,12 @@ import static org.hamcrest.CoreMatchers.containsString;
  * <p>
  * The bootstrap {@code admin} account created at startup is never deleted, so other test classes
  * can still authenticate as {@code admin/admin}. Only accounts whose login name starts with
- * {@code test_} are created and removed here. Because that bootstrap account is itself an active
- * administrator, {@link AppUser#countActiveAdmins()} never drops to one on its own; the last
- * administrator guards are therefore reached by temporarily disabling the bootstrap account and
- * restoring it immediately, both in a {@code finally} block and in the per-test cleanup.
+ * {@code test_} are created and removed here. Because the shared process-wide database can hold
+ * several active administrators at once — the bootstrap account plus any committed residue from
+ * another test class — {@link AppUser#countActiveAdmins()} never drops to one on its own; the last
+ * administrator guards are therefore reached by {@link #isolateSoleActiveAdmin(Long) making the
+ * seeded account the only active administrator} for the duration of the request and restoring the
+ * others in a {@code finally} block.
  */
 @QuarkusTest
 public class UserUiResourceCoverageTest {
@@ -87,15 +89,47 @@ public class UserUiResourceCoverageTest {
     }
 
     /**
-     * Enables or disables the bootstrap administrator in its own committed transaction.
+     * Makes one account the sole active administrator in its own committed transaction, disabling
+     * every other active administrator and returning their identifiers so the caller can restore
+     * them.
+     * <p>
+     * Disabling only the bootstrap account is not enough: the database is shared process-wide, so
+     * another test class can have left a committed active administrator whose login matches neither
+     * the bootstrap {@code admin} nor the {@code test_} cleanup pattern. Such a residue keeps
+     * {@link AppUser#countActiveAdmins()} above one and lets the last-administrator guard pass the
+     * demotion. Disabling every other active administrator makes the last-administrator arm
+     * reachable whatever residue the shared database holds.
      *
-     * @param active The new active flag.
+     * @param keepId The identifier of the administrator that must remain the only active one.
+     * @return The identifiers of the administrators disabled, for restoration.
      */
-    void setBootstrapActive(boolean active) {
+    java.util.List<Long> isolateSoleActiveAdmin(Long keepId) {
+        return QuarkusTransaction.requiringNew().call(() -> {
+            java.util.List<AppUser> others = AppUser.list(
+                    "active = true and roles like ?1 and id <> ?2",
+                    "%" + AppUser.ROLE_ADMIN + "%", keepId);
+            java.util.List<Long> disabled = new java.util.ArrayList<>();
+            for (AppUser other : others) {
+                other.active = false;
+                disabled.add(other.id);
+            }
+            return disabled;
+        });
+    }
+
+    /**
+     * Re-activates in its own committed transaction the accounts disabled by
+     * {@link #isolateSoleActiveAdmin(Long)}, leaving the shared database as it was found.
+     *
+     * @param ids The identifiers of the accounts to re-activate.
+     */
+    void restoreActiveAdmins(java.util.List<Long> ids) {
         QuarkusTransaction.requiringNew().run(() -> {
-            AppUser admin = AppUser.findByUsername(BOOTSTRAP);
-            if (admin != null) {
-                admin.active = active;
+            for (Long id : ids) {
+                AppUser admin = AppUser.findById(id);
+                if (admin != null) {
+                    admin.active = true;
+                }
             }
         });
     }
@@ -263,7 +297,7 @@ public class UserUiResourceCoverageTest {
     void testSave_missingUsernameError() {
         form().formParam("password", VALID_PW).formParam("roles", "VIEWER")
                 .when().post("/ui/users/new")
-                .then().statusCode(200).body(containsString("The username is mandatory."));
+                .then().statusCode(200).body(containsString("utilisateur est obligatoire."));
     }
 
     /**
@@ -275,7 +309,7 @@ public class UserUiResourceCoverageTest {
     void testSave_blankUsernameError() {
         form().formParam("username", "   ").formParam("password", VALID_PW).formParam("roles", "VIEWER")
                 .when().post("/ui/users/new")
-                .then().statusCode(200).body(containsString("The username is mandatory."));
+                .then().statusCode(200).body(containsString("utilisateur est obligatoire."));
     }
 
     /**
@@ -287,7 +321,7 @@ public class UserUiResourceCoverageTest {
         seedUser("test_dup", Set.of(AppUser.ROLE_VIEWER), true);
         form().formParam("username", "test_dup").formParam("password", VALID_PW).formParam("roles", "VIEWER")
                 .when().post("/ui/users/new")
-                .then().statusCode(200).body(containsString("already exists"));
+                .then().statusCode(200).body(containsString("existe déjà"));
     }
 
     /**
@@ -321,7 +355,7 @@ public class UserUiResourceCoverageTest {
     void testSave_noRoleError() {
         form().formParam("username", "test_nr").formParam("password", VALID_PW).formParam("roles", "BOGUS")
                 .when().post("/ui/users/new")
-                .then().statusCode(200).body(containsString("At least one role must be granted."));
+                .then().statusCode(200).body(containsString("Au moins un rôle doit être accordé."));
     }
 
     /**
@@ -385,7 +419,7 @@ public class UserUiResourceCoverageTest {
         Long id = seedUser("test_unr", Set.of(AppUser.ROLE_VIEWER), true);
         form().formParam("roles", "BOGUS").formParam("active", "on")
                 .when().post("/ui/users/" + id)
-                .then().statusCode(200).body(containsString("At least one role must be granted."));
+                .then().statusCode(200).body(containsString("Au moins un rôle doit être accordé."));
     }
 
     /**
@@ -410,13 +444,13 @@ public class UserUiResourceCoverageTest {
     @TestSecurity(user = "test_admin", roles = "ADMIN")
     void testUpdate_lastAdminDemotionRefused() {
         Long id = seedUser("test_last", Set.of(AppUser.ROLE_ADMIN), true);
-        setBootstrapActive(false);
+        java.util.List<Long> disabled = isolateSoleActiveAdmin(id);
         try {
             form().formParam("roles", "VIEWER").formParam("active", "on")
                     .when().post("/ui/users/" + id)
-                    .then().statusCode(200).body(containsString("last administrator"));
+                    .then().statusCode(200).body(containsString("dernier administrateur"));
         } finally {
-            setBootstrapActive(true);
+            restoreActiveAdmins(disabled);
         }
     }
 
@@ -428,13 +462,13 @@ public class UserUiResourceCoverageTest {
     @TestSecurity(user = "test_admin", roles = "ADMIN")
     void testUpdate_lastAdminDisableRefused() {
         Long id = seedUser("test_last", Set.of(AppUser.ROLE_ADMIN), true);
-        setBootstrapActive(false);
+        java.util.List<Long> disabled = isolateSoleActiveAdmin(id);
         try {
             form().formParam("roles", "ADMIN")
                     .when().post("/ui/users/" + id)
-                    .then().statusCode(200).body(containsString("last administrator"));
+                    .then().statusCode(200).body(containsString("dernier administrateur"));
         } finally {
-            setBootstrapActive(true);
+            restoreActiveAdmins(disabled);
         }
     }
 
@@ -493,21 +527,21 @@ public class UserUiResourceCoverageTest {
 
     /**
      * Tests that deleting the sole active administrator is refused, exercising the
-     * last-administrator delete guard. The bootstrap account is disabled around the request so
-     * the seeded account is the only active administrator, then restored.
+     * last-administrator delete guard. Every other active administrator is disabled around the
+     * request so the seeded account is the only active administrator, then they are restored.
      */
     @Test
     @TestSecurity(user = "test_admin", roles = "ADMIN")
     void testDelete_lastAdminRefused() {
         Long id = seedUser("test_last", Set.of(AppUser.ROLE_ADMIN), true);
-        setBootstrapActive(false);
+        java.util.List<Long> disabled = isolateSoleActiveAdmin(id);
         try {
             given().redirects().follow(false)
                     .when().post("/ui/users/" + id + "/delete")
                     .then().statusCode(303)
                     .header("location", containsString("noticeOk=false"));
         } finally {
-            setBootstrapActive(true);
+            restoreActiveAdmins(disabled);
         }
     }
 

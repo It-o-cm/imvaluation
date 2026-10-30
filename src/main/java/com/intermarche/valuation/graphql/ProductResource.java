@@ -1,5 +1,6 @@
 package com.intermarche.valuation.graphql;
 
+import com.intermarche.valuation.domain.EgalimRegime;
 import com.intermarche.valuation.domain.Product;
 import com.intermarche.valuation.domain.ProductType;
 import io.smallrye.common.annotation.RunOnVirtualThread;
@@ -146,6 +147,12 @@ public class ProductResource implements GraphQLTrait {
             // Convert String enum to Java Enum safely
             product.productType = input.productType != null ? ProductType.valueOf(input.productType) : null;
             product.unitName = input.unitName;
+            // EGAlim regime: absent input means the fail-open default EXEMPT, exactly as the
+            // entity initializes it and as an absent EGALIM_REGIME column would on import. An
+            // unknown value raises IllegalArgumentException inside this lambda, which execute()
+            // turns into a clean GraphQL error, like every other enum field.
+            product.egalimRegime = input.egalimRegime != null
+                    ? EgalimRegime.valueOf(input.egalimRegime) : EgalimRegime.EXEMPT;
             // Default 'active' to true if not specified
             product.active = input.active != null ? input.active : true;
 
@@ -214,6 +221,10 @@ public class ProductResource implements GraphQLTrait {
             if (input.referenceVolume != null) product.referenceVolume = input.referenceVolume;
             if (input.productType != null) product.productType = ProductType.valueOf(input.productType);
             if (input.unitName != null) product.unitName = input.unitName;
+            // EGAlim regime follows the optional-field pattern: an absent value leaves the
+            // product's classification untouched, an unknown value raises IllegalArgumentException
+            // caught by execute() as a clean GraphQL error.
+            if (input.egalimRegime != null) product.egalimRegime = EgalimRegime.valueOf(input.egalimRegime);
             if (input.active != null) product.active = input.active;
 
             LOGGER.info("Exiting method updateProduct");
@@ -257,6 +268,7 @@ public class ProductResource implements GraphQLTrait {
         public BigDecimal referenceVolume;
         public String productType;
         public String unitName;
+        public String egalimRegime;
         public Boolean active;
 
         /**
@@ -272,7 +284,8 @@ public class ProductResource implements GraphQLTrait {
         public String toString() {
             return "ProductRecord [ean=" + ean + ", name=" + name + ", description=" + description +
                     ", brand=" + brand + ", referenceWeight=" + referenceWeight + ", referenceVolume=" + referenceVolume +
-                    ", productType=" + productType + ", unitName=" + unitName + ", active=" + active;
+                    ", productType=" + productType + ", unitName=" + unitName + ", egalimRegime=" + egalimRegime +
+                    ", active=" + active;
         }
 
     }

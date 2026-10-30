@@ -180,23 +180,27 @@ public class NPlusMUpsellAdvantageFactoryTest {
     }
 
     /**
-     * Tests the scenario where the offer specification is missing a required field ("targetEans").
+     * Tests the scenario where the offer specification carries no {@code targetEans}.
      * <p>
-     * Expectation: Throws {@link IllegalArgumentException} (Schema validation failure).
+     * Since the family-targeting chantier (spec-ciblage-saisie §1), {@code targetEans} is no longer
+     * a required field — a family (or, here, nothing) can fill the plate — so such a specification
+     * VALIDATES rather than being rejected. With no targeting at all the resolved plate is empty, so
+     * the built appliers produce no upsell for the basket; the point pinned here is that
+     * {@code buildAppliers} no longer throws.
      */
     @Test
-    void testBuildAppliers_MissingTargetEans() {
+    void testBuildAppliers_MissingTargetEansIsTolerated() {
         setUpDatabase();
-        // Arrange: Missing targetEans
+        // Arrange: no targetEans and no targetFamilyCodes.
         String jsonSpec = "{ \"quantityToPay\": 2, \"discountedQuantity\": 1, \"selectionStrategy\": \"CHEAPEST\", \"discountType\": \"PERCENTAGE\", \"discountValue\": 50.0 }";
         DomainUtils.createAndPersistOffer("NO_EANS", store, "N+M", jsonSpec);
 
         Basket basket = createBasket("STORE_01", createItem("1111111111111", 1.0));
         BasketEvaluation evaluation = new BasketEvaluation(basket);
         evaluation.feedFrom(basket);
-        // Act & Assert
-        assertThrows(IllegalArgumentException.class, () -> factory.buildAppliers(evaluation),
-                "Should throw if targetEans is missing (Schema validation)");
+        // Act & Assert: targetEans is optional now, so no schema rejection is raised.
+        assertDoesNotThrow(() -> factory.buildAppliers(evaluation),
+                "targetEans is optional since family targeting: a spec without it must validate");
     }
 
     /**

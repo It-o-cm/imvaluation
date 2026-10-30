@@ -239,7 +239,7 @@ public class BasicOfferFactoryTest {
         evaluation.feedFrom(basket);
         // Create applier manually using real entities
         BasicOfferFactory.BasicOfferApplier applier =
-                new BasicOfferFactory.BasicOfferApplier(store, product1, defaultPrice, discountPrice);
+                new BasicOfferFactory.BasicOfferApplier(store, product1);
         // Register a real discount applier: this no longer forces the reference price at apply time.
         SimpleDiscountApplier realDiscount = new SimpleDiscountApplier();
         applier.registerDiscountApplier(realDiscount);
@@ -321,7 +321,7 @@ public class BasicOfferFactoryTest {
         // Arrange
         // Create applier for product1 (already setup in @BeforeEach)
         BasicOfferFactory.BasicOfferApplier applier =
-                new BasicOfferFactory.BasicOfferApplier(store, product1, defaultPrice, discountPrice);
+                new BasicOfferFactory.BasicOfferApplier(store, product1);
         // Act
         boolean result = applier.isApplicable(product2); // product2 has EAN 2222222222222
         // Assert

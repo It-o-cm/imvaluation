@@ -1,6 +1,8 @@
 package com.intermarche.valuation.ui;
 
 import com.intermarche.valuation.domain.AppUser;
+import com.intermarche.valuation.i18n.Messages;
+import com.intermarche.valuation.imports.EgalimCeilingCsvResource;
 import com.intermarche.valuation.imports.OfferCsvResource;
 import com.intermarche.valuation.imports.PriceCsvResource;
 import com.intermarche.valuation.imports.ProductCategoryStorageCsvResource;
@@ -8,6 +10,7 @@ import com.intermarche.valuation.imports.ProductCsvResource;
 import com.intermarche.valuation.imports.ProductFamilyCsvResource;
 import com.intermarche.valuation.imports.StoreCsvResource;
 import com.intermarche.valuation.imports.StoreGroupCsvResource;
+import com.intermarche.valuation.imports.VatRateCsvResource;
 import io.quarkus.qute.CheckedTemplate;
 import io.quarkus.qute.TemplateInstance;
 import io.smallrye.common.annotation.RunOnVirtualThread;
@@ -36,9 +39,11 @@ import java.net.URI;
 /**
  * Qute-backed administration screen gathering every CSV bulk import behind a single tab.
  * <p>
- * The catalog is loaded through seven importers that must be replayed in a mandated order
- * (Stores → Store groups → Products → Product families → Categories → Prices → Offers),
- * because each domain references the ones declared before it. This screen exposes them all
+ * The catalog is loaded through importers that must be replayed in a mandated order
+ * (Stores → Store groups → EGAlim regimes → Products → Product families → Categories →
+ * VAT rates → Prices → Offers), because each domain references the ones declared before it:
+ * the EGAlim regimes precede the products that classify against them, and the VAT rates
+ * precede the prices that name them. This screen exposes them all
  * in that order: the operator picks a domain, drops a pipe-delimited file, and the upload is
  * dispatched to the matching {@code *CsvResource} — the very endpoints reachable over HTTP,
  * so the screen never duplicates the import machinery, it only drives it.
@@ -61,6 +66,12 @@ public class ImportsUiResource {
     private static final String BASE_PATH = "/ui/imports";
 
     /**
+     * Localised interface labels for the /ui notices this screen raises.
+     */
+    @Inject
+    Messages messages;
+
+    /**
      * Importer for stores, the first domain of the mandated order.
      */
     @Inject
@@ -71,6 +82,13 @@ public class ImportsUiResource {
      */
     @Inject
     StoreGroupCsvResource storeGroups;
+
+    /**
+     * Importer for the administered EGAlim ceilings, delivered before the products that
+     * classify against them.
+     */
+    @Inject
+    EgalimCeilingCsvResource egalimRegimes;
 
     /**
      * Importer for products.
@@ -89,6 +107,12 @@ public class ImportsUiResource {
      */
     @Inject
     ProductCategoryStorageCsvResource categories;
+
+    /**
+     * Importer for the VAT regimes, delivered before the prices that name them.
+     */
+    @Inject
+    VatRateCsvResource vatRates;
 
     /**
      * Importer for prices.
@@ -156,7 +180,7 @@ public class ImportsUiResource {
     public Response run(@MultipartForm ImportUpload upload) {
         LOGGER.debug("Entering method run");
         if (upload == null || upload.file == null || upload.domain == null || upload.domain.isBlank()) {
-            return redirect("No file or domain was selected.", false);
+            return redirect(messages.get("imports.notice.noFileOrDomain"), false);
         }
         String domain = upload.domain.trim();
         try {
@@ -167,7 +191,7 @@ public class ImportsUiResource {
             return redirect(domain + " — " + summarize(body), ok);
         } catch (Exception e) {
             LOGGER.error("CSV import failed for domain " + domain, e);
-            return redirect("Import failed: " + e.getMessage(), false);
+            return redirect(messages.format("imports.error.failed", e.getMessage()), false);
         }
     }
 
@@ -182,9 +206,11 @@ public class ImportsUiResource {
         return switch (domain) {
             case "STORES" -> stores.importStores(file);
             case "STORE_GROUPS" -> storeGroups.importHierarchy(file);
+            case "EGALIM_REGIMES" -> egalimRegimes.importEgalimCeilings(file);
             case "PRODUCTS" -> products.importProducts(file);
             case "PRODUCT_FAMILIES" -> productFamilies.importProductFamilies(file);
             case "CATEGORIES" -> categories.importCategoryStorages(file);
+            case "VAT_RATES" -> vatRates.importVatRates(file);
             case "PRICES" -> prices.importPrices(file);
             case "OFFERS" -> offers.importOffers(file);
             default -> Response.status(Response.Status.BAD_REQUEST)

@@ -348,7 +348,94 @@ class AppUserTest {
         user.email = "alice@example.com";
         user.active = true;
         user.mustChangePassword = false;
-        int expected = Objects.hash("alice", "hash", "ADMIN", "Alice", "alice@example.com", true, false);
+        user.storeScope = "0101,G1";
+        user.allowedOfferTypes = "TICKET_DISCOUNT";
+        user.hiddenMenus = "imports";
+        user.locale = "fr";
+        int expected = Objects.hash("alice", "hash", "ADMIN", "Alice", "alice@example.com", true, false,
+                "0101,G1", "TICKET_DISCOUNT", "imports", "fr");
         assertEquals(expected, user.getChecksum());
+    }
+
+    /**
+     * The scope set round-trips through the CSV column, trimming and de-duplicating, and the empty
+     * value yields an empty set.
+     */
+    @Test
+    void scopeSets_roundTrip() {
+        AppUser user = new AppUser();
+        user.setStoreScopeSet(new LinkedHashSet<>(java.util.List.of("0101", "G1")));
+        assertEquals(Set.of("0101", "G1"), user.getStoreScopeSet());
+        user.storeScope = " 0101 , 0101 , G2 ";
+        assertEquals(Set.of("0101", "G2"), user.getStoreScopeSet());
+        assertTrue(new AppUser().getStoreScopeSet().isEmpty());
+        assertTrue(new AppUser().getAllowedOfferTypeSet().isEmpty());
+        assertTrue(new AppUser().getHiddenMenuSet().isEmpty());
+    }
+
+    /**
+     * An unrestricted account (no scope) passes every perimeter check — the regression-nil default.
+     */
+    @Test
+    void unrestrictedUser_passesEveryCheck() {
+        AppUser user = new AppUser();
+        assertFalse(user.isStoreScoped());
+        assertTrue(user.isStoreTargetingWithinScope(java.util.List.of("ANY")));
+        assertTrue(user.isOfferVisibleForScope(java.util.List.of("ANY")));
+        assertTrue(user.isOfferVisibleForScope(java.util.List.of()));
+        assertTrue(user.isOfferTypeAllowed("ANYTHING"));
+        assertFalse(user.isMenuHidden("offers"));
+    }
+
+    /**
+     * A store-scoped account writes only within its perimeter (subset rule) and refuses an empty or
+     * out-of-scope targeting.
+     */
+    @Test
+    void storeScoped_writeSubsetRule() {
+        AppUser user = new AppUser();
+        user.storeScope = "A,B";
+        assertTrue(user.isStoreScoped());
+        assertTrue(user.isStoreTargetingWithinScope(java.util.List.of("A")));
+        assertTrue(user.isStoreTargetingWithinScope(java.util.List.of("A", "B")));
+        assertFalse(user.isStoreTargetingWithinScope(java.util.List.of("A", "C")));
+        assertFalse(user.isStoreTargetingWithinScope(java.util.List.of("C")));
+        assertFalse(user.isStoreTargetingWithinScope(java.util.List.of()));
+    }
+
+    /**
+     * A store-scoped account sees an offer whose targeting intersects the scope, and only that one.
+     */
+    @Test
+    void storeScoped_readIntersectionRule() {
+        AppUser user = new AppUser();
+        user.storeScope = "A";
+        assertTrue(user.isOfferVisibleForScope(java.util.List.of("A")));
+        assertTrue(user.isOfferVisibleForScope(java.util.List.of("A", "B")));
+        assertFalse(user.isOfferVisibleForScope(java.util.List.of("B")));
+        assertFalse(user.isOfferVisibleForScope(java.util.List.of()));
+    }
+
+    /**
+     * A type-restricted account may use only its listed offer types.
+     */
+    @Test
+    void typeRestricted_allowsOnlyListedTypes() {
+        AppUser user = new AppUser();
+        user.allowedOfferTypes = "TICKET_DISCOUNT";
+        assertTrue(user.isOfferTypeAllowed("TICKET_DISCOUNT"));
+        assertFalse(user.isOfferTypeAllowed("N+M"));
+    }
+
+    /**
+     * A hidden-menu account reports its hidden keys as hidden and the others as visible.
+     */
+    @Test
+    void hiddenMenus_reportedHidden() {
+        AppUser user = new AppUser();
+        user.hiddenMenus = "imports,users";
+        assertTrue(user.isMenuHidden("imports"));
+        assertTrue(user.isMenuHidden("users"));
+        assertFalse(user.isMenuHidden("offers"));
     }
 }

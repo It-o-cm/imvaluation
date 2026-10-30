@@ -68,7 +68,9 @@ export default defineConfig({
       include: ['src/main/resources/META-INF/resources/ui/*.js'],
       reporter: ['text', 'json', 'html'],
       reportsDirectory: 'target/js-coverage',
-      all: false,
+      // Count every ui source, even one reached only by its boot (confirm.js), so an untested
+      // file cannot hide from the coverage report.
+      all: true,
     },
   },
 });

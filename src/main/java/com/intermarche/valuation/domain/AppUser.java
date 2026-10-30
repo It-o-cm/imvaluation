@@ -16,6 +16,7 @@ import org.wildfly.security.password.util.ModularCrypt;
 
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -64,6 +65,14 @@ public class AppUser extends BaseEntity {
      * Every role the application recognises, ordered from least to most privileged.
      */
     public static final List<String> ALL_ROLES = List.of(ROLE_VIEWER, ROLE_MANAGER, ROLE_ADMIN);
+
+    /**
+     * Every navigation menu key that {@link #hiddenMenus} may hide, in layout order. A stable key
+     * per {@code /ui/...} screen, shared by the layout, the users form and the access filter.
+     */
+    public static final List<String> MENU_KEYS = List.of(
+            "offers", "store-groups", "valuations", "egalim-ceilings", "consumptions", "anomalies",
+            "imports", "users");
 
     // --------------------------------------------------
     // Credentials
@@ -132,6 +141,45 @@ public class AppUser extends BaseEntity {
      */
     @Column(name = "must_change_password", nullable = false)
     public boolean mustChangePassword = false;
+
+    // --------------------------------------------------
+    // Perimeter (scope) — all optional, empty = no restriction (spec §1)
+    // --------------------------------------------------
+
+    /**
+     * The store and store-group codes the user is confined to (comma separated). Empty means no
+     * restriction: the user sees and writes across the whole catalog, as before (spec §1, §2).
+     */
+    @Column(name = "store_scope", length = 2000)
+    public String storeScope;
+
+    /**
+     * The offer types the user may create or modify (comma separated). Empty means every type,
+     * as before (spec §1, §2).
+     */
+    @Column(name = "allowed_offer_types", length = 1000)
+    public String allowedOfferTypes;
+
+    /**
+     * The menu keys hidden from the user's layout (comma separated, values of {@link #MENU_KEYS}).
+     * A hidden menu also has its screen refused server-side (spec §2, §3.3). Empty means nothing
+     * hidden, as before.
+     */
+    @Column(name = "hidden_menus", length = 1000)
+    public String hiddenMenus;
+
+    // --------------------------------------------------
+    // Interface language (spec-exploitation §1)
+    // --------------------------------------------------
+
+    /**
+     * The IETF language tag the user prefers for the back-office interface (e.g. {@code fr},
+     * {@code en}), or {@code null}/blank to fall back on the request's {@code Accept-Language}
+     * header and then the application default. Only the interface is localised; the machine API
+     * messages stay in English regardless of this field.
+     */
+    @Column(name = "locale", length = 10)
+    public String locale;
 
     // --------------------------------------------------
     // Credentials handling
@@ -241,6 +289,167 @@ public class AppUser extends BaseEntity {
     }
 
     // --------------------------------------------------
+    // Perimeter (scope) handling
+    // --------------------------------------------------
+
+    /**
+     * Parses a comma-separated value into a de-duplicated, insertion-ordered set.
+     *
+     * @param csv the raw comma-separated value, possibly null.
+     * @return the parsed set, never null.
+     */
+    private static Set<String> parseCsv(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return new LinkedHashSet<>();
+        }
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * Joins a set into a comma-separated value, dropping blanks and duplicates.
+     *
+     * @param values the values, possibly null.
+     * @return the comma-separated value, never null.
+     */
+    private static String joinCsv(Set<String> values) {
+        if (values == null) {
+            return "";
+        }
+        return values.stream()
+                .filter(value -> value != null && !value.trim().isEmpty())
+                .map(String::trim)
+                .distinct()
+                .collect(Collectors.joining(","));
+    }
+
+    /**
+     * Returns the store and store-group codes the user is confined to.
+     *
+     * @return the scope codes, empty when the user is unrestricted.
+     */
+    public Set<String> getStoreScopeSet() {
+        return parseCsv(storeScope);
+    }
+
+    /**
+     * Replaces the store scope.
+     *
+     * @param codes the store and store-group codes, empty for no restriction.
+     */
+    public void setStoreScopeSet(Set<String> codes) {
+        this.storeScope = joinCsv(codes);
+    }
+
+    /**
+     * Returns the offer types the user may create or modify.
+     *
+     * @return the allowed types, empty when the user may use every type.
+     */
+    public Set<String> getAllowedOfferTypeSet() {
+        return parseCsv(allowedOfferTypes);
+    }
+
+    /**
+     * Replaces the allowed offer types.
+     *
+     * @param types the allowed offer types, empty for no restriction.
+     */
+    public void setAllowedOfferTypeSet(Set<String> types) {
+        this.allowedOfferTypes = joinCsv(types);
+    }
+
+    /**
+     * Returns the menu keys hidden from the user's layout.
+     *
+     * @return the hidden menu keys, empty when nothing is hidden.
+     */
+    public Set<String> getHiddenMenuSet() {
+        return parseCsv(hiddenMenus);
+    }
+
+    /**
+     * Replaces the hidden menus.
+     *
+     * @param keys the hidden menu keys, empty for nothing hidden.
+     */
+    public void setHiddenMenuSet(Set<String> keys) {
+        this.hiddenMenus = joinCsv(keys);
+    }
+
+    /**
+     * Indicates whether the user is confined to a store perimeter.
+     *
+     * @return {@code true} when a store scope is set.
+     */
+    public boolean isStoreScoped() {
+        return !getStoreScopeSet().isEmpty();
+    }
+
+    /**
+     * Tells whether an offer's whole targeting fits inside the user's store scope — the write rule
+     * (spec §2): every targeted store/group code must belong to the scope. An unrestricted user
+     * always passes; a restricted user rejects an empty or out-of-scope targeting.
+     *
+     * @param targetCodes the offer's targeted store and store-group codes.
+     * @return {@code true} when the write is within scope.
+     */
+    public boolean isStoreTargetingWithinScope(Collection<String> targetCodes) {
+        Set<String> scope = getStoreScopeSet();
+        if (scope.isEmpty()) {
+            return true;
+        }
+        return targetCodes != null && !targetCodes.isEmpty() && scope.containsAll(targetCodes);
+    }
+
+    /**
+     * Tells whether an offer is visible to the user — the read rule (spec §2, §3.1): its targeting
+     * intersects the store scope. An unrestricted user sees everything.
+     *
+     * @param targetCodes the offer's targeted store and store-group codes.
+     * @return {@code true} when the offer is visible.
+     */
+    public boolean isOfferVisibleForScope(Collection<String> targetCodes) {
+        Set<String> scope = getStoreScopeSet();
+        if (scope.isEmpty()) {
+            return true;
+        }
+        if (targetCodes == null) {
+            return false;
+        }
+        for (String code : targetCodes) {
+            if (scope.contains(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Tells whether the user may create or modify an offer of a given type (spec §2). An
+     * unrestricted user may use every type.
+     *
+     * @param type the offer type.
+     * @return {@code true} when the type is allowed.
+     */
+    public boolean isOfferTypeAllowed(String type) {
+        Set<String> allowed = getAllowedOfferTypeSet();
+        return allowed.isEmpty() || allowed.contains(type);
+    }
+
+    /**
+     * Tells whether a menu key is hidden from the user (spec §2).
+     *
+     * @param key the menu key.
+     * @return {@code true} when the menu is hidden.
+     */
+    public boolean isMenuHidden(String key) {
+        return getHiddenMenuSet().contains(key);
+    }
+
+    // --------------------------------------------------
     // Display
     // --------------------------------------------------
 
@@ -310,6 +519,7 @@ public class AppUser extends BaseEntity {
      */
     @Override
     public int getChecksum() {
-        return Objects.hash(username, password, roles, displayName, email, active, mustChangePassword);
+        return Objects.hash(username, password, roles, displayName, email, active, mustChangePassword,
+                storeScope, allowedOfferTypes, hiddenMenus, locale);
     }
 }

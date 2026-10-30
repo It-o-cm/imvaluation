@@ -129,7 +129,7 @@ public class VatRateCsvResource extends ImporterCsvResource {
         } else {
             regime = VatRate.findById(regime.id);
             int incomingChecksum = computeIncomingChecksum(data);
-            if (regime.checksum != incomingChecksum) {
+            if (regime.changedFrom(incomingChecksum)) {
                 feedVatRate(data, regime);
                 counters[1]++;
             }

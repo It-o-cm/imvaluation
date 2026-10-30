@@ -229,7 +229,8 @@ public class ProductResourceTest {
         productResource.unitName = "Kg";
         productResource.description = "Product 1 description";
         assertEquals("ProductRecord [ean=100000000001, name=Product 1, description=Product 1 description, " +
-                "brand=null, referenceWeight=1.5, referenceVolume=2.5, productType=WEIGHT, unitName=Kg, active=true",
+                "brand=null, referenceWeight=1.5, referenceVolume=2.5, productType=WEIGHT, unitName=Kg, " +
+                "egalimRegime=null, active=true",
                 productResource.toString());
     }
 

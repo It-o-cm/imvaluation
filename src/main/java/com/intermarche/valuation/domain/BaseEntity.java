@@ -149,5 +149,29 @@ public abstract class BaseEntity extends PanacheEntity {
      *
      * @return An integer checksum
      */
+    /**
+     * Tells whether the incoming business state differs from the one this row
+     * was stored with.
+     *
+     * <p>Why a method rather than {@code entity.checksum != incoming} at each
+     * call site. The stored checksum is an {@link Integer} and the incoming one
+     * an {@code int}, so a direct comparison UNBOXES: a row whose checksum is
+     * null raises a NullPointerException instead of being seen as changed. A
+     * null checksum is not hypothetical - the lifecycle callbacks fill it for
+     * every row created through JPA, but a column added by a schema update on
+     * an existing table leaves it null on every row already there, and the
+     * deployed profiles run with {@code database.generation=update}.
+     *
+     * <p>A row with no checksum is reported as CHANGED: rewriting a row that
+     * happened to be identical costs one update, while skipping a row that
+     * differs loses the import.
+     *
+     * @param incoming the checksum computed from the incoming data
+     * @return true when the row must be rewritten
+     */
+    public boolean changedFrom(int incoming) {
+        return checksum == null || checksum != incoming;
+    }
+
     public abstract int getChecksum();
 }

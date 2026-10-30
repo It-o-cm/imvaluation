@@ -209,7 +209,7 @@ public class StoreGroupUiResourceCoverageTest {
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testSave_nullPayloadRejected() {
         save("null").when().post("/ui/store-groups")
-                .then().statusCode(400).body(containsString("Nothing to save."));
+                .then().statusCode(400).body(containsString("Rien à enregistrer."));
     }
 
     /**
@@ -220,7 +220,7 @@ public class StoreGroupUiResourceCoverageTest {
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testSave_missingGroupsRejected() {
         save("{}").when().post("/ui/store-groups")
-                .then().statusCode(400).body(containsString("Nothing to save."));
+                .then().statusCode(400).body(containsString("Rien à enregistrer."));
     }
 
     // --------------------------------------------------
@@ -235,7 +235,7 @@ public class StoreGroupUiResourceCoverageTest {
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testSave_nullCodeRefused() {
         save("{\"groups\":[{\"name\":\"anonymous\"}]}").when().post("/ui/store-groups")
-                .then().statusCode(409).body(containsString("A group is missing its code."));
+                .then().statusCode(409).body(containsString("Un groupe n'a pas de code."));
     }
 
     /**
@@ -246,7 +246,7 @@ public class StoreGroupUiResourceCoverageTest {
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testSave_blankCodeRefused() {
         save("{\"groups\":[{\"code\":\"   \"}]}").when().post("/ui/store-groups")
-                .then().statusCode(409).body(containsString("A group is missing its code."));
+                .then().statusCode(409).body(containsString("Un groupe n'a pas de code."));
     }
 
     /**
@@ -258,7 +258,7 @@ public class StoreGroupUiResourceCoverageTest {
     void testSave_unknownStoreRefused() {
         save("{\"groups\":[{\"code\":\"G1\",\"name\":\"G1\",\"storeCodes\":[\"NOPE\"]}]}")
                 .when().post("/ui/store-groups")
-                .then().statusCode(409).body(containsString("Unknown store code: NOPE"));
+                .then().statusCode(409).body(containsString("Code magasin inconnu : NOPE"));
     }
 
     /**
@@ -270,7 +270,7 @@ public class StoreGroupUiResourceCoverageTest {
     void testSave_unknownChildRefused() {
         save("{\"groups\":[{\"code\":\"G1\",\"name\":\"G1\",\"childCodes\":[\"NOPE\"]}]}")
                 .when().post("/ui/store-groups")
-                .then().statusCode(409).body(containsString("Unknown group code: NOPE"));
+                .then().statusCode(409).body(containsString("Code groupe inconnu : NOPE"));
     }
 
     /**
@@ -282,7 +282,7 @@ public class StoreGroupUiResourceCoverageTest {
     void testSave_selfCycleRefused() {
         save("{\"groups\":[{\"code\":\"A\",\"name\":\"A\",\"childCodes\":[\"A\"]}]}")
                 .when().post("/ui/store-groups")
-                .then().statusCode(409).body(containsString("Group 'A' ends up containing itself."));
+                .then().statusCode(409).body(containsString("Le groupe « A » finit par se contenir lui-même."));
     }
 
     /**
@@ -295,7 +295,7 @@ public class StoreGroupUiResourceCoverageTest {
         save("{\"groups\":[{\"code\":\"A\",\"name\":\"A\",\"childCodes\":[\"B\"]},"
                 + "{\"code\":\"B\",\"name\":\"B\",\"childCodes\":[\"A\"]}]}")
                 .when().post("/ui/store-groups")
-                .then().statusCode(409).body(containsString("ends up containing itself."));
+                .then().statusCode(409).body(containsString("finit par se contenir lui-même."));
     }
 
     // --------------------------------------------------

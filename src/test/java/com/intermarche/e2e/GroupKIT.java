@@ -58,8 +58,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * arbitrary order: a discount is always located by its literal {@code type} (e.g.
  * {@code Immediate Voucher Discount : <code>} with its telltale SPACE before the colon), never by
  * index. Money is compared scale-insensitively with {@link BigDecimal#compareTo}. 4xx/5xx bodies of
- * {@code /valuation} carry no entity: the K7/K8 poison rejections are asserted on
- * {@code valuation_traces.error_message} (Panache under {@code QuarkusTransaction}), keyed by a
+ * {@code /valuation} carry no entity: the K8 poison rejection (and K7's fail-safe SUCCESS trace) are
+ * asserted on {@code valuation_traces} (Panache under {@code QuarkusTransaction}), keyed by a
  * unique {@code customerCode} per probe, never the raw HTTP body.
  * <p>
  * CALIBRATION FINDINGS (catalog vs observed code):
@@ -68,10 +68,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       {@code DEFAULT}) because the voucher/vignette has registered as a discount applier on the
  *       {@code BasicOfferApplier}; the apple base is therefore {@code 0.99}/{@code 1.19}
  *       (priority-1 {@code BASE_FOR_DISCOUNT}), not the {@code 0.90}/{@code 1.08} DEFAULT winner.</li>
- *   <li>K7 — the unknown-EAN NPE is born in the {@code VignetteDiscountApplier} CONSTRUCTOR
- *       ({@code Collectors.toMap} with a null {@code Product::findByEan} value), inside
- *       {@code buildAppliers}, so it surfaces as {@code Error building appliers from factory: …}
- *       (the NPE message may be null), NOT the apply-time wrapper.</li>
+ *   <li>K7 — the unknown-EAN case no longer NPEs: since the H5 hardening the
+ *       {@code VignetteDiscountApplier} CONSTRUCTOR filters an EAN whose {@code Product::findByEan}
+ *       returns null (rather than letting {@code Collectors.toMap} reject the null value), because a
+ *       bad vignette EAN is user input, not a 500. The valuation succeeds 200, no vignette advantage is
+ *       produced, and the SUCCESS trace records no failure.</li>
  *   <li>K8 — {@code vignettesRequired: 0} passes the schema ({@code minimum: 0}) and the applier
  *       BUILDS cleanly; the integer division by zero fires at APPLY time, so the trace carries
  *       {@code Error applying discount logic: / by zero}.</li>
@@ -686,18 +687,25 @@ class GroupKIT {
     // --------------------------------------------------
 
     /**
-     * K7 — an unknown EAN in the {@code vignettes} map is a global poison (NPE &rarr; 500). The
-     * {@code VignetteDiscountApplier} constructor builds {@code productInCatalog} from the
-     * {@code vignettes} KEYS via {@code Collectors.toMap(k, Product::findByEan)}; for the unknown
-     * {@code 9999999999999} the finder returns {@code null}, which {@code toMap} refuses. The NPE is
-     * born inside {@code buildAppliers}, so the trace carries the {@code Error building appliers from
-     * factory:} wrapper. Probed on {@code 0101} (which owns {@code VIGNETTE_CUISSON}), keyed by a
-     * unique customer code so the FAILED trace is unambiguous.
+     * K7 — an unknown EAN in the {@code vignettes} map is now skipped fail-safe, not a 500. Since the
+     * H5 hardening the {@code VignetteDiscountApplier} constructor filters out an EAN whose
+     * {@code Product.findByEan} returns {@code null} ({@code VignetteDiscountFactory} — "Skip it rather
+     * than let Collectors.toMap reject the null value with an NPE"; rapport-remediation §"Step 6", H5),
+     * because a bad vignette EAN is user input, not a 500. The valuation of {@code 0101} (which owns
+     * {@code VIGNETTE_CUISSON}) succeeds with 200, no vignette advantage is produced, and the SUCCESS
+     * trace records no failure. Keyed by a unique customer code so the trace is unambiguous.
      */
     @Test
     void k7_unknownEanInVignettes() {
-        assertPoison("K7", basketVig("K7", "0101", "{\"9999999999999\":3}", plain("3300000000007", "1")),
-                "Error building appliers from factory:");
+        JsonPath body = valuate(basketVig("K7", "0101", "{\"9999999999999\":3}",
+                plain("3300000000007", "1")), 200).jsonPath();
+        assertEquals(0, advantageCountByPrefix(body, "Vignette Discount:"),
+                "An unknown vignette EAN is skipped (no NPE), so no vignette advantage: "
+                        + body.getList("advantages.type"));
+        TraceView trace = traceFor("K7");
+        assertTrue(trace.found, "A trace must exist for K7");
+        assertEquals(ValuationTrace.STATUS_SUCCESS, trace.status, "K7 valuation succeeds fail-safe");
+        assertNull(trace.errorMessage, "The skipped unknown EAN records no failure, was: " + trace.errorMessage);
     }
 
     // --------------------------------------------------

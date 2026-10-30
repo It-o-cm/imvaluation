@@ -173,7 +173,7 @@ public class ValuationUiResourceCoverageTest {
         seedTrace(STORE, "CUST1", ValuationTrace.STATUS_SUCCESS, VALID_BASKET);
         given().when().get("/ui/valuations?notice=Hello&noticeOk=false")
                 .then().statusCode(200).contentType(ContentType.HTML)
-                .body(containsString("Valuations"))
+                .body(containsString("Valorisations"))
                 .body(containsString(STORE));
     }
 
@@ -265,7 +265,7 @@ public class ValuationUiResourceCoverageTest {
         Long id = seedTrace(STORE, "CUST1", ValuationTrace.STATUS_SUCCESS, VALID_BASKET);
         given().when().get("/ui/valuations/" + id)
                 .then().statusCode(200).contentType(ContentType.HTML)
-                .body(containsString("Request"));
+                .body(containsString("Requête"));
     }
 
     /**
@@ -294,7 +294,7 @@ public class ValuationUiResourceCoverageTest {
     void testNewForm_rendersFresh() {
         given().when().get("/ui/valuations/new")
                 .then().statusCode(200).contentType(ContentType.HTML)
-                .body(containsString("Test a valuation"));
+                .body(containsString("Tester une valorisation"));
     }
 
     /**
@@ -346,7 +346,7 @@ public class ValuationUiResourceCoverageTest {
         form().formParam("request", VALID_BASKET)
                 .when().post("/ui/valuations/new")
                 .then().statusCode(200).contentType(ContentType.HTML)
-                .body(containsString("Result"))
+                .body(containsString("Résultat"))
                 .body(containsString("totalPrice"));
     }
 
@@ -359,7 +359,7 @@ public class ValuationUiResourceCoverageTest {
     void testSubmit_blankBasketError() {
         form().formParam("request", "")
                 .when().post("/ui/valuations/new")
-                .then().statusCode(200).body(containsString("The basket is empty."));
+                .then().statusCode(200).body(containsString("Le panier est vide."));
     }
 
     /**
@@ -370,7 +370,7 @@ public class ValuationUiResourceCoverageTest {
     @TestSecurity(user = "viewer", roles = "VIEWER")
     void testSubmit_nullBasketError() {
         form().when().post("/ui/valuations/new")
-                .then().statusCode(200).body(containsString("The basket is empty."));
+                .then().statusCode(200).body(containsString("Le panier est vide."));
     }
 
     /**
@@ -483,7 +483,7 @@ public class ValuationUiResourceCoverageTest {
         given().redirects().follow(false)
                 .when().post("/ui/valuations/purge")
                 .then().statusCode(303)
-                .header("location", containsString("deleted"));
+                .header("location", containsString("supprim"));
     }
 
     /**

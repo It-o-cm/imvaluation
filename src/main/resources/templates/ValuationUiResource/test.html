@@ -1,14 +1,14 @@
 {#include ui/layout}
 
-{#title}Test a valuation{/title}
+{#title}{inject:i18n.get('valuations.test.title')}{/title}
 
 {#body}
 <div class="page-head">
     <div>
-        <h1>Test a valuation</h1>
-        <p class="page-sub">Build a basket and submit it to the engine</p>
+        <h1>{inject:i18n.get('valuations.test.title')}</h1>
+        <p class="page-sub">{inject:i18n.get('valuations.test.subtitle')}</p>
     </div>
-    <a class="btn btn-ghost" href="/ui/valuations">Back to list</a>
+    <a class="btn btn-ghost" href="/ui/valuations">{inject:i18n.get('valuations.action.backToList')}</a>
 </div>
 
 {#if error}
@@ -16,11 +16,12 @@
 {/if}
 
 <form id="offer-form" class="stacked-form" method="post" action="/ui/valuations/new">
+{#csrf /}
     <section class="card">
         <div class="card-title-row">
-            <h2 class="card-title">Basket</h2>
+            <h2 class="card-title">{inject:i18n.get('valuations.test.basket')}</h2>
             <div class="mode-switch">
-                <button type="button" class="btn btn-small is-active" data-mode="form">Form</button>
+                <button type="button" class="btn btn-small is-active" data-mode="form">{inject:i18n.get('valuations.test.modeForm')}</button>
                 <button type="button" class="btn btn-small" data-mode="json">JSON</button>
             </div>
         </div>
@@ -29,7 +30,7 @@
 
         <div id="json-editor" class="json-editor is-hidden">
             <textarea id="specification-raw" spellcheck="false" rows="18"></textarea>
-            <p class="field-hint">Edits are synchronised with the form when switching back.</p>
+            <p class="field-hint">{inject:i18n.get('valuations.test.jsonHint')}</p>
         </div>
 
         <div id="spec-errors" class="spec-errors is-hidden"></div>
@@ -38,13 +39,13 @@
     </section>
 
     <div class="form-actions">
-        <button class="btn btn-primary" type="submit">Value this basket</button>
+        <button class="btn btn-primary" type="submit">{inject:i18n.get('valuations.test.submit')}</button>
     </div>
 </form>
 
 {#if responseJson}
 <section class="card">
-    <h2 class="card-title">Result</h2>
+    <h2 class="card-title">{inject:i18n.get('valuations.test.result')}</h2>
     <pre class="payload">{responseJson}</pre>
 </section>
 {/if}

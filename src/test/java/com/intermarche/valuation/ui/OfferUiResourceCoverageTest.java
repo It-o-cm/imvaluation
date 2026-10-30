@@ -201,13 +201,17 @@ public class OfferUiResourceCoverageTest {
     // --------------------------------------------------
 
     /**
-     * Tests that the creation form renders for an administrator.
+     * Tests that the creation form renders for an administrator, and that the Activation dates
+     * are entered with date AND time inputs (spec-divers-offre §4, GB-01-06-07: {@code
+     * datetime-local}, minute precision — locks the form against a date-only regression).
      */
     @Test
     @TestSecurity(user = "admin", roles = "ADMIN")
     void testCreateForm_rendersForAdmin() {
         given().when().get("/ui/offers/new?type=FREE_DELIVERY_THRESHOLD")
-                .then().statusCode(200).contentType(ContentType.HTML);
+                .then().statusCode(200).contentType(ContentType.HTML)
+                .body(containsString("type=\"datetime-local\" name=\"validFrom\""))
+                .body(containsString("type=\"datetime-local\" name=\"validTo\""));
     }
 
     /**
@@ -279,7 +283,7 @@ public class OfferUiResourceCoverageTest {
         form().formParam("code", "").formParam("type", "FREE_DELIVERY_THRESHOLD")
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "S1")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("code is mandatory"));
+                .then().statusCode(200).body(containsString("Le code de l"));
     }
 
     /**
@@ -291,7 +295,7 @@ public class OfferUiResourceCoverageTest {
         form().formParam("code", "OFF_X").formParam("type", "")
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "S1")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("type is mandatory"));
+                .then().statusCode(200).body(containsString("Le type de l"));
     }
 
     /**
@@ -305,7 +309,7 @@ public class OfferUiResourceCoverageTest {
         form().formParam("code", "OFF_DUP").formParam("type", "FREE_DELIVERY_THRESHOLD")
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "S1")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("already exists"));
+                .then().statusCode(200).body(containsString("existe déjà"));
     }
 
     /**
@@ -318,7 +322,7 @@ public class OfferUiResourceCoverageTest {
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "")
                 .formParam("storeGroupCodes", "")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("at least one store"));
+                .then().statusCode(200).body(containsString("au moins un magasin"));
     }
 
     /**
@@ -343,7 +347,7 @@ public class OfferUiResourceCoverageTest {
         form().formParam("code", "OFF_US").formParam("type", "FREE_DELIVERY_THRESHOLD")
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "NOPE")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("Unknown store codes"));
+                .then().statusCode(200).body(containsString("Codes magasin inconnus"));
     }
 
     /**
@@ -356,7 +360,7 @@ public class OfferUiResourceCoverageTest {
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "")
                 .formParam("storeGroupCodes", "NOPE")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("Unknown store group codes"));
+                .then().statusCode(200).body(containsString("Codes groupe de magasins inconnus"));
     }
 
     /**
@@ -370,7 +374,7 @@ public class OfferUiResourceCoverageTest {
         form().formParam("code", "OFF_BS").formParam("type", "FREE_DELIVERY_THRESHOLD")
                 .formParam("specification", "").formParam("storeCodes", "S1")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("specification is mandatory"));
+                .then().statusCode(200).body(containsString("La spécification de l"));
     }
 
     /**
@@ -382,7 +386,7 @@ public class OfferUiResourceCoverageTest {
     void testSave_errorWithNullCodeFields() {
         form().formParam("code", "OFF_NF").formParam("type", "")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("type is mandatory"));
+                .then().statusCode(200).body(containsString("Le type de l"));
     }
 
     /**
@@ -412,7 +416,7 @@ public class OfferUiResourceCoverageTest {
         form().formParam("code", "OFF_PS").formParam("type", "FREE_DELIVERY_THRESHOLD")
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "S1,NOPE")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("Unknown store codes: NOPE"));
+                .then().statusCode(200).body(containsString("Codes magasin inconnus : NOPE"));
     }
 
     /**
@@ -427,7 +431,7 @@ public class OfferUiResourceCoverageTest {
                 .formParam("specification", VALID_SPEC).formParam("storeCodes", "")
                 .formParam("storeGroupCodes", "G1,NOPE")
                 .when().post("/ui/offers/new")
-                .then().statusCode(200).body(containsString("Unknown store group codes: NOPE"));
+                .then().statusCode(200).body(containsString("Codes groupe de magasins inconnus : NOPE"));
     }
 
     /**
@@ -483,7 +487,7 @@ public class OfferUiResourceCoverageTest {
         Long id = seedOffer("OFF_UE", "FREE_DELIVERY_THRESHOLD", VALID_SPEC, List.of("S1"), List.of());
         form().formParam("type", "").formParam("specification", VALID_SPEC).formParam("storeCodes", "S1")
                 .when().post("/ui/offers/" + id)
-                .then().statusCode(200).body(containsString("type is mandatory"));
+                .then().statusCode(200).body(containsString("Le type de l"));
     }
 
     /**

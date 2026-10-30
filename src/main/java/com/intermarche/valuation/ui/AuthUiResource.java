@@ -66,6 +66,12 @@ public class AuthUiResource {
     PasswordResetService passwordReset;
 
     /**
+     * The interface message resolver, for localising the notices and errors shown on these screens.
+     */
+    @Inject
+    com.intermarche.valuation.i18n.Messages messages;
+
+    /**
      * The public base URL the reset link is built from (report H3).
      * <p>
      * Read from configuration, never from the request Host header: a {@code Host} an attacker
@@ -138,22 +144,24 @@ public class AuthUiResource {
     @Produces(MediaType.TEXT_HTML)
     public TemplateInstance login(@QueryParam("error") String error,
                                   @QueryParam("notice") String notice) {
-        return Templates.login(loginErrorMessage(error), notice);
+        String key = loginErrorMessageKey(error);
+        return Templates.login(key == null ? null : messages.get(key), notice);
     }
 
     /**
-     * Resolves the failure message shown on the login page for the {@code error} parameter.
+     * Resolves the message KEY of the failure shown on the login page for the {@code error} parameter.
      * <p>
      * Quarkus form authentication redirects here with exactly {@code error=true} when it
-     * rejects credentials. Only that value shows the generic failure message; any other
-     * value, an empty one included, shows nothing rather than reacting to a stray or
-     * hand-typed {@code error} query parameter.
+     * rejects credentials. Only that value yields the generic failure key; any other
+     * value, an empty one included, yields {@code null} rather than reacting to a stray or
+     * hand-typed {@code error} query parameter. The key is resolved to a localised message by the
+     * caller.
      *
      * @param error The raw {@code error} query parameter, may be null.
-     * @return The message to display, or {@code null} to display none.
+     * @return The message key to display, or {@code null} to display none.
      */
-    static String loginErrorMessage(String error) {
-        return "true".equals(error) ? "Invalid username or password." : null;
+    static String loginErrorMessageKey(String error) {
+        return "true".equals(error) ? "auth.error.invalidCredentials" : null;
     }
 
     // --------------------------------------------------
@@ -232,14 +240,14 @@ public class AuthUiResource {
                             @FormParam("password") String password,
                             @FormParam("confirm") String confirm) {
         if (password == null || !password.equals(confirm)) {
-            return redirectToReset(token, "The two passwords do not match.");
+            return redirectToReset(token, messages.get("auth.error.passwordsMismatch"));
         }
         String error = passwordReset.resetPassword(token, password);
         if (error != null) {
             return redirectToReset(token, error);
         }
         URI target = UriBuilder.fromPath("/ui/login")
-                .queryParam("notice", "Your password has been changed. You can sign in.")
+                .queryParam("notice", messages.get("auth.notice.passwordChangedSignIn"))
                 .build();
         return Response.seeOther(target).build();
     }
@@ -280,7 +288,7 @@ public class AuthUiResource {
                 .httpOnly(true)
                 .build();
         URI target = UriBuilder.fromPath("/ui/login")
-                .queryParam("notice", "You have been signed out.")
+                .queryParam("notice", messages.get("auth.notice.signedOut"))
                 .build();
         return Response.seeOther(target).cookie(cleared).build();
     }
@@ -343,7 +351,7 @@ public class AuthUiResource {
         // The session cookie carries a signed identity rather than the credentials, so it
         // stays valid: there is no reason to sign the user out of a session they just used.
         URI target = UriBuilder.fromPath("/ui/offers")
-                .queryParam("notice", "Password updated.")
+                .queryParam("notice", messages.get("auth.notice.passwordUpdated"))
                 .build();
         return Response.seeOther(target).build();
     }
@@ -362,17 +370,17 @@ public class AuthUiResource {
         // On a forced change the user authenticated moments ago, so the current password
         // is not asked for and must not be checked.
         if (!user.mustChangePassword && !user.matchesPassword(currentPassword)) {
-            return "The current password is incorrect.";
+            return messages.get("auth.error.currentPasswordIncorrect");
         }
         String policyError = AppUser.validatePassword(newPassword);
         if (policyError != null) {
             return policyError;
         }
         if (!newPassword.equals(confirmation)) {
-            return "The two passwords do not match.";
+            return messages.get("auth.error.passwordsMismatch");
         }
         if (user.matchesPassword(newPassword)) {
-            return "The new password must differ from the current one.";
+            return messages.get("auth.error.newPasswordSameAsCurrent");
         }
         return null;
     }

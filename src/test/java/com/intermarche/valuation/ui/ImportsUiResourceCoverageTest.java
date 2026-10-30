@@ -66,24 +66,29 @@ public class ImportsUiResourceCoverageTest {
                     + "S001|Store One";
 
     /**
-     * The seven import domains, in the mandated replay order, each matching a dispatch case.
+     * The nine import domains, in the mandated replay order (the EGAlim regimes before the
+     * products that classify against them, the VAT rates before the prices that name them),
+     * each matching a dispatch case.
      */
     private static final String[] DOMAINS = {
-            "STORES", "STORE_GROUPS", "PRODUCTS", "PRODUCT_FAMILIES", "CATEGORIES", "PRICES", "OFFERS"
+            "STORES", "STORE_GROUPS", "EGALIM_REGIMES", "PRODUCTS", "PRODUCT_FAMILIES",
+            "CATEGORIES", "VAT_RATES", "PRICES", "OFFERS"
     };
 
     /**
      * The importer-specific header line for each known domain, so a header-only upload passes
      * every importer's required-columns check and reports an empty successful import.
      */
-    private static final java.util.Map<String, String> DOMAIN_HEADERS = java.util.Map.of(
-            "STORES", "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n",
-            "STORE_GROUPS", "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n",
-            "PRODUCTS", "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n",
-            "PRODUCT_FAMILIES", "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n",
-            "CATEGORIES", "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n",
-            "PRICES", "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n",
-            "OFFERS", "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n");
+    private static final java.util.Map<String, String> DOMAIN_HEADERS = java.util.Map.ofEntries(
+            java.util.Map.entry("STORES", "CODE|NAME|STREET_LINE1|STREET_LINE2|POSTAL_CODE|CITY|COUNTRY|LATITUDE|LONGITUDE\n"),
+            java.util.Map.entry("STORE_GROUPS", "CODE|NAME|STORE_CODES|STORE_GROUP_CODES\n"),
+            java.util.Map.entry("EGALIM_REGIMES", "CODE|LABEL|CAP_RATE\n"),
+            java.util.Map.entry("PRODUCTS", "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE\n"),
+            java.util.Map.entry("PRODUCT_FAMILIES", "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n"),
+            java.util.Map.entry("CATEGORIES", "EAN|LEVEL1|LEVEL2|LEVEL3|LEVEL4|LEVEL5\n"),
+            java.util.Map.entry("VAT_RATES", "VAT_NUMBER|RATE|LABEL\n"),
+            java.util.Map.entry("PRICES", "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"),
+            java.util.Map.entry("OFFERS", "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n"));
 
     /**
      * Clears the whole reference set before each test so rows written by an upload here or by
@@ -233,6 +238,26 @@ public class ImportsUiResourceCoverageTest {
         }
     }
 
+    /**
+     * Tests that the two referential domains newly wired into the screen — EGALIM_REGIMES and
+     * VAT_RATES — each dispatch to their importer through the {@code /run} endpoint and report
+     * an empty successful import, guarding the two new dispatch arms explicitly.
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = "ADMIN")
+    void testRun_dispatchesEgalimAndVatDomains() {
+        String egalim = postImport("EGALIM_REGIMES", DOMAIN_HEADERS.get("EGALIM_REGIMES"));
+        org.junit.jupiter.api.Assertions.assertTrue(egalim.contains("EGALIM_REGIMES"),
+                "location should carry the EGALIM_REGIMES domain");
+        org.junit.jupiter.api.Assertions.assertTrue(egalim.contains("noticeOk=true"),
+                "empty EGALIM_REGIMES import should be reported as a success");
+        String vat = postImport("VAT_RATES", DOMAIN_HEADERS.get("VAT_RATES"));
+        org.junit.jupiter.api.Assertions.assertTrue(vat.contains("VAT_RATES"),
+                "location should carry the VAT_RATES domain");
+        org.junit.jupiter.api.Assertions.assertTrue(vat.contains("noticeOk=true"),
+                "empty VAT_RATES import should be reported as a success");
+    }
+
     // --------------------------------------------------
     // POST /run — missing-input guard arms
     // --------------------------------------------------
@@ -248,7 +273,7 @@ public class ImportsUiResourceCoverageTest {
                 .when().post("/ui/imports/run")
                 .then().statusCode(303)
                 .extract().header("Location");
-        org.junit.jupiter.api.Assertions.assertTrue(location.contains("selected"));
+        org.junit.jupiter.api.Assertions.assertTrue(location.contains("Aucun"));
         org.junit.jupiter.api.Assertions.assertTrue(location.contains("noticeOk=false"));
     }
 
@@ -264,7 +289,7 @@ public class ImportsUiResourceCoverageTest {
                 .when().post("/ui/imports/run")
                 .then().statusCode(303)
                 .extract().header("Location");
-        org.junit.jupiter.api.Assertions.assertTrue(location.contains("selected"));
+        org.junit.jupiter.api.Assertions.assertTrue(location.contains("Aucun"));
     }
 
     /**
@@ -280,7 +305,7 @@ public class ImportsUiResourceCoverageTest {
                 .when().post("/ui/imports/run")
                 .then().statusCode(303)
                 .extract().header("Location");
-        org.junit.jupiter.api.Assertions.assertTrue(location.contains("selected"));
+        org.junit.jupiter.api.Assertions.assertTrue(location.contains("Aucun"));
     }
 
     /**

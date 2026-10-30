@@ -91,6 +91,7 @@ class ValuationUiResourceTest {
         ValuationUiResource resource = new ValuationUiResource();
         resource.traceService = traceService;
         resource.valuationResource = valuationResource;
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         return resource;
     }
 

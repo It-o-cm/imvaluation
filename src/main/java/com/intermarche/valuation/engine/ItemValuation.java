@@ -114,6 +114,7 @@ public final class ItemValuation {
             copy.lineId = slice.lineId;
             copy.produceEan = slice.produceEan;
             copy.quantity = slice.quantity;
+            copy.product = slice.product;
             lines.add(new BasketEvaluation.Item(copy, sliceAmount));
             return lines;
         }
@@ -131,6 +132,7 @@ public final class ItemValuation {
             lineItem.lineId = s.lineId;
             lineItem.produceEan = slice.produceEan;
             lineItem.quantity = s.quantity;
+            lineItem.product = slice.product;
 
             AmountEvaluation lineAmount;
             if (i == sources.size() - 1) {

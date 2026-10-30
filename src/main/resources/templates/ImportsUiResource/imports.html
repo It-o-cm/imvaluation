@@ -1,12 +1,12 @@
 {#include ui/layout}
 
-{#title}Imports{/title}
+{#title}{inject:i18n.get('imports.title')}{/title}
 
 {#body}
 <div class="page-head">
     <div>
-        <h1>Imports</h1>
-        <p class="page-sub">Bulk CSV import, staged fallback 1000→100→10→1, checksum no-op on unchanged rows.</p>
+        <h1>{inject:i18n.get('imports.title')}</h1>
+        <p class="page-sub">{inject:i18n.get('imports.subtitle')}</p>
     </div>
 </div>
 
@@ -15,35 +15,35 @@
 {/if}
 
 <div class="card">
-    <div class="card-title-row"><h2 class="card-title">Drop a CSV file</h2></div>
-    <p class="card-sub">Recommended order — each domain references the ones declared before it:
-        Stores → Store groups → Products → Product families → Categories → Prices → Offers.</p>
+    <div class="card-title-row"><h2 class="card-title">{inject:i18n.get('imports.card.title')}</h2></div>
+    <p class="card-sub">{inject:i18n.get('imports.card.order')}</p>
     {#if canWrite}
-    <form class="import-drop" method="post" action="/ui/imports/run" enctype="multipart/form-data">
+    <form class="import-drop" method="post" action="/ui/imports/run?csrf-token={inject:csrf.token}" enctype="multipart/form-data">
         <div class="field-grid">
             <label class="field">
-                <span class="field-label">Domain</span>
+                <span class="field-label">{inject:i18n.get('imports.field.domain')}</span>
                 <select class="input-control" name="domain">
-                    <option value="STORES">1. STORES (referential stores)</option>
-                    <option value="STORE_GROUPS">2. STORE_GROUPS (store hierarchy)</option>
-                    <option value="PRODUCTS">3. PRODUCTS (referential products)</option>
-                    <option value="PRODUCT_FAMILIES">4. PRODUCT_FAMILIES</option>
-                    <option value="CATEGORIES">5. CATEGORIES (product category storages)</option>
-                    <option value="PRICES">6. PRICES</option>
-                    <option value="OFFERS">7. OFFERS</option>
+                    <option value="STORES">{inject:i18n.get('imports.domain.stores')}</option>
+                    <option value="STORE_GROUPS">{inject:i18n.get('imports.domain.storeGroups')}</option>
+                    <option value="EGALIM_REGIMES">{inject:i18n.get('imports.domain.egalimRegimes')}</option>
+                    <option value="PRODUCTS">{inject:i18n.get('imports.domain.products')}</option>
+                    <option value="PRODUCT_FAMILIES">{inject:i18n.get('imports.domain.productFamilies')}</option>
+                    <option value="CATEGORIES">{inject:i18n.get('imports.domain.categories')}</option>
+                    <option value="VAT_RATES">{inject:i18n.get('imports.domain.vatRates')}</option>
+                    <option value="PRICES">{inject:i18n.get('imports.domain.prices')}</option>
+                    <option value="OFFERS">{inject:i18n.get('imports.domain.offers')}</option>
                 </select>
             </label>
             <label class="field">
-                <span class="field-label">File (pipe-delimited)</span>
+                <span class="field-label">{inject:i18n.get('imports.field.file')}</span>
                 <input class="input-control" type="file" name="file" accept=".csv,text/csv,text/plain" required>
             </label>
         </div>
-        <div class="form-actions"><button class="btn btn-primary" type="submit">Import</button></div>
-        <p class="field-hint">Drag &amp; drop the file anywhere onto this frame — the domain is preselected from its
-            name (stores.csv → STORES, offers.csv → OFFERS, etc.).</p>
+        <div class="form-actions"><button class="btn btn-primary" type="submit">{inject:i18n.get('imports.action.run')}</button></div>
+        <p class="field-hint">{inject:i18n.get('imports.hint.drop')}</p>
     </form>
     {#else}
-    <p class="placeholder-note">Admin rights are required to run an import.</p>
+    <p class="placeholder-note">{inject:i18n.get('imports.note.adminRequired')}</p>
     {/if}
 </div>
 

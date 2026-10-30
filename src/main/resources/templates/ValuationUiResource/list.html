@@ -1,15 +1,15 @@
 {#include ui/layout}
 
-{#title}Valuations{/title}
+{#title}{inject:i18n.get('valuations.title')}{/title}
 
 {#body}
 <div class="page-head">
     <div>
-        <h1>Valuations</h1>
+        <h1>{inject:i18n.get('valuations.title')}</h1>
         <p class="page-sub">{view.summary}</p>
     </div>
     <div class="page-actions">
-        <a class="btn btn-primary" href="/ui/valuations/new">New test</a>
+        <a class="btn btn-primary" href="/ui/valuations/new">{inject:i18n.get('valuations.action.newTest')}</a>
     </div>
 </div>
 
@@ -19,27 +19,29 @@
 
 {#if !config.enabled}
 <div class="alert alert-warn" role="status">
-    Recording is turned off: valuations run normally but leave no trace.
+    {inject:i18n.get('valuations.recordingOff')}
 </div>
 {/if}
 
 {#if view.canWrite}
 <section class="card">
-    <h2 class="card-title">Recording</h2>
+    <h2 class="card-title">{inject:i18n.get('valuations.recording.title')}</h2>
     <form class="inline-form" method="post" action="/ui/valuations/config">
+        {#csrf /}
         <label class="toggle-row">
             <input type="checkbox" name="enabled" {#if config.enabled}checked{/if}>
-            <span>Record valuations</span>
+            <span>{inject:i18n.get('valuations.recording.toggle')}</span>
         </label>
         <label class="field field-inline">
-            <span class="field-label">Keep for (days)</span>
+            <span class="field-label">{inject:i18n.get('valuations.recording.keepDays')}</span>
             <input type="number" name="retentionDays" min="1" max="365" value="{config.retentionDays}">
         </label>
-        <button class="btn" type="submit">Save</button>
+        <button class="btn" type="submit">{inject:i18n.get('valuations.action.save')}</button>
     </form>
     <form method="post" action="/ui/valuations/purge"
-          onsubmit="return confirm('Delete every recorded valuation ?');">
-        <button class="btn btn-small btn-danger" type="submit">Purge all now</button>
+          onsubmit="return confirm('{inject:i18n.get('valuations.confirm.purge')}');">
+        {#csrf /}
+        <button class="btn btn-small btn-danger" type="submit">{inject:i18n.get('valuations.action.purgeAll')}</button>
     </form>
 </section>
 {/if}
@@ -49,55 +51,55 @@
     <input type="hidden" name="dir" value="{view.direction}">
 
     <div class="filter-field">
-        <span class="filter-label">Store</span>
+        <span class="filter-label">{inject:i18n.get('valuations.filter.store')}</span>
         <div data-lookup="store" data-name="store" data-value="{view.filter('store')}"></div>
     </div>
 
     <label class="filter-field">
-        <span class="filter-label">Customer</span>
-        <input type="search" name="customer" placeholder="Any fragment" value="{view.filter('customer')}">
+        <span class="filter-label">{inject:i18n.get('valuations.filter.customer')}</span>
+        <input type="search" name="customer" placeholder="{inject:i18n.get('valuations.filter.anyFragment')}" value="{view.filter('customer')}">
     </label>
 
     <label class="filter-field">
-        <span class="filter-label">Status</span>
+        <span class="filter-label">{inject:i18n.get('valuations.filter.status')}</span>
         <select name="status">
-            <option value="">All</option>
-            <option value="SUCCESS" {#if view.filter('status') == 'SUCCESS'}selected{/if}>Success</option>
-            <option value="REJECTED" {#if view.filter('status') == 'REJECTED'}selected{/if}>Rejected</option>
-            <option value="FAILED" {#if view.filter('status') == 'FAILED'}selected{/if}>Failed</option>
+            <option value="">{inject:i18n.get('valuations.filter.statusAll')}</option>
+            <option value="SUCCESS" {#if view.filter('status') == 'SUCCESS'}selected{/if}>{inject:i18n.get('valuations.status.success')}</option>
+            <option value="REJECTED" {#if view.filter('status') == 'REJECTED'}selected{/if}>{inject:i18n.get('valuations.status.rejected')}</option>
+            <option value="FAILED" {#if view.filter('status') == 'FAILED'}selected{/if}>{inject:i18n.get('valuations.status.failed')}</option>
         </select>
     </label>
 
     <div class="filter-actions">
-        <button class="btn btn-primary" type="submit">Filter</button>
+        <button class="btn btn-primary" type="submit">{inject:i18n.get('valuations.action.filter')}</button>
         {#if view.filtered}
-        <a class="btn btn-ghost" href="/ui/valuations">Reset</a>
+        <a class="btn btn-ghost" href="/ui/valuations">{inject:i18n.get('valuations.action.reset')}</a>
         {/if}
     </div>
 </form>
 
 {#if view.rows.isEmpty()}
 <div class="empty-state">
-    <p>No valuation recorded yet.</p>
-    <p class="empty-hint">Submit a test basket, or wait for a client to call the endpoint.</p>
+    <p>{inject:i18n.get('valuations.empty.title')}</p>
+    <p class="empty-hint">{inject:i18n.get('valuations.empty.hint')}</p>
 </div>
 {#else}
 <table class="data-table">
     <thead>
     <tr>
         <th class="{#if view.isSortedOn('createdAt')}is-sorted{/if}">
-            <a class="col-sort" href="{view.sortUrl('createdAt')}">When <span class="sort-arrow">{view.sortIndicator('createdAt')}</span></a>
+            <a class="col-sort" href="{view.sortUrl('createdAt')}">{inject:i18n.get('valuations.col.when')} <span class="sort-arrow">{view.sortIndicator('createdAt')}</span></a>
         </th>
         <th class="{#if view.isSortedOn('storeCode')}is-sorted{/if}">
-            <a class="col-sort" href="{view.sortUrl('storeCode')}">Store <span class="sort-arrow">{view.sortIndicator('storeCode')}</span></a>
+            <a class="col-sort" href="{view.sortUrl('storeCode')}">{inject:i18n.get('valuations.col.store')} <span class="sort-arrow">{view.sortIndicator('storeCode')}</span></a>
         </th>
-        <th>Customer</th>
-        <th>Status</th>
+        <th>{inject:i18n.get('valuations.col.customer')}</th>
+        <th>{inject:i18n.get('valuations.col.status')}</th>
         <th class="{#if view.isSortedOn('totalIncludingTax')}is-sorted{/if}">
-            <a class="col-sort" href="{view.sortUrl('totalIncludingTax')}">Total <span class="sort-arrow">{view.sortIndicator('totalIncludingTax')}</span></a>
+            <a class="col-sort" href="{view.sortUrl('totalIncludingTax')}">{inject:i18n.get('valuations.col.total')} <span class="sort-arrow">{view.sortIndicator('totalIncludingTax')}</span></a>
         </th>
         <th class="{#if view.isSortedOn('durationMs')}is-sorted{/if}">
-            <a class="col-sort" href="{view.sortUrl('durationMs')}">Time <span class="sort-arrow">{view.sortIndicator('durationMs')}</span></a>
+            <a class="col-sort" href="{view.sortUrl('durationMs')}">{inject:i18n.get('valuations.col.time')} <span class="sort-arrow">{view.sortIndicator('durationMs')}</span></a>
         </th>
         <th class="col-actions"></th>
     </tr>
@@ -110,14 +112,14 @@
         <td>{trace.storeCode ?: '—'}</td>
         <td class="col-muted">{trace.customerCode ?: '—'}</td>
         <td>
-            {#if trace.success}<span class="badge badge-ok">Success</span>
+            {#if trace.success}<span class="badge badge-ok">{inject:i18n.get('valuations.status.success')}</span>
             {#else}<span class="badge badge-error">{trace.status}</span>{/if}
         </td>
         <td class="col-muted">{#if trace.totalIncludingTax}{trace.totalIncludingTax} &euro;{#else}&mdash;{/if}</td>
         <td class="col-muted">{#if trace.durationMs}{trace.durationMs} ms{#else}&mdash;{/if}</td>
         <td class="col-actions">
-            <a class="btn btn-small" href="/ui/valuations/{trace.id}">View</a>
-            <a class="btn btn-small" href="/ui/valuations/new?replay={trace.id}">Replay</a>
+            <a class="btn btn-small" href="/ui/valuations/{trace.id}">{inject:i18n.get('valuations.action.view')}</a>
+            <a class="btn btn-small" href="/ui/valuations/new?replay={trace.id}">{inject:i18n.get('valuations.action.replay')}</a>
         </td>
     </tr>
     {/for}
@@ -126,24 +128,24 @@
 </table>
 
 {#if view.paged}
-<nav class="pager" aria-label="Pagination">
+<nav class="pager" aria-label="{inject:i18n.get('valuations.pager.aria')}">
     {#if view.hasPrevious}
-    <a class="btn btn-small" href="{view.pageUrl(1)}">First</a>
-    <a class="btn btn-small" href="{view.pageUrl(view.currentPage - 1)}">Previous</a>
+    <a class="btn btn-small" href="{view.pageUrl(1)}">{inject:i18n.get('valuations.pager.first')}</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.currentPage - 1)}">{inject:i18n.get('valuations.pager.previous')}</a>
     {#else}
-    <span class="btn btn-small is-disabled">First</span>
-    <span class="btn btn-small is-disabled">Previous</span>
+    <span class="btn btn-small is-disabled">{inject:i18n.get('valuations.pager.first')}</span>
+    <span class="btn btn-small is-disabled">{inject:i18n.get('valuations.pager.previous')}</span>
     {/if}
     <span class="pager-status">
-        Page {view.currentPage} of {view.pageCount}
+        {inject:i18n.format('valuations.pager.pageOf', view.currentPage, view.pageCount)}
         <span class="pager-range">{view.rangeLabel}</span>
     </span>
     {#if view.hasNext}
-    <a class="btn btn-small" href="{view.pageUrl(view.currentPage + 1)}">Next</a>
-    <a class="btn btn-small" href="{view.pageUrl(view.pageCount)}">Last</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.currentPage + 1)}">{inject:i18n.get('valuations.pager.next')}</a>
+    <a class="btn btn-small" href="{view.pageUrl(view.pageCount)}">{inject:i18n.get('valuations.pager.last')}</a>
     {#else}
-    <span class="btn btn-small is-disabled">Next</span>
-    <span class="btn btn-small is-disabled">Last</span>
+    <span class="btn btn-small is-disabled">{inject:i18n.get('valuations.pager.next')}</span>
+    <span class="btn btn-small is-disabled">{inject:i18n.get('valuations.pager.last')}</span>
     {/if}
 </nav>
 {/if}

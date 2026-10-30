@@ -36,6 +36,13 @@ public class OfferResource implements GraphQLTrait, com.intermarche.valuation.en
     com.intermarche.valuation.ui.OfferSchemaRegistry schemaRegistry;
 
     /**
+     * The signed-in user's perimeter (store scope, allowed offer types), applied to filter reads
+     * and to refuse writes outside the perimeter (spec §2). Unrestricted for accounts with no scope.
+     */
+    @jakarta.inject.Inject
+    com.intermarche.valuation.security.CurrentUser currentUser;
+
+    /**
      * Validates an offer specification against the factory schema of its type (report C3).
      * <p>
      * The GraphQL surface previously persisted any {@code specification} string verbatim, so a
@@ -75,7 +82,9 @@ public class OfferResource implements GraphQLTrait, com.intermarche.valuation.en
     @RolesAllowed("MANAGER")
     public List<Offer> allOffers() {
         LOGGER.info("Entering method allOffers");
-        List<Offer> result = Offer.listAll();
+        List<Offer> result = Offer.<Offer>listAll().stream()
+                .filter(offer -> currentUser.isOfferVisibleForScope(offerTargetCodes(offer)))
+                .toList();
         LOGGER.info("Exiting method allOffers");
         return result;
     }
@@ -93,7 +102,9 @@ public class OfferResource implements GraphQLTrait, com.intermarche.valuation.en
     public Offer offer(@Name("id") Long id) {
         LOGGER.info("Entering method offer with id: " + id);
         Offer offer = Offer.findById(id);
-        if (offer == null) {
+        if (offer == null || !currentUser.isOfferVisibleForScope(offerTargetCodes(offer))) {
+            // Out of the user's perimeter reads as not found: the perimeter never leaks the
+            // existence of an offer the user may not see (spec §2).
             LOGGER.error("Offer with id " + id + " not found");
             throw new NoSuchElementException("Offer with id " + id + " not found");
         }
@@ -114,7 +125,7 @@ public class OfferResource implements GraphQLTrait, com.intermarche.valuation.en
     public Offer offerByCode(@Name("code") String code) {
         LOGGER.info("Entering method offerByCode with code: " + code);
         Offer offer = Offer.findByCode(code);
-        if (offer == null) {
+        if (offer == null || !currentUser.isOfferVisibleForScope(offerTargetCodes(offer))) {
             LOGGER.error("Offer with code " + code + " not found");
             throw new NoSuchElementException("Offer with code " + code + " not found");
         }
@@ -224,6 +235,15 @@ public class OfferResource implements GraphQLTrait, com.intermarche.valuation.en
                 Set<StoreGroup> groups = resolveStoreGroups(input.storeGroupCodes);
                 offer.storeGroups.addAll(groups);
             }
+            // Optional PDV exclusions (spec-ciblage-saisie §3): unknown codes reject the mutation.
+            if (input.excludedStoreCodes != null && !input.excludedStoreCodes.isEmpty()) {
+                offer.excludedStores.addAll(resolveStores(input.excludedStoreCodes));
+            }
+            if (input.excludedStoreGroupCodes != null && !input.excludedStoreGroupCodes.isEmpty()) {
+                offer.excludedStoreGroups.addAll(resolveStoreGroups(input.excludedStoreGroupCodes));
+            }
+            // Perimeter (spec §2): the type must be allowed and the whole targeting within scope.
+            enforceScope(offer.type, offerTargetCodes(offer));
             offer.persist();
             LOGGER.info("Exiting method createOffer. Created ID: " + offer.id);
             return offer;
@@ -254,6 +274,12 @@ public class OfferResource implements GraphQLTrait, com.intermarche.valuation.en
                 LOGGER.error("Offer with id " + id + " not found");
                 throw new NoSuchElementException("Offer with id " + id + " not found");
             }
+            // Perimeter (spec §2, §3.1): enforce on the RESULTING type and targeting BEFORE mutating
+            // the managed offer, so the user lookup does not auto-flush a half-updated row. Removing
+            // an out-of-scope target is accepted (it leaves the scope), adding one is refused.
+            enforceScope(
+                    input.type != null ? input.type : offer.type,
+                    resultingTargetCodes(offer, input));
             // Apply Updates
             if (input.type != null) offer.type = input.type;
             if (input.specification != null) offer.specification = input.specification;
@@ -276,6 +302,20 @@ public class OfferResource implements GraphQLTrait, com.intermarche.valuation.en
                 if (!input.storeGroupCodes.isEmpty()) {
                     Set<StoreGroup> groups = resolveStoreGroups(input.storeGroupCodes);
                     offer.storeGroups.addAll(groups);
+                }
+            }
+            // Handle PDV exclusion updates (spec-ciblage-saisie §3): a provided list (even empty)
+            // replaces the exclusions, a null list leaves them unchanged.
+            if (input.excludedStoreCodes != null) {
+                offer.excludedStores.clear();
+                if (!input.excludedStoreCodes.isEmpty()) {
+                    offer.excludedStores.addAll(resolveStores(input.excludedStoreCodes));
+                }
+            }
+            if (input.excludedStoreGroupCodes != null) {
+                offer.excludedStoreGroups.clear();
+                if (!input.excludedStoreGroupCodes.isEmpty()) {
+                    offer.excludedStoreGroups.addAll(resolveStoreGroups(input.excludedStoreGroupCodes));
                 }
             }
             LOGGER.info("Exiting method updateOffer");
@@ -337,6 +377,74 @@ public class OfferResource implements GraphQLTrait, com.intermarche.valuation.en
     }
 
     /**
+     * Collects an offer's whole targeting as a flat set of store and store-group codes.
+     *
+     * @param offer the offer.
+     * @return the targeted store and store-group codes.
+     */
+    private Set<String> offerTargetCodes(Offer offer) {
+        Set<String> codes = new HashSet<>();
+        for (Store store : offer.stores) {
+            codes.add(store.code);
+        }
+        for (StoreGroup group : offer.storeGroups) {
+            codes.add(group.code);
+        }
+        return codes;
+    }
+
+    /**
+     * Computes an offer's targeting AFTER an update would apply: the input's codes when it provides
+     * them (even empty, a replacement), otherwise the offer's current codes (kept). Read before any
+     * mutation, so it reflects the resulting state without touching the managed entity.
+     *
+     * @param offer the offer being updated.
+     * @param input the update input.
+     * @return the resulting targeted store and store-group codes.
+     */
+    private Set<String> resultingTargetCodes(Offer offer, OfferRecord input) {
+        Set<String> codes = new HashSet<>();
+        if (input.storeCodes != null) {
+            codes.addAll(input.storeCodes);
+        } else {
+            for (Store store : offer.stores) {
+                codes.add(store.code);
+            }
+        }
+        if (input.storeGroupCodes != null) {
+            codes.addAll(input.storeGroupCodes);
+        } else {
+            for (StoreGroup group : offer.storeGroups) {
+                codes.add(group.code);
+            }
+        }
+        return codes;
+    }
+
+    /**
+     * Enforces the signed-in user's perimeter on a write (spec §2): the offer type must be allowed
+     * and the whole resulting targeting must fit within the store scope. No-op for an unrestricted
+     * user.
+     * <p>
+     * Called before the managed offer is mutated, so the user-lookup query it performs does not
+     * auto-flush a half-updated row.
+     *
+     * @param type        the resulting offer type.
+     * @param targetCodes the resulting targeted store and store-group codes.
+     * @throws ScopeViolationException when the type or the targeting is outside the perimeter.
+     */
+    private void enforceScope(String type, Set<String> targetCodes) {
+        if (!currentUser.isOfferTypeAllowed(type)) {
+            throw new ScopeViolationException(
+                    "Offer type '" + type + "' is not allowed for your profile.");
+        }
+        if (!currentUser.isStoreTargetingWithinScope(targetCodes)) {
+            throw new ScopeViolationException(
+                    "The offer targeting is outside your store perimeter.");
+        }
+    }
+
+    /**
      * Input record type for GraphQL Offer mutations.
      * <p>
      * Contains fields corresponding to the {@link Offer} entity.
@@ -387,6 +495,18 @@ public class OfferResource implements GraphQLTrait, com.intermarche.valuation.en
          * List of StoreGroup codes (business keys) to be linked to this offer.
          */
         public List<String> storeGroupCodes;
+
+        /**
+         * List of Store codes (business keys) this offer is excluded from (spec-ciblage-saisie §3);
+         * null leaves them unchanged on update, a provided list (even empty) replaces them.
+         */
+        public List<String> excludedStoreCodes;
+
+        /**
+         * List of StoreGroup codes (business keys) this offer is excluded from
+         * (spec-ciblage-saisie §3); null leaves them unchanged on update, a provided list replaces.
+         */
+        public List<String> excludedStoreGroupCodes;
 
         /**
          * Default constructor.

@@ -78,16 +78,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *       ({@code Infinity}/{@code NaN}) in {@code OfferApplier.computeEfficiencyScore} (line 87-89).
  *       Observed: no schema-valid offer can reach it. {@code bundlePrice} carries
  *       {@code exclusiveMinimum:0} and N+M {@code quantityToPay} carries {@code minimum:1} in the
- *       upsell schema, so both zeroing configs are rejected at valuation ({@code Error validating
- *       offer:}). The division is dead code masked by the schemas; the test GRAVES that.</li>
+ *       upsell schema, so both zeroing configs are skipped fail-closed at valuation (200 + {@code
+ *       Skipped configurations: … Error validating offer:} on the SUCCESS trace, A2/H1). The division
+ *       is dead code masked by the schemas; the test GRAVES that.</li>
  *   <li>P2 — "each offer family appears once" is calibrated to "appears": the two immediate-voucher
  *       offers targeting the apple ({@code PROMO_STORE_101} and {@code BRI_APPLES_DISCOUNT}) both fire
  *       on the standard apple line, and both group franco offers ({@code FREE_DELIVERY_THRESHOLD_0101}
  *       and the {@code REGION_NORTH} {@code PROMO_GROUP_NORD}) apply, so a couple of families legitimately
  *       appear more than once. The structural G6 invariants are the real non-regression assertion.</li>
- *   <li>P3 — the wire message at valuation is double-wrapped
- *       ({@code Error building appliers from factory: Error validating offer: …}); the
- *       {@code Error validating offer:} fragment is asserted as a substring.</li>
+ *   <li>P3 — a schema-nonconforming spec that the CSV imports is skipped fail-closed at valuation
+ *       (200 + {@code Skipped configurations: … Error validating offer: …} on the SUCCESS trace, A2/H1);
+ *       the {@code Error validating offer:} fragment is asserted as a substring of the recorded skip.</li>
  *   <li>P5 — {@code MassProductImporterClient} exists but is a standalone {@code main()} bound to the
  *       fixed port {@code 8090}, not a {@code @QuarkusTest} fixture; disabled.</li>
  * </ul>
@@ -319,18 +320,44 @@ class GroupPIT {
     }
 
     /**
-     * Posts a basket expected to fail with a 500 and asserts the FAILED trace carries the literal
-     * fragment; the fragment is a substring match, tolerant of the engine wrapping prefix.
+     * Posts a basket expected to fail and asserts the FAILED trace carries the literal fragment;
+     * the fragment is a substring match, tolerant of the engine wrapping prefix. A referential gap
+     * is answered 422 (commit c59011f), any other runtime failure 500; the caller passes the
+     * expected HTTP status.
      *
      * @param customer         The unique customer code for the probe.
      * @param body             The basket JSON.
      * @param expectedFragment The literal that {@code error_message} must contain.
+     * @param httpStatus       The expected HTTP status (422 for a referential gap, 500 otherwise).
      */
-    private void assertPoison(String customer, String body, String expectedFragment) {
-        valuate(body, 500);
+    private void assertPoison(String customer, String body, String expectedFragment, int httpStatus) {
+        valuate(body, httpStatus);
         TraceView trace = traceFor(customer);
         assertTrue(trace.found, "A FAILED trace must exist for " + customer);
         assertNotNull(trace.errorMessage, "Error message for " + customer);
+        assertTrue(trace.errorMessage.contains(expectedFragment),
+                "Message for " + customer + " must contain <" + expectedFragment + ">, was: "
+                        + trace.errorMessage);
+    }
+
+    /**
+     * Posts a basket whose only faulty configuration is skipped fail-closed (A2, report H1): the
+     * valuation still succeeds with 200 and the skip is recorded on the SUCCESS trace as a
+     * {@code Skipped configurations: ...} message carrying the configuration's validation error
+     * (rapport-remediation-imvaluation.md §"Step 3", A2/H1 — a corrupted spec is skipped and
+     * recorded, not a 500).
+     *
+     * @param customer         The unique customer code for the probe.
+     * @param body             The basket JSON.
+     * @param expectedFragment The literal the recorded skip message must contain.
+     */
+    private void assertFailClosed(String customer, String body, String expectedFragment) {
+        valuate(body, 200);
+        TraceView trace = traceFor(customer);
+        assertTrue(trace.found, "A trace must exist for " + customer);
+        assertNotNull(trace.errorMessage, "The fail-closed skip must be recorded for " + customer);
+        assertTrue(trace.errorMessage.contains("Skipped configurations:"),
+                "Message for " + customer + " must record a fail-closed skip, was: " + trace.errorMessage);
         assertTrue(trace.errorMessage.contains(expectedFragment),
                 "Message for " + customer + " must contain <" + expectedFragment + ">, was: "
                         + trace.errorMessage);
@@ -526,8 +553,10 @@ class GroupPIT {
      * 0. The only offers that could zero the amount are rejected by their schema BEFORE they ever
      * score: a {@code bundlePrice:0.0} bundle fails {@code exclusiveMinimum:0}, and an N+M
      * {@code quantityToPay:0} fails the upsell schema's {@code minimum:1}. Both are valid JSON so they
-     * import, but every valuation of their quarantine store is refused 500 with {@code Error
-     * validating offer:} — proving the division is dead code masked by the schemas.
+     * import; since the A2 fail-closed doctrine (rapport-remediation §"Step 3", H1) each is SKIPPED and
+     * recorded, so every valuation of their quarantine store succeeds 200 with {@code Skipped
+     * configurations: … Error validating offer: …} on the SUCCESS trace — proving the division stays
+     * dead code masked by the schemas, without a configuration-borne denial of service.
      */
     @Test
     void p1_idempotenceAndUnreachableDivisionByZero() {
@@ -538,9 +567,9 @@ class GroupPIT {
             List<String> repeat = signatureOf(valuate(probe, 200).jsonPath());
             assertEquals(reference, repeat, "Repetition " + i + " must yield the identical evaluation");
         }
-        assertPoison("P1-zerobundle", basket("P1-zerobundle", "0105", plain("3300000000007", "1")),
+        assertFailClosed("P1-zerobundle", basket("P1-zerobundle", "0105", plain("3300000000007", "1")),
                 "Error validating offer:");
-        assertPoison("P1-nmzero", basket("P1-nmzero", "0104", plain("3300000000007", "1")),
+        assertFailClosed("P1-nmzero", basket("P1-nmzero", "0104", plain("3300000000007", "1")),
                 "Error validating offer:");
     }
 
@@ -648,9 +677,12 @@ class GroupPIT {
      * <p>
      * VALUATION path: {@code P3_NONCONFORMING} carries the perfectly-parsable but schema-nonconforming
      * spec {@code {"foo":1}}; the CSV import performs NO schema validation so it imports cleanly, yet
-     * the first valuation of its store rebuilds the appliers, runs the networknt schema, and is refused
-     * 500 with the double-wrapped {@code … Error validating offer: …} recorded in the trace. UI form and
-     * CSV therefore diverge: the UI would reject it, the CSV does not.
+     * the first valuation of its store rebuilds the appliers and runs the networknt schema. Since the A2
+     * fail-closed doctrine (rapport-remediation §"Step 3", H1) that {@code ConfigurationException} is
+     * SKIPPED and RECORDED rather than aborting the valuation: the store {@code 0103} valuation succeeds
+     * with 200 and the SUCCESS trace carries {@code Skipped configurations: … Error validating offer: …}.
+     * UI form and CSV therefore still diverge: the UI would reject the spec, the CSV imports it, and the
+     * engine quarantines it per basket without failing the whole valuation.
      */
     @Test
     void p3_specificationFailurePaths() {
@@ -660,7 +692,7 @@ class GroupPIT {
         String reported = persist.getBody().asString();
         assertTrue(reported.contains("Failed to parse specification for Offer P3A_BAD"),
                 "The unparsable spec must be reported at persist, was: " + reported);
-        assertPoison("P3B", basket("P3B", "0103", plain("3300000000007", "1")),
+        assertFailClosed("P3B", basket("P3B", "0103", plain("3300000000007", "1")),
                 "Error validating offer:");
     }
 
@@ -822,7 +854,7 @@ class GroupPIT {
         try {
             DateTimeProvider.setFixedDateTime(LocalDateTime.of(2026, 1, 1, 0, 0));
             assertPoison("P8-past", basket("P8-past", "0101", plain("3300000000001", "1")),
-                    "No active price found");
+                    "No active price found", 422);
             TraceView pastTrace = traceFor("P8-past");
             assertTrue(pastTrace.errorMessage.contains("Checked at date"),
                     "The no-price error must quote the checked date, was: " + pastTrace.errorMessage);

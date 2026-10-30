@@ -110,6 +110,18 @@ public final class MinimumAmountCondition implements TriggerCondition {
     }
 
     /**
+     * Returns the current measured amount of this condition — the same figure {@link #evaluate}
+     * compares to the threshold — so a message advantage can render the amount still missing
+     * (spec-messages-editique §1, {@code {{missingAmount}}}).
+     *
+     * @param evaluation the evaluation context.
+     * @return the measured amount, tax included, never negative.
+     */
+    public BigDecimal measure(BasketEvaluation evaluation) {
+        return scope == Scope.TICKET ? ticketAmount(evaluation) : itemsAmount(evaluation, new ArrayList<>());
+    }
+
+    /**
      * Computes the current ticket amount: every valued offer, net of the retained advantages.
      *
      * @param evaluation the evaluation context.

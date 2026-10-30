@@ -676,4 +676,44 @@ public class OfferResourceTest {
         String expected = "OfferRecord [code=CODE, type=TYPE, specification=SPEC, storeCodes=null, storeGroupCodes=null]";
         assertEquals(expected, record.toString());
     }
+
+    /**
+     * spec-divers-offre §4 (GB-01-06-02): the dates of an already-expired offer can be changed
+     * through {@code updateOffer} — the CRUD forbids nothing, so an operator can reopen or
+     * reschedule a finished promotion. This test locks that behaviour; no development is expected.
+     */
+    @Test
+    @TestSecurity(user = "testAdmin", roles = {"ADMIN"})
+    void testUpdateOffer_ExpiredOfferDatesCanBeChanged() throws GraphQLException {
+        setUp();
+        Offer existing = (Offer) Offer.listAll().get(0);
+        existing.validFrom = java.time.LocalDateTime.of(2020, 1, 1, 0, 0);
+        existing.validTo = java.time.LocalDateTime.of(2020, 12, 31, 23, 59);
+        existing.persist();
+        OfferResource.OfferRecord input = new OfferResource.OfferRecord();
+        input.validFrom = java.time.LocalDateTime.of(2027, 1, 1, 8, 0);
+        input.validTo = java.time.LocalDateTime.of(2027, 12, 31, 20, 0);
+        Offer updated = resource.updateOffer(existing.id, input);
+        assertEquals(java.time.LocalDateTime.of(2027, 1, 1, 8, 0), updated.validFrom);
+        assertEquals(java.time.LocalDateTime.of(2027, 12, 31, 20, 0), updated.validTo);
+    }
+
+    /**
+     * spec-divers-offre §4 (GB-01-06-02): the admin finders are not filtered by validity, so an
+     * expired offer is still listed by {@code allOffers} and reachable by {@code offer(id)} — the
+     * back office sees everything, which is what lets its dates be edited.
+     */
+    @Test
+    @TestSecurity(user = "testAdmin", roles = {"ADMIN", "MANAGER"})
+    void testAllOffers_IncludesExpiredOffer() {
+        setUp();
+        Offer existing = (Offer) Offer.listAll().get(0);
+        existing.validFrom = java.time.LocalDateTime.of(2019, 1, 1, 0, 0);
+        existing.validTo = java.time.LocalDateTime.of(2019, 12, 31, 23, 59);
+        existing.persist();
+        assertTrue(resource.allOffers().stream().anyMatch(o -> o.id.equals(existing.id)),
+                "an expired offer must still be listed to the admin");
+        assertEquals(existing.id, resource.offer(existing.id).id,
+                "an expired offer must still be reachable by id");
+    }
 }

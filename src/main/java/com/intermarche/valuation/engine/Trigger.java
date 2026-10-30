@@ -3,9 +3,13 @@ package com.intermarche.valuation.engine;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -102,6 +106,8 @@ public final class Trigger implements TriggerCondition {
                 return parseMinimumQuantity(condition);
             case "COUPON_CODE":
                 return parseCouponCode(condition);
+            case "TIME_WINDOW":
+                return parseTimeWindow(condition);
             default:
                 throw new IllegalArgumentException("Unknown trigger condition kind '" + kind + "'.");
         }
@@ -163,6 +169,56 @@ public final class Trigger implements TriggerCondition {
             throw new IllegalArgumentException("COUPON_CODE requires a non-blank 'code'.");
         }
         return new CouponCodeCondition(codeNode.asText());
+    }
+
+    /**
+     * Parses a {@code TIME_WINDOW} condition (spec-divers-offre §1), requiring parsable
+     * {@code from}/{@code to} times and, when present, known weekday names.
+     * <p>
+     * {@code days} is optional (absent means every day); {@code from} and {@code to} are local
+     * {@code HH:mm} times bounding the half-open window {@code [from, to)}, and {@code from}
+     * after {@code to} declares a window spanning midnight. The schema enforces the shapes; this
+     * helper turns them into typed values and rejects any residual malformation through the same
+     * {@link IllegalArgumentException} channel.
+     *
+     * @param condition the condition node.
+     * @return the parsed condition.
+     * @throws IllegalArgumentException if a weekday is unknown or a time is missing or malformed.
+     */
+    private static TriggerCondition parseTimeWindow(JsonNode condition) {
+        Set<DayOfWeek> days = new LinkedHashSet<>();
+        JsonNode daysNode = condition.get("days");
+        if (daysNode != null && daysNode.isArray()) {
+            for (JsonNode day : daysNode) {
+                try {
+                    days.add(DayOfWeek.valueOf(day.asText().trim().toUpperCase(Locale.ROOT)));
+                } catch (IllegalArgumentException e) {
+                    throw new IllegalArgumentException("Unknown TIME_WINDOW day '" + day.asText() + "'.");
+                }
+            }
+        }
+        return new TimeWindowCondition(days, requireTime(condition, "from"), requireTime(condition, "to"));
+    }
+
+    /**
+     * Reads a required {@code HH:mm} local time from a condition node.
+     *
+     * @param condition the condition node.
+     * @param field     the field name ({@code from} or {@code to}).
+     * @return the parsed local time.
+     * @throws IllegalArgumentException if the field is missing or not a valid {@code HH:mm} time.
+     */
+    private static LocalTime requireTime(JsonNode condition, String field) {
+        JsonNode node = condition.get(field);
+        if (node == null || !node.isTextual()) {
+            throw new IllegalArgumentException("TIME_WINDOW requires a '" + field + "' time.");
+        }
+        try {
+            return LocalTime.parse(node.asText());
+        } catch (DateTimeParseException e) {
+            throw new IllegalArgumentException("TIME_WINDOW '" + field + "' is not a valid HH:mm time: "
+                    + node.asText());
+        }
     }
 
     /**

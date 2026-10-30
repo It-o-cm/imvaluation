@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -61,7 +62,7 @@ public class PriceResourceTest {
 
         Product product = DomainUtils.createAndPersistProduct("PROD_01", "Product 01", ProductType.UNIT);
         Store store = DomainUtils.createAndPersistStore("STORE_01", 0.0, 0.0);
-        createAndPersistPrice(product, store, PriceUsage.DEFAULT, 1, LocalDateTime.now());
+        createAndPersistPrice(product, store, PriceUsage.DEFAULT, 1, LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS));
     }
 
     /**
@@ -165,7 +166,7 @@ public class PriceResourceTest {
         input.storeId = store.id;
         input.priceUsage = PriceUsage.BASE_FOR_DISCOUNT; // Different usage to avoid conflict
         input.priority = 1;
-        input.startDateTime = LocalDateTime.now();
+        input.startDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
         input.priceExcludingTax = BigDecimal.ONE;
         // A create now resolves the rate to a regime, so the happy path must name a seeded one.
         input.vatRate = new BigDecimal("0.2000");
@@ -192,7 +193,7 @@ public class PriceResourceTest {
         input.storeId = store.id;
         input.priceUsage = PriceUsage.BASE_FOR_DISCOUNT;
         input.priority = 7;
-        input.startDateTime = LocalDateTime.now();
+        input.startDateTime = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS);
         input.priceExcludingTax = BigDecimal.ONE;
         input.vatRate = new BigDecimal("0.1500"); // no regime carries this rate
 
@@ -421,7 +422,7 @@ public class PriceResourceTest {
         Store store = Store.findByCode("STORE_01");
 
         // Create a second price with different keys
-        LocalDateTime futureStart = LocalDateTime.now().plusDays(1);
+        LocalDateTime futureStart = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).plusDays(1);
         createAndPersistPrice(product, store, PriceUsage.DEFAULT, 1, futureStart);
 
         Price target = (Price) Price.listAll().get(0); // The one from setUp (earliest time)
@@ -484,7 +485,7 @@ public class PriceResourceTest {
     void testUpdatePrice_ChangeEndDateTime() throws GraphQLException {
         setUp();
         Price existing = (Price) Price.listAll().get(0);
-        LocalDateTime newEnd = LocalDateTime.now().plusDays(10);
+        LocalDateTime newEnd = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).plusDays(10);
 
         PriceResource.PriceRecord input = new PriceResource.PriceRecord();
         input.endDateTime = newEnd;
@@ -528,7 +529,7 @@ public class PriceResourceTest {
     void testUpdatePrice_ChangeStartDateTime_Success() throws GraphQLException {
         setUp();
         Price existing = (Price) Price.listAll().get(0);
-        LocalDateTime newStart = LocalDateTime.now().plusDays(5);
+        LocalDateTime newStart = LocalDateTime.now().truncatedTo(ChronoUnit.SECONDS).plusDays(5);
 
         PriceResource.PriceRecord input = new PriceResource.PriceRecord();
         input.startDateTime = newStart;

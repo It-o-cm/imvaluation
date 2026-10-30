@@ -1,5 +1,7 @@
 package com.intermarche.valuation.ui;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intermarche.valuation.domain.AppUser;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Store;
@@ -99,6 +101,26 @@ public class OfferUiResource implements EngineTrait {
     OfferSchemaRegistry schemaRegistry;
 
     /**
+     * The signed-in user's perimeter (store scope, allowed offer types), applied to filter the
+     * lists, to restrict the form's type choices and to refuse out-of-scope writes (spec §2).
+     */
+    @Inject
+    com.intermarche.valuation.security.CurrentUser currentUser;
+
+    /**
+     * The localised interface labels, used for the form validation messages shown back to the user
+     * (spec-exploitation §1). Engine/schema validation messages stay in their original English.
+     */
+    @Inject
+    com.intermarche.valuation.i18n.Messages messages;
+
+    /**
+     * The natural-language drafting assistant, powering the AI panel of the form.
+     */
+    @Inject
+    com.intermarche.valuation.ai.OfferDraftService draftService;
+
+    /**
      * Type-safe declarations of the Qute templates used by this resource.
      * <p>
      * Templates live under {@code src/main/resources/templates/OfferUiResource}.
@@ -124,11 +146,12 @@ public class OfferUiResource implements EngineTrait {
          * @param storeCodes      The store codes currently linked, comma separated.
          * @param storeGroupCodes The store group codes currently linked, comma separated.
          * @param error       An error message to display, may be null.
+         * @param aiAvailable Whether the natural-language assistant is configured.
          * @return The template instance to render.
          */
         public static native TemplateInstance form(Offer offer, Set<String> types, String schemasJson,
                                                    String specificationJson, String storeCodes,
-                                                   String storeGroupCodes, String error);
+                                                   String storeGroupCodes, String error, boolean aiAvailable);
     }
 
     // --------------------------------------------------
@@ -146,6 +169,7 @@ public class OfferUiResource implements EngineTrait {
      * @param type   The offer type to filter on, may be null or blank.
      * @param target A store or store group code the offer must target, may be null or blank.
      * @param ean    An EAN the offer must reference, may be null or blank.
+     * @param article An article EAN the offer's resolved targeting must cover, may be null or blank.
      * @param sort   The column driving the sort, defaulting to the offer code.
      * @param dir    The sort direction, either "asc" or "desc".
      * @param page   The requested page number, defaulting to the first one.
@@ -160,6 +184,7 @@ public class OfferUiResource implements EngineTrait {
                                  @QueryParam("type") String type,
                                  @QueryParam("target") String target,
                                  @QueryParam("ean") String ean,
+                                 @QueryParam("article") String article,
                                  @QueryParam("sort") @DefaultValue(SORT_CODE) String sort,
                                  @QueryParam("dir") @DefaultValue("asc") String dir,
                                  @QueryParam("page") @DefaultValue("1") int page,
@@ -170,17 +195,36 @@ public class OfferUiResource implements EngineTrait {
         // An unknown sort key would break the query, so fall back to the default column.
         String sortKey = SORTABLE.contains(sort) ? sort : SORT_CODE;
         boolean descending = "desc".equalsIgnoreCase(dir);
-        PanacheQuery<Offer> query = queryOffers(search, type, target, ean, sortKey, descending)
-                .page(Page.ofSize(PAGE_SIZE));
-        long totalCount = query.count();
-        int pageCount = Math.max(1, query.pageCount());
-        int currentPage = Math.min(Math.max(page, 1), pageCount);
-        List<Offer> offers = query.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
+        List<Offer> offers;
+        long totalCount;
+        int pageCount;
+        int currentPage;
+        if (isSet(article)) {
+            // The article filter (spec-exploitation §4) resolves the offer targeting exactly as the
+            // engine does — targetEans ∪ resolved families − excludedEans — which cannot be expressed
+            // in JPQL, so the matching offers are filtered in memory and paginated here.
+            List<Offer> matching = filterByArticle(
+                    queryOffers(search, type, target, ean, sortKey, descending).list(), article.trim());
+            totalCount = matching.size();
+            pageCount = Math.max(1, (int) Math.ceil(totalCount / (double) PAGE_SIZE));
+            currentPage = Math.min(Math.max(page, 1), pageCount);
+            int start = (currentPage - 1) * PAGE_SIZE;
+            offers = start >= matching.size() ? new ArrayList<>()
+                    : new ArrayList<>(matching.subList(start, Math.min(start + PAGE_SIZE, matching.size())));
+        } else {
+            PanacheQuery<Offer> query = queryOffers(search, type, target, ean, sortKey, descending)
+                    .page(Page.ofSize(PAGE_SIZE));
+            totalCount = query.count();
+            pageCount = Math.max(1, query.pageCount());
+            currentPage = Math.min(Math.max(page, 1), pageCount);
+            offers = query.page(Page.of(currentPage - 1, PAGE_SIZE)).list();
+        }
         Map<String, String> filters = new LinkedHashMap<>();
         filters.put("q", search);
         filters.put("type", type);
         filters.put("target", target);
         filters.put("ean", ean);
+        filters.put("article", article);
         ListView<Offer> view = new ListView<>(offers, BASE_PATH, filters, sortKey, descending,
                 currentPage, pageCount, totalCount, PAGE_SIZE, "offer", notice, noticeOk,
                 securityContext != null && securityContext.isUserInRole(AppUser.ROLE_ADMIN));
@@ -201,6 +245,7 @@ public class OfferUiResource implements EngineTrait {
      * @param type   The offer type to filter on, may be null or blank.
      * @param target A store or store group code the offer must target, may be null or blank.
      * @param ean    An EAN the offer must reference, may be null or blank.
+     * @param article An article EAN the offer's resolved targeting must cover, may be null or blank.
      * @param sort   The column driving the sort, defaulting to the offer code.
      * @param dir    The sort direction, either "asc" or "desc".
      * @return A CSV attachment holding every matching offer.
@@ -212,12 +257,18 @@ public class OfferUiResource implements EngineTrait {
                            @QueryParam("type") String type,
                            @QueryParam("target") String target,
                            @QueryParam("ean") String ean,
+                           @QueryParam("article") String article,
                            @QueryParam("sort") @DefaultValue(SORT_CODE) String sort,
                            @QueryParam("dir") @DefaultValue("asc") String dir) {
         LOGGER.debug("Entering method export");
         String sortKey = SORTABLE.contains(sort) ? sort : SORT_CODE;
         boolean descending = "desc".equalsIgnoreCase(dir);
         List<Offer> offers = queryOffers(search, type, target, ean, sortKey, descending).list();
+        if (isSet(article)) {
+            // Same resolved-targeting filter as the screen (spec-exploitation §4), so the export is
+            // consistent with what the list shows for that article.
+            offers = filterByArticle(offers, article.trim());
+        }
         StringBuilder csv = new StringBuilder("CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\n");
         for (Offer offer : offers) {
             csv.append(sanitize(offer.code)).append('|')
@@ -271,9 +322,9 @@ public class OfferUiResource implements EngineTrait {
         LOGGER.debug("Entering method create");
         Offer offer = new Offer();
         offer.type = type;
-        return Templates.form(offer, schemaRegistry.getKnownTypes(),
+        return Templates.form(offer, allowedTypesForForm(),
                 HtmlSafeJson.forScript(buildSchemasJson()),
-                HtmlSafeJson.forScript(offer.specification), "", "", null);
+                HtmlSafeJson.forScript(offer.specification), "", "", null, draftService.isAvailable());
     }
 
     /**
@@ -291,16 +342,17 @@ public class OfferUiResource implements EngineTrait {
         Offer offer = Offer.findById(id);
         if (offer == null) {
             LOGGER.error("Offer with id " + id + " not found");
-            return Response.status(Response.Status.NOT_FOUND).entity("Offer " + id + " not found").build();
+            return Response.status(Response.Status.NOT_FOUND).entity(messages.format("offers.error.notFound", id)).build();
         }
         TemplateInstance template = Templates.form(
                 offer,
-                schemaRegistry.getKnownTypes(),
+                allowedTypesForForm(),
                 HtmlSafeJson.forScript(buildSchemasJson()),
                 HtmlSafeJson.forScript(offer.specification),
                 joinStoreCodes(offer),
                 joinStoreGroupCodes(offer),
-                null);
+                null,
+                draftService.isAvailable());
         return Response.ok(template).build();
     }
 
@@ -381,7 +433,7 @@ public class OfferUiResource implements EngineTrait {
         Offer offer = Offer.findById(id);
         if (offer == null) {
             LOGGER.error("Offer with id " + id + " not found");
-            return Response.status(Response.Status.NOT_FOUND).entity("Offer " + id + " not found").build();
+            return Response.status(Response.Status.NOT_FOUND).entity(messages.format("offers.error.notFound", id)).build();
         }
         String error = applyForm(offer, type, specification, storeCodes, storeGroupCodes, false);
         if (error == null) {
@@ -411,10 +463,113 @@ public class OfferUiResource implements EngineTrait {
         if (!deleted) {
             // Align with edit/update: a missing offer is a 404, never a silent redirect.
             LOGGER.error("Offer with id " + id + " not found");
-            return Response.status(Response.Status.NOT_FOUND).entity("Offer " + id + " not found").build();
+            return Response.status(Response.Status.NOT_FOUND).entity(messages.format("offers.error.notFound", id)).build();
         }
         LOGGER.debug("Exiting method delete. Result: " + deleted);
         return redirectToList();
+    }
+
+    // --------------------------------------------------
+    // Natural-language drafting
+    // --------------------------------------------------
+
+    /**
+     * Request body of {@link #aiDraft(AiDraftRequest)}: the plain-language description of
+     * the offer or advantage to draft.
+     * <p>
+     * Fields are read by Jackson; the record stays public for the resource method signature.
+     *
+     * @param prompt The natural-language description, one to a few sentences.
+     */
+    public record AiDraftRequest(String prompt) {
+    }
+
+    /**
+     * Turns a plain-language description into a draft offer specification, or a declaration
+     * of impossibility with the reason and possibly a close alternative.
+     * <p>
+     * The answer is always a 200 carrying one of the three statuses of
+     * {@link com.intermarche.valuation.ai.OfferDraftResult}: the panel is a UI call, and
+     * the browser renders the outcome rather than branching on a status code. A draft is
+     * never persisted here — it pre-fills the form and the administrator reviews it before
+     * saving, exactly like a hand-written specification.
+     *
+     * @param request The description to draft from, may be null.
+     * @return The draft outcome, never null.
+     */
+    @RolesAllowed(AppUser.ROLE_ADMIN)
+    @POST
+    @jakarta.ws.rs.Path("/ai-draft")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public com.intermarche.valuation.ai.OfferDraftResult aiDraft(AiDraftRequest request) {
+        LOGGER.debug("Entering method aiDraft");
+        try {
+            return draftService.draft(request == null ? null : request.prompt());
+        } catch (Exception e) {
+            // The service already narrows its failures; this catch is the last-resort net
+            // so the panel always gets a renderable JSON answer.
+            LOGGER.error("The AI draft endpoint failed unexpectedly", e);
+            return com.intermarche.valuation.ai.OfferDraftResult.error(
+                    messages.get("offers.ai.error.unexpected"));
+        }
+    }
+
+    /**
+     * The coverage preview of a free-form targeting condition (spec-ciblage-where §5): the
+     * exact number of products the fragment covers and a capped sample of them, so the
+     * administrator sees what an empty "Eligible products" field really targets — and a
+     * condition that matches nothing says so before the offer is saved. Read-only, hence a
+     * GET; a fragment that fails the grammar comes back as an error payload, never a 500.
+     *
+     * @param where The condition text, may be null or blank.
+     * @return The count, the sample and the outcome, never null.
+     */
+    @RolesAllowed(AppUser.ROLE_ADMIN)
+    @GET
+    @jakarta.ws.rs.Path("/where-preview")
+    @Produces(MediaType.APPLICATION_JSON)
+    public WherePreview wherePreview(@QueryParam("where") String where) {
+        LOGGER.debug("Entering method wherePreview");
+        if (where == null || where.isBlank()) {
+            return WherePreview.error(messages.get("offers.ai.error.empty"));
+        }
+        try {
+            long count = com.intermarche.valuation.engine.TargetWhere.countOf(where);
+            java.util.List<java.util.Map<String, String>> products = new java.util.ArrayList<>();
+            for (com.intermarche.valuation.domain.Product product
+                    : com.intermarche.valuation.engine.TargetWhere.sampleOf(where, 20)) {
+                java.util.Map<String, String> entry = new java.util.LinkedHashMap<>();
+                entry.put("ean", product.ean);
+                entry.put("name", product.name == null ? "" : product.name);
+                products.add(entry);
+            }
+            return new WherePreview(count, products, null);
+        } catch (IllegalArgumentException e) {
+            return WherePreview.error(e.getMessage());
+        }
+    }
+
+    /**
+     * The coverage preview payload: the exact count, a capped product sample and an error
+     * message when the fragment failed the grammar. A record, serialized by Jackson.
+     *
+     * @param count    The number of products the condition covers, 0 when error.
+     * @param products  The sample of covered products, empty when error.
+     * @param error     The grammar refusal message, null on success.
+     */
+    public record WherePreview(long count, java.util.List<java.util.Map<String, String>> products,
+                               String error) {
+
+        /**
+         * Builds a refusal payload.
+         *
+         * @param message Why the fragment was refused.
+         * @return The preview carrying the error.
+         */
+        static WherePreview error(String message) {
+            return new WherePreview(0, java.util.List.of(), message);
+        }
     }
 
     // --------------------------------------------------
@@ -462,6 +617,16 @@ public class OfferUiResource implements EngineTrait {
         if (isSet(ean)) {
             append(where, "exists (select 1 from o.eans e where e like ?" + (params.size() + 1) + ")");
             params.add(ean.trim() + "%");
+        }
+        // Perimeter (spec §2): a store-scoped user only sees offers whose targeting intersects the
+        // scope. The same EXISTS shape as the target filter, with an IN over the scope codes. This
+        // is the server-side truth; the IHM filter is only a convenience.
+        Set<String> scope = currentUser == null ? Set.of() : currentUser.getStoreScopeSet();
+        if (!scope.isEmpty()) {
+            int index = params.size() + 1;
+            append(where, "(exists (select 1 from o.stores s where s.code in ?" + index + ")"
+                    + " or exists (select 1 from o.storeGroups g where g.code in ?" + index + "))");
+            params.add(scope);
         }
         if (where.length() > 0) {
             jpql.append(" where ").append(where);
@@ -513,6 +678,52 @@ public class OfferUiResource implements EngineTrait {
     }
 
     /**
+     * The JSON mapper used to parse offer specifications for the article filter.
+     */
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    /**
+     * Keeps the offers whose targeting covers a given article (spec-exploitation §4).
+     *
+     * @param offers  the candidate offers.
+     * @param article the article EAN to match.
+     * @return the offers whose resolved targeting contains the article, in the input order.
+     */
+    private List<Offer> filterByArticle(List<Offer> offers, String article) {
+        List<Offer> matching = new ArrayList<>();
+        for (Offer offer : offers) {
+            if (offerCoversArticle(offer, article)) {
+                matching.add(offer);
+            }
+        }
+        return matching;
+    }
+
+    /**
+     * Tells whether an offer's targeting covers an article, resolving it exactly as the engine does
+     * through the shared {@link EngineTrait#resolveTargetEans(JsonNode, String)} helper: the union of
+     * {@code targetEans} and the resolved {@code targetFamilyCodes} sub-trees, minus
+     * {@code excludedEans}. An offer that targets no EAN (no {@code targetEans}/{@code targetFamilyCodes})
+     * covers nothing, and an offer whose specification cannot be parsed or whose family is unknown does
+     * not match rather than breaking the whole listing.
+     *
+     * @param offer   the offer to test.
+     * @param article the article EAN.
+     * @return {@code true} when the offer's resolved targeting contains the article.
+     */
+    private boolean offerCoversArticle(Offer offer, String article) {
+        if (offer.specification == null || offer.specification.isBlank()) {
+            return false;
+        }
+        try {
+            JsonNode spec = MAPPER.readTree(offer.specification);
+            return resolveTargetEans(spec, offer.code).contains(article);
+        } catch (RuntimeException | com.fasterxml.jackson.core.JsonProcessingException e) {
+            return false;
+        }
+    }
+
+    /**
      * Applies the submitted form values to an offer after validating them.
      * <p>
      * Validation covers the mandatory fields, the uniqueness of the code on creation,
@@ -544,10 +755,10 @@ public class OfferUiResource implements EngineTrait {
             offer.validFrom = parseFormDateTime(validFrom);
             offer.validTo = parseFormDateTime(validTo);
         } catch (java.time.format.DateTimeParseException e) {
-            return "Invalid validity date: " + e.getParsedString();
+            return messages.format("offers.error.invalidDate", e.getParsedString());
         }
         if (offer.validFrom != null && offer.validTo != null && !offer.validFrom.isBefore(offer.validTo)) {
-            return "The validity window is inverted: the start must precede the end.";
+            return messages.get("offers.error.windowInverted");
         }
         return null;
     }
@@ -584,18 +795,18 @@ public class OfferUiResource implements EngineTrait {
     private String applyForm(Offer offer, String type, String specification,
                              String storeCodes, String storeGroupCodes, boolean isNew) {
         if (offer.code == null || offer.code.isBlank()) {
-            return "The offer code is mandatory.";
+            return messages.get("offers.error.codeMandatory");
         }
         if (type == null || type.isBlank()) {
-            return "The offer type is mandatory.";
+            return messages.get("offers.error.typeMandatory");
         }
         if (isNew && Offer.count("code", offer.code) > 0) {
-            return "An offer with code '" + offer.code + "' already exists.";
+            return messages.format("offers.error.codeExists", offer.code);
         }
         List<String> requestedStores = splitCsv(storeCodes);
         List<String> requestedGroups = splitCsv(storeGroupCodes);
         if (requestedStores.isEmpty() && requestedGroups.isEmpty()) {
-            return "The offer must target at least one store or one store group.";
+            return messages.get("offers.error.targetRequired");
         }
         String schema = schemaRegistry.getSchema(type);
         if (schema != null) {
@@ -612,6 +823,17 @@ public class OfferUiResource implements EngineTrait {
         } catch (IllegalArgumentException e) {
             return e.getMessage();
         }
+        // Perimeter (spec §2): the type must be allowed and the whole resulting targeting within
+        // the user's store scope. Server-side truth, mirroring the GraphQL enforcement. A null
+        // currentUser only occurs off-server (plain-unit): treated as unrestricted.
+        if (currentUser != null && !currentUser.isOfferTypeAllowed(type)) {
+            return messages.format("offers.error.typeNotAllowed", type);
+        }
+        Set<String> targetCodes = new HashSet<>(requestedStores);
+        targetCodes.addAll(requestedGroups);
+        if (currentUser != null && !currentUser.isStoreTargetingWithinScope(targetCodes)) {
+            return messages.get("offers.error.targetingOutsideScope");
+        }
         offer.type = type;
         offer.specification = specification;
         offer.stores.clear();
@@ -619,6 +841,26 @@ public class OfferUiResource implements EngineTrait {
         offer.storeGroups.clear();
         offer.storeGroups.addAll(groups);
         return null;
+    }
+
+    /**
+     * Returns the offer types the current user may pick in the form: every registered type, narrowed
+     * to the user's {@code allowedOfferTypes} when set (spec §2). An unrestricted user sees them all.
+     *
+     * @return the selectable offer types, in a stable order.
+     */
+    private Set<String> allowedTypesForForm() {
+        Set<String> known = schemaRegistry.getKnownTypes();
+        com.intermarche.valuation.domain.AppUser user = currentUser == null ? null : currentUser.currentAppUser();
+        if (user == null) {
+            return known;
+        }
+        Set<String> allowed = user.getAllowedOfferTypeSet();
+        if (allowed.isEmpty()) {
+            return known;
+        }
+        return known.stream().filter(allowed::contains)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
     }
 
     /**
@@ -630,7 +872,7 @@ public class OfferUiResource implements EngineTrait {
      */
     private String validateSpecification(String schema, String specification) {
         if (specification == null || specification.isBlank()) {
-            return "The offer specification is mandatory.";
+            return messages.get("offers.error.specMandatory");
         }
         try {
             this.processSpecification(schema, specification, (node) -> {
@@ -658,7 +900,7 @@ public class OfferUiResource implements EngineTrait {
         if (stores.size() != codes.size()) {
             Set<String> found = stores.stream().map(s -> s.code).collect(Collectors.toSet());
             List<String> missing = codes.stream().filter(c -> !found.contains(c)).toList();
-            throw new IllegalArgumentException("Unknown store codes: " + String.join(", ", missing));
+            throw new IllegalArgumentException(messages.format("offers.error.unknownStores", String.join(", ", missing)));
         }
         return new HashSet<>(stores);
     }
@@ -678,7 +920,7 @@ public class OfferUiResource implements EngineTrait {
         if (groups.size() != codes.size()) {
             Set<String> found = groups.stream().map(g -> g.code).collect(Collectors.toSet());
             List<String> missing = codes.stream().filter(c -> !found.contains(c)).toList();
-            throw new IllegalArgumentException("Unknown store group codes: " + String.join(", ", missing));
+            throw new IllegalArgumentException(messages.format("offers.error.unknownStoreGroups", String.join(", ", missing)));
         }
         return new HashSet<>(groups);
     }
@@ -695,12 +937,13 @@ public class OfferUiResource implements EngineTrait {
     private Response renderFormWithError(Offer offer, String storeCodes, String storeGroupCodes, String error) {
         TemplateInstance template = Templates.form(
                 offer,
-                schemaRegistry.getKnownTypes(),
+                allowedTypesForForm(),
                 HtmlSafeJson.forScript(buildSchemasJson()),
                 HtmlSafeJson.forScript(offer.specification),
                 storeCodes == null ? "" : storeCodes,
                 storeGroupCodes == null ? "" : storeGroupCodes,
-                error);
+                error,
+                draftService.isAvailable());
         return Response.ok(template).build();
     }
 

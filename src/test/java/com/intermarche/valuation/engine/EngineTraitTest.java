@@ -319,4 +319,234 @@ public class EngineTraitTest {
         assertEquals("Consumer logic failed", ex.getMessage());
     }
 
+    // --------------------------------------------------
+    // Free-form targeting (spec-ciblage-where)
+    // --------------------------------------------------
+
+    /**
+     * A factory schema carrying {@code targetEans} with it required: the shared-fragment
+     * injection adds {@code targetWhere} and drops the requirement, so a where-only offer
+     * validates.
+     */
+    @Test
+    void targetWhereIsInjectedAndFreesTheRequiredEans() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": { "targetEans": { "type": "array", "items": { "type": "string" } } },
+                  "required": ["targetEans"] }""";
+        String json = "{ \"targetWhere\": \"brand = 'X'\" }";
+        List<JsonNode> consumed = new ArrayList<>();
+        trait.processSpecification(schema, json, consumed::add);
+        assertEquals(1, consumed.size());
+    }
+
+    /**
+     * A schema that does not target EANs receives no {@code targetWhere}: the strict factory
+     * schema refuses the property, so a free-form targeting on a non-targeting type can
+     * never be silently ignored.
+     */
+    @Test
+    void targetWhereIsNotInjectedWithoutTargetEans() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": { "label": { "type": "string" } },
+                  "required": ["label"] }""";
+        String json = "{ \"label\": \"x\", \"targetWhere\": \"brand = 'X'\" }";
+        assertThrows(IllegalArgumentException.class,
+                () -> trait.processSpecification(schema, json, node -> {
+                }));
+    }
+
+    /**
+     * The free-form targeting is exclusive of the enumerated EAN targeting.
+     */
+    @Test
+    void targetWhereCannotBeCombinedWithTargetEans() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": {
+                    "targetEans": { "type": "array", "items": { "type": "string" } },
+                    "targetWhere": { "type": "string" } } }""";
+        String json = "{ \"targetEans\": [\"1\"], \"targetWhere\": \"brand = 'X'\" }";
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> trait.processSpecification(schema, json, node -> {
+                }));
+        assertEquals("Error validating offer: targetWhere cannot be combined with "
+                + "targetEans or targetFamilyCodes.", error.getMessage());
+    }
+
+    /**
+     * The free-form targeting is exclusive of the family targeting too.
+     */
+    @Test
+    void targetWhereCannotBeCombinedWithTargetFamilyCodes() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": {
+                    "targetFamilyCodes": { "type": "array", "items": { "type": "string" } },
+                    "targetWhere": { "type": "string" } } }""";
+        String json = "{ \"targetFamilyCodes\": [\"LAIT\"], \"targetWhere\": \"brand = 'X'\" }";
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> trait.processSpecification(schema, json, node -> {
+                }));
+        assertEquals("Error validating offer: targetWhere cannot be combined with "
+                + "targetEans or targetFamilyCodes.", error.getMessage());
+    }
+
+    /**
+     * An invalid fragment is refused at the door, with the grammar's own message.
+     */
+    @Test
+    void targetWhereIsParsedAtValidationTime() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": {
+                    "targetEans": { "type": "array", "items": { "type": "string" } },
+                    "targetWhere": { "type": "string" } } }""";
+        String json = "{ \"targetWhere\": \"colour = 'red'\" }";
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> trait.processSpecification(schema, json, node -> {
+                }));
+        assertEquals("Error validating offer: Unknown field 'colour' at position 0 in the "
+                + "targeting condition. Allowed fields: ean, name, brand, productType, "
+                + "egalimRegime, referenceWeight, referenceVolume.", error.getMessage());
+    }
+
+    /**
+     * A blank free-form targeting is a no-op, not an exclusivity violation.
+     */
+    @Test
+    void aBlankTargetWhereIsANoOp() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": {
+                    "targetEans": { "type": "array", "items": { "type": "string" } },
+                    "targetWhere": { "type": "string" } } }""";
+        String json = "{ \"targetEans\": [\"1\"], \"targetWhere\": \"   \" }";
+        List<JsonNode> consumed = new ArrayList<>();
+        trait.processSpecification(schema, json, consumed::add);
+        assertEquals(1, consumed.size());
+    }
+
+    /**
+     * A scope ITEMS specification without any targeting would apply to nothing, silently —
+     * the very draft an assistant can produce when it drops the product clause. The cross
+     * rule refuses it.
+     */
+    @Test
+    void aScopeItemsSpecificationRequiresATargeting() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": {
+                    "scope": { "type": "string" },
+                    "targetEans": { "type": "array", "items": { "type": "string" } },
+                    "targetWhere": { "type": "string" } } }""";
+        String json = "{ \"scope\": \"ITEMS\" }";
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> trait.processSpecification(schema, json, node -> {
+                }));
+        assertEquals("Error validating offer: a scope ITEMS specification requires a product "
+                + "targeting: targetEans, targetFamilyCodes or targetWhere.", error.getMessage());
+    }
+
+    /**
+     * A scope ITEMS specification carrying any of the three targeting forms validates; the
+     * enumerated form is exercised here, the free-form one by
+     * {@link #targetWhereIsInjectedAndFreesTheRequiredEans}.
+     */
+    @Test
+    void aScopeItemsSpecificationWithTargetEansValidates() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": {
+                    "scope": { "type": "string" },
+                    "targetEans": { "type": "array", "items": { "type": "string" } },
+                    "targetWhere": { "type": "string" } } }""";
+        String json = "{ \"scope\": \"ITEMS\", \"targetEans\": [\"1\"] }";
+        List<JsonNode> consumed = new ArrayList<>();
+        trait.processSpecification(schema, json, consumed::add);
+        assertEquals(1, consumed.size());
+    }
+
+    /**
+     * A scope TICKET specification cannot carry a product targeting — the whole ticket is
+     * the target — whichever form the targeting takes.
+     */
+    @Test
+    void aScopeTicketSpecificationCannotCarryATargeting() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": {
+                    "scope": { "type": "string" },
+                    "targetEans": { "type": "array", "items": { "type": "string" } },
+                    "targetWhere": { "type": "string" } } }""";
+        IllegalArgumentException eans = assertThrows(IllegalArgumentException.class,
+                () -> trait.processSpecification(schema,
+                        "{ \"scope\": \"TICKET\", \"targetEans\": [\"1\"] }", node -> {
+                        }));
+        assertEquals("Error validating offer: a scope TICKET specification cannot carry a "
+                + "product targeting.", eans.getMessage());
+        IllegalArgumentException where = assertThrows(IllegalArgumentException.class,
+                () -> trait.processSpecification(schema,
+                        "{ \"scope\": \"TICKET\", \"targetWhere\": \"brand = 'X'\" }", node -> {
+                        }));
+        assertEquals("Error validating offer: a scope TICKET specification cannot carry a "
+                + "product targeting.", where.getMessage());
+    }
+
+    /**
+     * A scope TICKET specification alone, and one whose free-form condition is blank, both
+     * validate — a blank condition is no targeting at all.
+     */
+    @Test
+    void aScopeTicketSpecificationAloneValidates() {
+        EngineTrait trait = createTrait();
+        String schema = """
+                { "type": "object", "additionalProperties": false,
+                  "properties": {
+                    "scope": { "type": "string" },
+                    "targetEans": { "type": "array", "items": { "type": "string" } },
+                    "targetWhere": { "type": "string" } } }""";
+        List<JsonNode> consumed = new ArrayList<>();
+        trait.processSpecification(schema, "{ \"scope\": \"TICKET\" }", consumed::add);
+        trait.processSpecification(schema, "{ \"scope\": \"TICKET\", \"targetWhere\": \"   \" }",
+                consumed::add);
+        assertEquals(2, consumed.size());
+    }
+
+    /**
+     * The free-form targeting resolves through one parameterized query whose text carries
+     * only the whitelisted path, and the EAN exclusion still subtracts from its plate.
+     * <p>
+     * {@code Product.list} is a static inherited from {@code PanacheEntityBase}, so the
+     * interceptor is opened on the base class for the duration of the resolution.
+     */
+    @Test
+    void resolveTargetEansResolvesTheFragmentThroughAParameterizedQuery() throws Exception {
+        EngineTrait trait = createTrait();
+        Product product = new Product();
+        product.ean = "123";
+        Product excluded = new Product();
+        excluded.ean = "789";
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode spec = mapper.readTree(
+                "{ \"targetWhere\": \"brand = 'X'\", \"excludedEans\": [\"789\"] }");
+        try (MockedStatic<io.quarkus.hibernate.orm.panache.PanacheEntityBase> mockedBase =
+                     mockStatic(io.quarkus.hibernate.orm.panache.PanacheEntityBase.class)) {
+            mockedBase.when(() -> io.quarkus.hibernate.orm.panache.PanacheEntityBase.list(
+                            "select p from Product p where p.brand = ?1", "X"))
+                    .thenReturn(List.of(product, excluded));
+            Set<String> plate = trait.resolveTargetEans(spec, "OFFER_1");
+            assertEquals(Set.of("123"), plate);
+        }
+    }
 }

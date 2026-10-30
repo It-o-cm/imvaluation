@@ -45,6 +45,10 @@ const SCHEMAS = {
       active: { type: 'boolean' },
       mode: { enum: ['A', 'B'] },
       tags: { oneOf: [{ const: 'x' }] },
+      targetEans: { type: 'array', items: { type: 'string' } },
+      targetFamilyCodes: { type: 'array', items: { type: 'string' } },
+      excludedEans: { type: 'array', items: { type: 'string' } },
+      targetWhere: { type: 'string' },
       tiers: { type: 'array', items: { type: 'object', properties: { qty: { type: 'integer' } } }, 'x-item-label': 'tier' },
       block: { type: 'object', properties: { note: { type: 'string' } } },
       vignettes: { type: 'object' },
@@ -104,6 +108,10 @@ function buildForm(schemasObj, specObj) {
   jsonEditor.appendChild(rawTa);
   const hidden = mk('input', { type: 'hidden', id: 'specification', name: 'specification' });
   const errors = mk('div', { id: 'spec-errors', class: 'is-hidden' });
+  const storeHost = mk('div', { 'data-widget': 'store-code', 'data-name': 'storeCodes', 'data-value': '' });
+  const groupHost = mk('div', { 'data-widget': 'store-group-code', 'data-name': 'storeGroupCodes', 'data-value': '' });
+  form.appendChild(storeHost);
+  form.appendChild(groupHost);
   form.appendChild(select);
   form.appendChild(modeSwitch);
   form.appendChild(schemaForm);
@@ -113,7 +121,7 @@ function buildForm(schemasObj, specObj) {
   document.body.appendChild(schemasScript);
   document.body.appendChild(specScript);
   document.body.appendChild(form);
-  els = { schemasScript, specScript, form, select, bForm, bJson, schemaForm, jsonEditor, rawTa, hidden, errors };
+  els = { schemasScript, specScript, form, select, bForm, bJson, schemaForm, jsonEditor, rawTa, hidden, errors, storeHost, groupHost };
 }
 
 /**
@@ -1033,10 +1041,16 @@ describe('switchMode', () => {
 
 describe('initTargetWidgets', () => {
   /**
-   * Removes any target-widget hosts added by a previous case.
+   * Removes any target-widget hosts added by a previous case of this block — the body-level
+   * ones these tests create; the boot form's own hosts stay, the later apply-draft cases
+   * rely on them.
    */
   afterEach(() => {
-    document.querySelectorAll('[data-widget]').forEach((n) => n.remove());
+    document.querySelectorAll('[data-widget]').forEach((n) => {
+      if (n.parentElement === document.body) {
+        n.remove();
+      }
+    });
   });
   /**
    * Each host gets an autocomplete and a hidden input seeded from its comma list.
@@ -1091,3 +1105,461 @@ describe('init boot dispatcher', () => {
     }
   });
 });
+
+describe('parseEanList — client-side EAN file import (spec-ciblage-saisie §4)', () => {
+  /**
+   * A multi-line file fills the list and drops duplicates, keeping declaration order.
+   */
+  it('parses lines and de-duplicates in order', () => {
+    expect(view.parseEanList('3300000000001\n3300000000002\n3300000000001\n'))
+      .toEqual(['3300000000001', '3300000000002']);
+  });
+
+  /**
+   * A leading UTF-8 BOM is stripped from the first value.
+   */
+  it('strips a leading UTF-8 BOM', () => {
+    expect(view.parseEanList('\uFEFF3300000000001\n')).toEqual(['3300000000001']);
+  });
+
+  /**
+   * Blank lines are ignored and surrounding whitespace is trimmed.
+   */
+  it('ignores blank lines and trims whitespace', () => {
+    expect(view.parseEanList('3300000000001\n\n   \n  3300000000002  \n'))
+      .toEqual(['3300000000001', '3300000000002']);
+  });
+
+  /**
+   * A one-column CSV keeps only the first field of each row.
+   */
+  it('keeps the first field of a delimited row', () => {
+    expect(view.parseEanList('3300000000001,label\n3300000000002;x\n'))
+      .toEqual(['3300000000001', '3300000000002']);
+  });
+
+  /**
+   * A file carrying a NUL byte is treated as binary and refused (null), never partially parsed.
+   */
+  it('refuses a binary file with a NUL byte', () => {
+    expect(view.parseEanList('3300000000001\u0000binary')).toBeNull();
+  });
+
+  /**
+   * A null input is refused as well.
+   */
+  it('refuses a null input', () => {
+    expect(view.parseEanList(null)).toBeNull();
+  });
+
+  /**
+   * An empty or whitespace-only file yields an empty list, not null.
+   */
+  it('returns an empty list for an empty file', () => {
+    expect(view.parseEanList('\n  \n')).toEqual([]);
+  });
+});
+
+describe('offer-spec:apply listener', () => {
+  /**
+   * A validated type and specification land in the editor without a reload: the type
+   * select moves, the generated form rebuilds, and the hidden input carries the values
+   * the fields read back.
+   */
+  it('applies a known type and its specification', () => {
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'MINI', specification: { title: 'Drafted' } },
+    }));
+    expect(els.select.value).toBe('MINI');
+    expect(els.hidden.value).toBe(JSON.stringify({ title: 'Drafted' }, null, 2));
+  });
+
+  /**
+   * A type with no schema, or an absent type, is ignored: the editor keeps its current
+   * type and values, so a caller can never force the form onto a schema-less value.
+   */
+  it('ignores an unknown or absent type', () => {
+    els.select.value = 'RICH';
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'NOPE', specification: { title: 'X' } },
+    }));
+    expect(els.select.value).toBe('RICH');
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { specification: { title: 'X' } },
+    }));
+    expect(els.select.value).toBe('RICH');
+    // An event carrying no detail at all collapses to the empty detail.
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply'));
+    expect(els.select.value).toBe('RICH');
+  });
+
+  /**
+   * A specification absent from the detail collapses to the empty object.
+   */
+  it('applies an empty specification when none is carried', () => {
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'MINI' },
+    }));
+    expect(els.select.value).toBe('MINI');
+    expect(els.hidden.value).toBe(JSON.stringify({}, null, 2));
+  });
+
+  /**
+   * While the JSON mode is active the draft is written into the raw editor instead, and
+   * the hidden input mirrors it.
+   */
+  it('fills the raw editor when the JSON mode is active', () => {
+    els.bJson.click();
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'MINI', specification: { title: 'Raw' } },
+    }));
+    expect(els.rawTa.value).toBe(JSON.stringify({ title: 'Raw' }, null, 2));
+    expect(els.hidden.value).toBe(JSON.stringify({ title: 'Raw' }, null, 2));
+    els.bForm.click();
+  });
+});
+
+describe('offer-targets:apply listener', () => {
+  /**
+   * A draft's store targeting lands in the pickers, chips and hidden inputs included.
+   */
+  it('applies a suggested store group to the pickers', () => {
+    document.dispatchEvent(new window.CustomEvent('offer-targets:apply', {
+      detail: { storeGroupCodes: ['IDF'] },
+    }));
+    const hidden = document.querySelector("input[name='storeGroupCodes']");
+    expect(hidden.value).toBe('IDF');
+    expect(els.groupHost.getAttribute('data-value')).toBe('IDF');
+  });
+
+  /**
+   * The suggestion merges into the codes already picked instead of overwriting them.
+   */
+  it('merges a suggestion into the existing targeting', () => {
+    els.storeHost.setAttribute('data-value', '0101');
+    document.dispatchEvent(new window.CustomEvent('offer-targets:apply', {
+      detail: { storeCodes: ['0101', '0102'] },
+    }));
+    expect(document.querySelector("input[name='storeCodes']").value).toBe('0101,0102');
+  });
+
+  /**
+   * A host or a list that is absent is skipped: the dispatch never throws, and the other
+   * side still applies.
+   */
+  it('skips an absent side without touching the other', () => {
+    els.groupHost.remove();
+    els.storeHost.setAttribute('data-value', '');
+    expect(() => document.dispatchEvent(new window.CustomEvent('offer-targets:apply', {
+      detail: { storeCodes: ['0103'] },
+    }))).not.toThrow();
+    expect(document.querySelector("input[name='storeCodes']").value).toBe('0103');
+  });
+});
+
+describe('local $ref resolution', () => {
+  /**
+   * A factory schema declaring its nested object through a #/definitions reference: the
+   * field builder must see the resolved object — the award rendered as nested fields with
+   * its values filled — not a bare $ref node that falls back to a text input showing the
+   * dreaded "[object Object]".
+   */
+  it('renders a $ref field as the resolved object with its values', async () => {
+    // The fresh module binds its own DOM; the boot module keeps its references to the
+    // original nodes, which must be reattached afterwards or every later block writes
+    // into a detached tree.
+    const originalForm = els.form;
+    const originalSchemasScript = els.schemasScript;
+    const originalSpecScript = els.specScript;
+    document.body.innerHTML = '';
+    document.body.innerHTML =
+      '<script id="offer-schemas" type="application/json">'
+      + JSON.stringify({
+        TIERED: {
+          type: 'object',
+          required: ['tiers'],
+          properties: {
+            tiers: {
+              type: 'array',
+              'x-item-label': 'tier',
+              items: {
+                type: 'object',
+                required: ['threshold', 'award'],
+                properties: {
+                  threshold: { type: 'number' },
+                  award: { $ref: '#/definitions/award' },
+                },
+              },
+            },
+          },
+          definitions: {
+            award: {
+              type: 'object',
+              required: ['type', 'value'],
+              properties: {
+                type: { enum: ['PERCENTAGE'] },
+                value: { type: 'number' },
+              },
+            },
+          },
+        },
+      })
+      + '</script>'
+      + '<script id="offer-specification" type="application/json">'
+      + '{"tiers":[{"threshold":0,"award":{"type":"PERCENTAGE","value":20}}]}'
+      + '</script>'
+      + '<form id="offer-form">'
+      + '<select id="offer-type"><option value="TIERED" selected>TIERED</option></select>'
+      + '<div id="schema-form"></div>'
+      + '<div id="json-editor" class="is-hidden"><textarea id="specification-raw"></textarea></div>'
+      + '<input type="hidden" id="specification" name="specification">'
+      + '<div id="spec-errors" class="is-hidden"></div>'
+      + '<div class="mode-switch"><button type="button" data-mode="form" class="is-active">F</button>'
+      + '<button type="button" data-mode="json">J</button></div>'
+      + '</form>';
+    globalThis.fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) }));
+    const fresh = await loadScript(PATH, { bust: 'deref-refs' });
+    expect(document.getElementById('specification').value).toContain('"value": 20');
+    expect(document.getElementById('schema-form').innerHTML).not.toContain('[object Object]');
+    // The resolved award renders as a nested enum + number, filled from the specification.
+    const nested = document.querySelectorAll('#schema-form select, #schema-form input');
+    expect(nested.length).toBeGreaterThan(1);
+    expect(fresh).toBeTruthy();
+    // Reattach the boot form — not a rebuild: the main module's element references point
+    // at these very nodes — and force a re-render on them.
+    document.body.innerHTML = '';
+    document.body.appendChild(originalSchemasScript);
+    document.body.appendChild(originalSpecScript);
+    document.body.appendChild(originalForm);
+    document.querySelectorAll('.mode-switch [data-mode="form"]')[0].click();
+  });
+
+  /**
+   * An unresolvable reference stays as-is and a self-referencing definition does not loop:
+   * the resolver guards both.
+   */
+  it('keeps an unknown reference and guards cycles', () => {
+    const unknown = view.dereference({ $ref: '#/definitions/nope' }, { definitions: {} }, []);
+    expect(unknown).toEqual({ $ref: '#/definitions/nope' });
+    const cyclic = {
+      definitions: { loop: { properties: { self: { $ref: '#/definitions/loop' } } } },
+    };
+    // The self-reference resolves once, then the guard stops the recursion: the inner
+    // self stays a bare reference, and the whole call terminates.
+    const resolved = view.dereference(cyclic, cyclic, []);
+    expect(resolved.definitions.loop.properties.self.properties.self)
+      .toEqual({ $ref: '#/definitions/loop' });
+  });
+});
+
+describe('unified targeting field', () => {
+  /**
+   * Makes the coverage preview fetch resolve with the given payload.
+   *
+   * @param {object} preview The payload the endpoint would return.
+   */
+  function previewYields(preview, suggestions) {
+    globalThis.fetch.mockImplementation((url) =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(
+          String(url).includes('/ui/lookup/products') ? (suggestions || []) : preview),
+      }));
+  }
+
+  /**
+   * The single targeting input, whatever the rendered form.
+   */
+  function targetingInput() {
+    return document.querySelector('#schema-form .targeting-input');
+  }
+
+  /**
+   * A specification carrying an EAN list seeds the single field with the joined EANs,
+   * and the submitted specification carries targetEans, never targetWhere.
+   */
+  it('seeds from an EAN list and submits targetEans', async () => {
+    previewYields({ count: 2, products: [], error: null });
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'RICH', specification: { targetEans: ['111', '222'], label: 'L' } },
+    }));
+    expect(targetingInput().value).toBe('111, 222');
+    expect(els.hidden.value).toContain('targetEans');
+    expect(els.hidden.value).not.toContain('targetWhere');
+    // The preview of an EAN list resolves through the same grammar, as an in condition.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "/ui/offers/where-preview?where=" + encodeURIComponent("ean in ('111', '222')"));
+  });
+
+  /**
+   * A specification carrying a condition seeds the field with it, and the submitted
+   * specification carries targetWhere, never targetEans.
+   */
+  it('seeds from a condition and submits targetWhere', async () => {
+    previewYields({ count: 3, products: [{ ean: '3300000000001', name: 'Pomme Gala' }], error: null });
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'RICH', specification: { targetWhere: "name like 'pomme%'", label: 'L' } },
+    }));
+    expect(targetingInput().value).toBe("name like 'pomme%'");
+    expect(els.hidden.value).toContain('targetWhere');
+    expect(els.hidden.value).not.toContain('targetEans');
+    await microflush();
+    const note = document.querySelector('#schema-form .placeholder-note');
+    expect(note.textContent).toContain('Coverage: 3 products');
+    expect(note.textContent).toContain('Pomme Gala (3300000000001)');
+  });
+
+  /**
+   * What the administrator types decides the targeting: EANs read as a list, a
+   * condition reads as a condition, and switching the content switches the carried
+   * key — the exclusivity holds by construction.
+   */
+  it('reads the typed content as one targeting or the other', async () => {
+    previewYields({ count: 0, products: [], error: null });
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'RICH', specification: { label: 'L' } },
+    }));
+    const input = targetingInput();
+    input.value = '111, 222';
+    input.dispatchEvent(new window.Event('input'));
+    expect(els.hidden.value).toContain('targetEans');
+    expect(els.hidden.value).not.toContain('targetWhere');
+
+    input.value = "name like 'x%'";
+    input.dispatchEvent(new window.Event('input'));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(els.hidden.value).toContain('targetWhere');
+    expect(els.hidden.value).not.toContain('targetEans');
+
+    input.value = '';
+    input.dispatchEvent(new window.Event('input'));
+    expect(els.hidden.value).not.toContain('targetEans');
+    expect(els.hidden.value).not.toContain('targetWhere');
+  });
+
+  /**
+   * The third case of the field's contract — neither an EAN list nor a parseable
+   * condition — is an error: the input is flagged, the grammar's message shows, and the
+   * refused content does not travel to the submitted specification.
+   */
+  it('flags a refused content as an error and carries nothing', async () => {
+    previewYields({ count: 0, products: [], error: "Unknown field 'colour'." });
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'RICH', specification: { targetWhere: "colour = 'red'", label: 'L' } },
+    }));
+    await microflush();
+    const input = targetingInput();
+    expect(input.classList.contains('is-invalid')).toBe(true);
+    expect(document.querySelector('#schema-form .placeholder-note').textContent)
+      .toContain("The condition was refused: Unknown field 'colour'.");
+    // The refused content is the error case, not a condition: nothing is carried.
+    expect(els.hidden.value).not.toContain('targetWhere');
+    expect(els.hidden.value).not.toContain('targetEans');
+
+    // Correcting the content clears the error and carries the condition.
+    previewYields({ count: 1, products: [], error: null });
+    input.value = "colour = 'red' and brand = 'X'";
+    input.dispatchEvent(new window.Event('input'));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(input.classList.contains('is-invalid')).toBe(false);
+    expect(els.hidden.value).toContain('targetWhere');
+  });
+
+  /**
+   * While the verdict is pending — the content typed, the grammar not yet answered —
+   * the candidate stays carried, so a fast submit does not lose a plausible condition.
+   */
+  it('carries the candidate while the verdict is pending', async () => {
+    previewYields({ count: 1, products: [], error: null });
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'RICH', specification: { label: 'L' } },
+    }));
+    const input = targetingInput();
+    input.value = "name like 'x%'";
+    input.dispatchEvent(new window.Event('input'));
+    expect(els.hidden.value).toContain('targetWhere');
+    await vi.advanceTimersByTimeAsync(300);
+    expect(els.hidden.value).toContain('targetWhere');
+  });
+
+  /**
+   * A failed preview fetch leaves the note empty without throwing; the verdict stays
+   * pending, so the candidate remains carried — the save's own grammar remains the
+   * final arbiter.
+   */
+  it('survives a failed fetch and keeps the candidate', async () => {
+    globalThis.fetch.mockImplementation(() => Promise.reject(new Error('offline')));
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'RICH', specification: { targetWhere: "brand = 'X'", label: 'L' } },
+    }));
+    await microflush();
+    expect(document.querySelector('#schema-form .placeholder-note').textContent)
+      .not.toContain('Coverage:');
+    expect(els.hidden.value).toContain('targetWhere');
+  });
+
+  /**
+   * While the content reads as an EAN list, the trailing digits being typed drive the
+   * product lookup and the suggestions appear; picking one completes the list.
+   */
+  it('suggests products for the EAN being typed', async () => {
+    previewYields({ count: 2, products: [], error: null }, [
+      { value: '3300000000017', label: 'Pomme Gala' },
+      { value: '3300000000025', label: 'Pomme Pink' },
+    ]);
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'RICH', specification: { targetEans: ['111'], label: 'L' } },
+    }));
+    const input = targetingInput();
+    input.value = '111, 330';
+    input.dispatchEvent(new window.Event('input'));
+    await vi.advanceTimersByTimeAsync(180);
+    const url = '/ui/lookup/products?q=' + encodeURIComponent('330');
+    expect(globalThis.fetch).toHaveBeenCalledWith(url, expect.anything());
+    const dropdown = document.querySelector('#schema-form .targeting-wrap .ac-dropdown');
+    expect(dropdown.classList.contains('is-hidden')).toBe(false);
+    expect(dropdown.querySelectorAll('.ac-item').length).toBe(2);
+
+    dropdown.querySelector('.ac-item').dispatchEvent(
+      new window.MouseEvent('mousedown', { cancelable: true }));
+    expect(input.value).toBe('111, 3300000000017');
+    expect(els.hidden.value).toContain('3300000000017');
+  });
+
+  /**
+   * The suggestions only exist for the list reading: a condition being typed never hits
+   * the product lookup.
+   */
+  it('does not suggest for a condition being typed', async () => {
+    previewYields({ count: 1, products: [], error: null });
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'RICH', specification: { label: 'L' } },
+    }));
+    const input = targetingInput();
+    input.value = "name like 'x%'";
+    input.dispatchEvent(new window.Event('input'));
+    await vi.advanceTimersByTimeAsync(300);
+    const calls = globalThis.fetch.mock.calls.map((call) => call[0]);
+    expect(calls.some((url) => String(url).includes('/ui/lookup/products'))).toBe(false);
+    const dropdown = document.querySelector('#schema-form .targeting-wrap .ac-dropdown');
+    expect(dropdown.classList.contains('is-hidden')).toBe(true);
+  });
+
+  /**
+   * The family and exclusion fields stay, grouped right after the single targeting field.
+   */
+  it('keeps the family and exclusion fields grouped after the targeting', () => {
+    previewYields({ count: 0, products: [], error: null });
+    document.dispatchEvent(new window.CustomEvent('offer-spec:apply', {
+      detail: { type: 'RICH', specification: { targetEans: ['1'], label: 'L' } },
+    }));
+    const labels = Array.from(document.querySelectorAll('#schema-form .field .field-label'))
+      .map((node) => node.textContent);
+    const targeting = labels.indexOf('Eligible products');
+    expect(targeting).toBeGreaterThanOrEqual(0);
+    expect(labels[targeting + 1]).toBe('Target Family Codes');
+    expect(labels[targeting + 2]).toBe('Excluded Eans');
+  });
+});
+

@@ -40,11 +40,10 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
         Set<String> processedEans = new HashSet<>();
         for (Basket.Item item : basket.items) {
             if (item.produceEan != null && !processedEans.contains(item.produceEan)) {
-                Product product = item.getProduct();
-                Price defaultPrice = item.getPrice(store, PriceUsage.DEFAULT);
-                Price refPrice = item.getPrice(store, PriceUsage.BASE_FOR_DISCOUNT);
-                // Create a dedicated applier for this specific product
-                appliers.add(new BasicOfferApplier(store, product, defaultPrice, refPrice));
+                // Create a dedicated applier for this specific product. Its prices are resolved
+                // slice by slice when it applies: the lines of one product may carry different
+                // price profiles (pushed trio, price date, referential now).
+                appliers.add(new BasicOfferApplier(store, item.getProduct()));
                 processedEans.add(item.produceEan);
             }
         }
@@ -64,22 +63,16 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
 
         private final Store store;
         private final Product product;
-        private final Price defaultPrice;
-        private final Price refPrice;
 
         /**
          * Constructs a BasicOfferApplier for a specific product and store.
          *
-         * @param store        The store context for pricing.
-         * @param product      The product this applier targets.
-         * @param defaultPrice The default price to use for the product.
-         * @param refPrice     The reference price for discount calculations.
+         * @param store   The store context for pricing.
+         * @param product The product this applier targets.
          */
-        public BasicOfferApplier(Store store, Product product, Price defaultPrice, Price refPrice) {
+        public BasicOfferApplier(Store store, Product product) {
             this.store = store;
             this.product = product;
-            this.defaultPrice = defaultPrice;
-            this.refPrice = refPrice;
         }
 
         /**
@@ -134,10 +127,15 @@ public class BasicOfferFactory implements OfferApplierFactory, EngineTrait {
             // (BASE_FOR_DISCOUNT) is deferred to a post-arbitration re-pricing step in the engine,
             // which touches only the lines that end up carrying an actually-retained discount — so
             // a discarded advantage never leaves the customer paying the (higher) reference price.
+            // Each slice is valued at ITS OWN price profile (digital sheet DG-01-02-03, DG-01-01-02):
+            // a line with a pushed trio, a line with a price date and a plain line of the same
+            // product are separate slices, and the price of the product's first line must not be
+            // applied to the others.
             List<OfferApplication> applications = new ArrayList<>();
             for (Basket.Item slice : slices) {
                 evaluation.addAvailableToUpcell(slice);
-                applications.add(new BasicApplication(slice, store, product, this.defaultPrice, this.refPrice));
+                applications.add(new BasicApplication(slice, store, product,
+                        slice.getPrice(store, PriceUsage.DEFAULT), slice.getPrice(store, PriceUsage.BASE_FOR_DISCOUNT)));
             }
             return applications;
         }

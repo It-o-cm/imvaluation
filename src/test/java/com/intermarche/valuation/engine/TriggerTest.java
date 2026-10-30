@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalTime;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
@@ -291,5 +293,64 @@ public class TriggerTest {
         Trigger trigger = Trigger.of(node("""
                 { "conditions": [ { "kind": "MINIMUM_AMOUNT", "scope": "TICKET", "threshold": 40 } ] }"""));
         assertTrue(trigger.evaluate(evaluation).satisfied());
+    }
+
+    /**
+     * Tests that a TIME_WINDOW condition parses into a {@link TimeWindowCondition} with its
+     * weekdays and bounds (spec-divers-offre §1).
+     */
+    @Test
+    void testParseTimeWindow() {
+        Trigger trigger = Trigger.of(node("""
+                { "conditions": [
+                    { "kind": "TIME_WINDOW", "days": ["MONDAY", "FRIDAY"],
+                      "from": "17:00", "to": "19:00" } ] }"""));
+        TimeWindowCondition window = (TimeWindowCondition) trigger.getChildren().get(0);
+        assertEquals(Set.of(DayOfWeek.MONDAY, DayOfWeek.FRIDAY), window.getDays());
+        assertEquals(LocalTime.of(17, 0), window.getFrom());
+        assertEquals(LocalTime.of(19, 0), window.getTo());
+    }
+
+    /**
+     * Tests that a TIME_WINDOW with no days parses with an empty day set (every day), and that
+     * a midnight-spanning window (from after to) is accepted.
+     */
+    @Test
+    void testParseTimeWindowWithoutDaysAndSpanningMidnight() {
+        Trigger trigger = Trigger.of(node("""
+                { "conditions": [ { "kind": "TIME_WINDOW", "from": "22:00", "to": "02:00" } ] }"""));
+        TimeWindowCondition window = (TimeWindowCondition) trigger.getChildren().get(0);
+        assertTrue(window.getDays().isEmpty());
+        assertEquals(LocalTime.of(22, 0), window.getFrom());
+        assertEquals(LocalTime.of(2, 0), window.getTo());
+    }
+
+    /**
+     * Tests that an unknown weekday, a missing bound and a malformed time are all rejected.
+     */
+    @Test
+    void testTimeWindowRejections() {
+        assertThrows(IllegalArgumentException.class, () -> Trigger.of(node("""
+                { "conditions": [ { "kind": "TIME_WINDOW", "days": ["FUNDAY"],
+                  "from": "17:00", "to": "19:00" } ] }""")));
+        assertThrows(IllegalArgumentException.class, () -> Trigger.of(node("""
+                { "conditions": [ { "kind": "TIME_WINDOW", "from": "17:00" } ] }""")));
+        assertThrows(IllegalArgumentException.class, () -> Trigger.of(node("""
+                { "conditions": [ { "kind": "TIME_WINDOW", "from": "25:99", "to": "19:00" } ] }""")));
+    }
+
+    /**
+     * Tests that a TIME_WINDOW composes in AND with a MINIMUM_AMOUNT condition (a conditional
+     * happy hour): the parsed trigger holds both children (spec-divers-offre §1).
+     */
+    @Test
+    void testTimeWindowComposesInAnd() {
+        Trigger trigger = Trigger.of(node("""
+                { "conditions": [
+                    { "kind": "MINIMUM_AMOUNT", "scope": "TICKET", "threshold": 40 },
+                    { "kind": "TIME_WINDOW", "from": "17:00", "to": "19:00" } ] }"""));
+        assertEquals(2, trigger.getChildren().size());
+        assertInstanceOf(MinimumAmountCondition.class, trigger.getChildren().get(0));
+        assertInstanceOf(TimeWindowCondition.class, trigger.getChildren().get(1));
     }
 }

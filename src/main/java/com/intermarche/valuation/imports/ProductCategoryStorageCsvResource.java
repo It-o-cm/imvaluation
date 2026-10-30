@@ -229,7 +229,7 @@ public class ProductCategoryStorageCsvResource extends ImporterCsvResource {
             storage = ProductCategoryStorage.findById(storage.id);
             // Checksum Optimization
             int incomingChecksum = computeIncomingChecksum(data, product.id);
-            if (storage.checksum != incomingChecksum) {
+            if (storage.changedFrom(incomingChecksum)) {
                 feedCategoryStorage(data, storage);
                 counters[1]++;
             }

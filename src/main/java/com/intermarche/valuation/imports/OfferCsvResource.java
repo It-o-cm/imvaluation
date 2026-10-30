@@ -1,5 +1,6 @@
 package com.intermarche.valuation.imports;
 
+import com.intermarche.valuation.domain.BudgetGroup;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
@@ -41,9 +42,10 @@ public class OfferCsvResource extends ImporterCsvResource {
 
     private static final Logger LOGGER = Logger.getLogger(OfferCsvResource.class);
 
-    // Keys used to store auxiliary maps (Stores, Groups) in the generic context map
+    // Keys used to store auxiliary maps (Stores, Groups, Budget groups) in the generic context map
     private static final String CTX_STORES = "__CTX_STORES__";
     private static final String CTX_GROUPS = "__CTX_GROUPS__";
+    private static final String CTX_BUDGET_GROUPS = "__CTX_BUDGET_GROUPS__";
 
     /** Header name of the natural key: the offer code. */
     static final String COL_CODE = "CODE";
@@ -64,6 +66,24 @@ public class OfferCsvResource extends ImporterCsvResource {
 
     /** Header name of the optional active flag; blank defaults to true. */
     static final String COL_ACTIVE = "ACTIVE";
+
+    /**
+     * Header name of the optional budget group code (spec §2). A blank cell leaves the offer out
+     * of any group; a code unknown to the referential rejects the line.
+     */
+    static final String COL_BUDGET_GROUP_CODE = "BUDGET_GROUP_CODE";
+
+    /**
+     * Header name of the optional excluded store codes (spec-ciblage-saisie §3), comma-separated.
+     * A blank cell clears the exclusions; a code unknown to the referential rejects the line.
+     */
+    static final String COL_EXCLUDED_STORE_CODES = "EXCLUDED_STORE_CODES";
+
+    /**
+     * Header name of the optional excluded store group codes (spec-ciblage-saisie §3),
+     * comma-separated. A blank cell clears the exclusions; an unknown code rejects the line.
+     */
+    static final String COL_EXCLUDED_STORE_GROUP_CODES = "EXCLUDED_STORE_GROUP_CODES";
 
     /** The columns this importer cannot work without. */
     static final List<String> REQUIRED_COLUMNS = List.of(
@@ -114,7 +134,36 @@ public class OfferCsvResource extends ImporterCsvResource {
         contextMap.put(CTX_STORES, storeMap);
         Map<String, StoreGroup> groupMap = getStoreGroupMap(parsedLines);
         contextMap.put(CTX_GROUPS, groupMap);
+        Map<String, BudgetGroup> budgetGroupMap = getBudgetGroupMap(parsedLines);
+        contextMap.put(CTX_BUDGET_GROUPS, budgetGroupMap);
         return contextMap;
+    }
+
+    /**
+     * Retrieves a map of BudgetGroups referenced in the provided lines.
+     * <p>
+     * Extracts the single optional code from the BUDGET_GROUP_CODE column of each line and performs
+     * a bulk fetch.
+     *
+     * @param parsedLines The list of parsed data containing budget group codes.
+     * @return A map of budget group code to BudgetGroup entity.
+     */
+    private Map<String, BudgetGroup> getBudgetGroupMap(List<LineData> parsedLines) {
+        Set<String> codesToFetch = new HashSet<>();
+        for (LineData data : parsedLines) {
+            String code = safeGet(data, COL_BUDGET_GROUP_CODE);
+            if (code != null && !code.isBlank()) {
+                codesToFetch.add(code.trim());
+            }
+        }
+        Map<String, BudgetGroup> budgetGroupMap = new HashMap<>();
+        if (!codesToFetch.isEmpty()) {
+            List<BudgetGroup> groups = BudgetGroup.list("code IN ?1", codesToFetch);
+            for (BudgetGroup g : groups) {
+                budgetGroupMap.put(g.code, g);
+            }
+        }
+        return budgetGroupMap;
     }
 
     /**
@@ -203,6 +252,8 @@ public class OfferCsvResource extends ImporterCsvResource {
         Map<String, Store> storeMap = retrieveStores(entityMap, requestedStoreCodes);
         List<String> requestedGroupCodes = parseCodes(data.get(COL_STORE_GROUP_CODES));
         Map<String, StoreGroup> groupMap = retrieveStoreGroups(entityMap, requestedGroupCodes);
+        String requestedBudgetGroupCode = safeGet(data, COL_BUDGET_GROUP_CODE);
+        Map<String, BudgetGroup> budgetGroupMap = retrieveBudgetGroups(entityMap, requestedBudgetGroupCode);
         // 3. Business Logic (Create/Update/Link)
         boolean isNew = (offer == null);
         if (isNew) {
@@ -212,14 +263,15 @@ public class OfferCsvResource extends ImporterCsvResource {
         else {
             offer = Offer.findById(offer.id);
         }
-        prepareOffer(data, offer, requestedStoreCodes, requestedGroupCodes, storeMap, groupMap);
+        prepareOffer(data, offer, requestedStoreCodes, requestedGroupCodes, storeMap, groupMap,
+                requestedBudgetGroupCode, budgetGroupMap);
         // Checksum Logic
         int incomingChecksum = computeIncomingChecksum(data, requestedStoreCodes, requestedGroupCodes);
         if (isNew) {
             counters[0]++;
             Panache.getEntityManager().persist(offer);
         } else {
-            if (offer.checksum != incomingChecksum) {
+            if (offer.changedFrom(incomingChecksum)) {
                 counters[1]++;
             }
         }
@@ -239,13 +291,25 @@ public class OfferCsvResource extends ImporterCsvResource {
      * @param groupMap            The map of available groups.
      */
     private void prepareOffer(LineData data, Offer offer, List<String> requestedStoreCodes, List<String> requestedGroupCodes,
-                              Map<String, Store> storeMap, Map<String, StoreGroup> groupMap) {
+                              Map<String, Store> storeMap, Map<String, StoreGroup> groupMap,
+                              String requestedBudgetGroupCode, Map<String, BudgetGroup> budgetGroupMap) {
         // Update Fields
         offer.type = safeGet(data, COL_TYPE);
         offer.specification = safeGet(data, COL_SPECIFICATION);
         offer.validFrom = safeParseDateTime(data, COL_VALID_FROM);
         offer.validTo = safeParseDateTime(data, COL_VALID_TO);
         offer.active = parseActive(data);
+        // Optional budget group (spec §2): a blank cell clears the link; a present code must resolve.
+        if (requestedBudgetGroupCode == null || requestedBudgetGroupCode.isBlank()) {
+            offer.budgetGroup = null;
+        } else {
+            String code = requestedBudgetGroupCode.trim();
+            BudgetGroup bg = budgetGroupMap == null ? null : budgetGroupMap.get(code);
+            if (bg == null) {
+                throw new IllegalArgumentException("BudgetGroup code '" + code + "' not found.");
+            }
+            offer.budgetGroup = BudgetGroup.findById(bg.id);
+        }
         // Handle Target Linking
         // Validate: At least one target
         if (requestedStoreCodes.isEmpty() && requestedGroupCodes.isEmpty()) {
@@ -273,6 +337,25 @@ public class OfferCsvResource extends ImporterCsvResource {
                 throw new IllegalArgumentException("StoreGroup code '" + gCode + "' not found.");
             }
         }
+        // Optional PDV exclusions (spec-ciblage-saisie §3): replacement strategy — a blank cell
+        // clears them, an unknown code rejects the line. Resolved per line by code so the chunked
+        // and one-by-one fallback paths behave identically.
+        offer.excludedStores.clear();
+        offer.excludedStoreGroups.clear();
+        for (String sCode : parseCodes(data.get(COL_EXCLUDED_STORE_CODES))) {
+            Store s = Store.find("code", sCode).firstResult();
+            if (s == null) {
+                throw new IllegalArgumentException("Excluded store code '" + sCode + "' not found.");
+            }
+            offer.excludedStores.add(s);
+        }
+        for (String gCode : parseCodes(data.get(COL_EXCLUDED_STORE_GROUP_CODES))) {
+            StoreGroup g = StoreGroup.find("code", gCode).firstResult();
+            if (g == null) {
+                throw new IllegalArgumentException("Excluded store group code '" + gCode + "' not found.");
+            }
+            offer.excludedStoreGroups.add(g);
+        }
     }
 
     /**
@@ -295,7 +378,30 @@ public class OfferCsvResource extends ImporterCsvResource {
                 groupMap.put(g.code, g);
             }
         }
-        return groupMap;
+        return groupMap == null ? Map.of() : groupMap;
+    }
+
+    /**
+     * Retrieves the map of BudgetGroups from the entity map, performing a fetch if missing.
+     * <p>
+     * If the map is missing from the context (1-by-1 fallback mode), this method fetches the
+     * single requested group by code.
+     *
+     * @param entityMap                The context map.
+     * @param requestedBudgetGroupCode The optional budget group code needed, possibly null/blank.
+     * @return The map of BudgetGroups, empty when no code is requested.
+     */
+    private Map<String, BudgetGroup> retrieveBudgetGroups(Map<String, Object> entityMap, String requestedBudgetGroupCode) {
+        @SuppressWarnings("unchecked")
+        Map<String, BudgetGroup> budgetGroupMap = (Map<String, BudgetGroup>) entityMap.get(CTX_BUDGET_GROUPS);
+        if (budgetGroupMap == null && requestedBudgetGroupCode != null && !requestedBudgetGroupCode.isBlank()) {
+            budgetGroupMap = new HashMap<>();
+            BudgetGroup g = BudgetGroup.findByCode(requestedBudgetGroupCode.trim());
+            if (g != null) {
+                budgetGroupMap.put(g.code, g);
+            }
+        }
+        return budgetGroupMap == null ? Map.of() : budgetGroupMap;
     }
 
     /**
@@ -316,7 +422,7 @@ public class OfferCsvResource extends ImporterCsvResource {
             List<Store> stores = Store.list("code IN ?1", requestedStoreCodes);
             for (Store s : stores) storeMap.put(s.code, s);
         }
-        return storeMap;
+        return storeMap == null ? Map.of() : storeMap;
     }
 
     /**
@@ -352,15 +458,28 @@ public class OfferCsvResource extends ImporterCsvResource {
         String groupCodes = groupCodeList.stream()
                 .sorted()
                 .collect(Collectors.joining("|"));
-        // Replicate Offer#getChecksum() exactly, activation fields included: getChecksum()
-        // now hashes active/validFrom/validTo, so omitting them here would make a byte-identical
-        // re-import mis-compare and report a spurious update.
+        // Replicate Offer#getChecksum() exactly, activation and budget-group fields included:
+        // getChecksum() now hashes active/validFrom/validTo and the budget group code, so omitting
+        // any of them here would make a byte-identical re-import mis-compare and report a spurious
+        // update.
+        String budgetGroupCode = safeGet(data, COL_BUDGET_GROUP_CODE);
+        if (budgetGroupCode != null && budgetGroupCode.isBlank()) {
+            budgetGroupCode = null;
+        }
+        // Mirror Offer#getChecksum()'s excluded targets (spec-ciblage-saisie §3): parseCodes()
+        // already sorts and de-duplicates, matching getExcludedStore(Group)Codes()'s sorted output,
+        // so a byte-identical re-import compares equal.
+        String excludedStoreCodes = String.join("|", parseCodes(data.get(COL_EXCLUDED_STORE_CODES)));
+        String excludedGroupCodes = String.join("|", parseCodes(data.get(COL_EXCLUDED_STORE_GROUP_CODES)));
         return Objects.hash(data.code, type, spec,
                 storeCodes,
                 groupCodes,
                 parseActive(data),
                 safeParseDateTime(data, COL_VALID_FROM),
-                safeParseDateTime(data, COL_VALID_TO));
+                safeParseDateTime(data, COL_VALID_TO),
+                budgetGroupCode,
+                excludedStoreCodes,
+                excludedGroupCodes);
     }
 
     /**

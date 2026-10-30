@@ -3,9 +3,11 @@ package com.intermarche.valuation;
 import com.intermarche.valuation.domain.Offer;
 import com.intermarche.valuation.domain.Price;
 import com.intermarche.valuation.domain.Product;
+import com.intermarche.valuation.domain.ProductCategoryStorage;
 import com.intermarche.valuation.domain.ProductFamily;
 import com.intermarche.valuation.domain.Store;
 import com.intermarche.valuation.domain.StoreGroup;
+import com.intermarche.valuation.domain.VatRate;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.transaction.Transactional;
@@ -41,13 +43,21 @@ public class ReferentialReadinessCheckCoverageTest {
     /**
      * Clears the reference set before each test, in reverse dependency order, so the store
      * count reflects only what the test seeds.
+     * <p>
+     * The order mirrors {@code DataInitializer.wipeSeededData}: every child (the offers and prices,
+     * then the product category storages, families and VAT rates) is removed before {@link Product},
+     * itself before {@link StoreGroup} and {@link Store}. Deleting a product while a seeded product
+     * category storage still points at it would raise a foreign-key violation now that the
+     * referential is populated at startup.
      */
     @BeforeEach
     @Transactional
     void cleanDatabase() {
-        Price.deleteAll();
         Offer.deleteAll();
+        Price.deleteAll();
+        ProductCategoryStorage.deleteAll();
         ProductFamily.deleteAll();
+        VatRate.deleteAll();
         Product.deleteAll();
         StoreGroup.deleteAll();
         Store.deleteAll();

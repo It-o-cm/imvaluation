@@ -150,7 +150,7 @@ public class EgalimCeilingCsvResource extends ImporterCsvResource {
             Panache.getEntityManager().persist(ceiling);
         } else {
             ceiling = EgalimCeiling.findById(ceiling.id);
-            if (ceiling.checksum != computeIncomingChecksum(data, code, cap)) {
+            if (ceiling.changedFrom(computeIncomingChecksum(data, code, cap))) {
                 feedCeiling(data, ceiling, code, cap);
                 counters[1]++;
             }

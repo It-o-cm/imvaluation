@@ -197,7 +197,7 @@ public class StoreGroupCsvResource extends ImporterCsvResource {
             Panache.getEntityManager().persist(group);
             counters[0]++;
             groupMap.put(data.code, group);
-        } else if (group.checksum != incomingChecksum) {
+        } else if (group.changedFrom(incomingChecksum)) {
             // UPDATE — re-attach the (possibly detached) instance so the changes are flushed, then
             // REPLACE the members (A4): a member dropped from the feed is removed from the group.
             group = StoreGroup.findById(group.id);

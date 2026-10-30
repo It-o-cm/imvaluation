@@ -181,21 +181,12 @@ public class NPlusMOfferFactory implements OfferApplierFactory, EngineTrait {
      */
     private void processOffer(Offer offer, Map<String, Basket.Item> basketItems, List<OfferApplier> appliers, Store store) {
         this.processSpecification(OFFER_SCHEMA, offer, (spec) -> {
-            // Parse List of Target EANs
+            // Resolve the target plate (targetEans ∪ families − exclusions, spec-ciblage-saisie
+            // §1/§2) and keep the basket items it covers.
             Map<String, Basket.Item> targetItems = new HashMap<>();
-            JsonNode eansNode = spec.get("targetEans");
-
-            if (eansNode.isTextual()) {
-                String ean = eansNode.asText();
+            for (String ean : resolveTargetEans(spec, offer.code)) {
                 if (basketItems.containsKey(ean)) {
                     targetItems.put(ean, basketItems.get(ean));
-                }
-            } else {
-                for (JsonNode node : eansNode) {
-                    String ean = node.asText();
-                    if (basketItems.containsKey(ean)) {
-                        targetItems.put(ean, basketItems.get(ean));
-                    }
                 }
             }
 

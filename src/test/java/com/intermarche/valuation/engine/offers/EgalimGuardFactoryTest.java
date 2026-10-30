@@ -326,6 +326,61 @@ public class EgalimGuardFactoryTest {
     }
 
     /**
+     * spec-divers-offre §5.2: a 50% discount flagged {@code compliance.egalimExempt} on a
+     * FOOD_34 line lands entirely in excludedGenerosity — the counted generosity is zero and
+     * there is no correction, exactly like the anti-gaspi exemption (the sales case).
+     */
+    @Test
+    void testApply_EgalimExempt_ExcludedNoCorrection() {
+        setUpDatabase();
+        seedProduct("FOOD", "10.00", EgalimRegime.FOOD_34);
+        BasketEvaluation evaluation = evaluationOf(line("L1", "FOOD", 1));
+        StubOffer offer = new StubOffer(valued("L1", "FOOD", "10.00"));
+        evaluation.getOffers().add(offer);
+        StubDiscount exempt = new StubDiscount("SOLDES", offer, "5.00", null);
+        exempt.setEgalimExempt(true);
+        evaluation.getAdvantages().add(exempt);
+        Collection<AdvantageApplication> result = applier().apply(evaluation);
+        BasketEvaluation.EgalimLine record = recordFor(evaluation, "FOOD");
+        assertEquals(new BigDecimal("10.00"), record.nominalPrice);
+        assertEquals(new BigDecimal("5.00"), record.finalPrice);
+        assertEquals(new BigDecimal("5.00"), record.excludedGenerosity);
+        assertEquals(new BigDecimal("0.00"), record.countedGenerosity);
+        assertEquals(new BigDecimal("0.0000"), record.generosityRate);
+        assertEquals(new BigDecimal("3.40"), record.remainingBeforeCap);
+        assertNull(record.correction);
+        assertTrue(result.isEmpty());
+    }
+
+    /**
+     * spec-divers-offre §5.2 (mixed): on a FOOD_34 line, only the {@code egalimExempt} discount
+     * is excluded; a second, non-exempt discount is still counted toward the ceiling. Here 3.00
+     * exempt + 2.00 counted on a 10.00 nominal stays conforme (20% counted), so no correction and
+     * the remaining margin reflects only the counted part.
+     */
+    @Test
+    void testApply_EgalimExempt_MixedWithCountedDiscount() {
+        setUpDatabase();
+        seedProduct("FOOD", "10.00", EgalimRegime.FOOD_34);
+        BasketEvaluation evaluation = evaluationOf(line("L1", "FOOD", 1));
+        StubOffer offer = new StubOffer(valued("L1", "FOOD", "10.00"));
+        evaluation.getOffers().add(offer);
+        StubDiscount exempt = new StubDiscount("SOLDES", offer, "3.00", null);
+        exempt.setEgalimExempt(true);
+        evaluation.getAdvantages().add(exempt);
+        evaluation.getAdvantages().add(new StubDiscount("CARD", offer, "2.00", null));
+        Collection<AdvantageApplication> result = applier().apply(evaluation);
+        BasketEvaluation.EgalimLine record = recordFor(evaluation, "FOOD");
+        assertEquals(new BigDecimal("5.00"), record.finalPrice);
+        assertEquals(new BigDecimal("3.00"), record.excludedGenerosity);
+        assertEquals(new BigDecimal("2.00"), record.countedGenerosity);
+        assertEquals(new BigDecimal("0.2000"), record.generosityRate);
+        assertEquals(new BigDecimal("1.40"), record.remainingBeforeCap);
+        assertNull(record.correction);
+        assertTrue(result.isEmpty());
+    }
+
+    /**
      * §8.7: a manual gesture (−40%) is excluded from the counted generosity, so the line is never
      * corrected however deep the gesture.
      */
@@ -489,7 +544,8 @@ public class EgalimGuardFactoryTest {
     }
 
     /**
-     * The forced configuration is AT_TOTAL, priority Integer.MAX_VALUE, cumulable.
+     * The forced configuration is AT_TOTAL, priority Integer.MAX_VALUE - 1 (just before the SRP
+     * guard), cumulable.
      */
     @Test
     void testApplier_ForcedConfiguration() {
@@ -497,7 +553,7 @@ public class EgalimGuardFactoryTest {
         com.intermarche.valuation.domain.Offer configuration = applier().getConfiguration();
         assertEquals("EGALIM_GUARD", configuration.type);
         assertTrue(configuration.specification.contains("\"applicationMoment\":\"AT_TOTAL\""));
-        assertTrue(configuration.specification.contains("2147483647"));
+        assertTrue(configuration.specification.contains("2147483646"));
     }
 
     /**
@@ -561,6 +617,9 @@ public class EgalimGuardFactoryTest {
     @Test
     void testEndToEnd_CapsOverride_FromSpecification() {
         setUpDatabase();
+        // The spec caps replace the legal DEFAULT, not the administered referential (which primes):
+        // silence the referential so the override is the applicable source (spec §3 ladder).
+        clearCeilings();
         seedProduct("FOOD", "10.00", EgalimRegime.FOOD_34);
         DomainUtils.createAndPersistOffer("EG_CAP", store, "EGALIM_GUARD",
                 "{ \"caps\": { \"FOOD_34\": 0.30, \"DPH_40\": 0.45 } }");
@@ -847,6 +906,56 @@ public class EgalimGuardFactoryTest {
         public AmountEvaluation getDiscountAmount() {
             return amount;
         }
+
+        /**
+         * Whether this stub is flagged EGAlim-exempt (spec-divers-offre §2).
+         */
+        private boolean egalimExempt;
+
+        /**
+         * Returns whether this stub is EGAlim-exempt.
+         *
+         * @return the exemption flag.
+         */
+        @Override
+        public boolean isEgalimExempt() {
+            return egalimExempt;
+        }
+
+        /**
+         * Records the EGAlim-exempt flag, so a test can mark this discount exempt.
+         *
+         * @param egalimExempt whether the discount is EGAlim-exempt.
+         */
+        @Override
+        public void setEgalimExempt(boolean egalimExempt) {
+            this.egalimExempt = egalimExempt;
+        }
+
+        /**
+         * Whether this stub is flagged SRP-exempt (spec-srp-guard §3.3).
+         */
+        private boolean srpExempt;
+
+        /**
+         * Returns whether this stub is SRP-exempt.
+         *
+         * @return the exemption flag.
+         */
+        @Override
+        public boolean isSrpExempt() {
+            return srpExempt;
+        }
+
+        /**
+         * Records the SRP-exempt flag, so a test can mark this discount exempt.
+         *
+         * @param srpExempt whether the discount is SRP-exempt.
+         */
+        @Override
+        public void setSrpExempt(boolean srpExempt) {
+            this.srpExempt = srpExempt;
+        }
     }
 
     /**
@@ -877,13 +986,35 @@ public class EgalimGuardFactoryTest {
     }
 
     /**
-     * Seeds one administered ceiling row.
+     * Adjusts the administered ceiling of one regime, upserting so it works whether or not the
+     * referential is already seeded at startup.
+     * <p>
+     * The {@code EGALIM_REGIMES} referential is now seeded when the application boots, so a test that
+     * simply persisted a fresh row would create a duplicate for a code the seed already carries and
+     * make {@link EgalimCeiling#findByCode(String)} ambiguous. This updates the existing row's
+     * ceiling in place when the seed already states the regime, and only inserts when it does not.
+     * The change is rolled back with the surrounding {@code @TestTransaction}.
      *
      * @param code    the regime code.
-     * @param capRate the ceiling as a fraction, or null for an uncapped regime.
+     * @param capRate the ceiling as a fraction, or null for an uncapped (released) regime.
      */
-    private void seedCeiling(String code, String capRate) {
-        new EgalimCeiling(code, code, capRate == null ? null : new BigDecimal(capRate)).persist();
+    private void setCeiling(String code, String capRate) {
+        BigDecimal cap = capRate == null ? null : new BigDecimal(capRate);
+        EgalimCeiling existing = EgalimCeiling.findByCode(code);
+        if (existing == null) {
+            new EgalimCeiling(code, code, cap).persist();
+        } else {
+            existing.capRate = cap;
+        }
+    }
+
+    /**
+     * Empties the administered ceiling referential so a scenario can exercise the silent-referential
+     * path (the guard's own override, then the enum default) whether or not the startup seed
+     * populated the table. Rolled back with the surrounding {@code @TestTransaction}.
+     */
+    private void clearCeilings() {
+        EgalimCeiling.deleteAll();
     }
 
     /**
@@ -910,6 +1041,7 @@ public class EgalimGuardFactoryTest {
      */
     @Test
     void testResolveCaps_EnumDefaultsWhenNothingElseStates() {
+        clearCeilings();
         Map<EgalimRegime, BigDecimal> caps = EgalimGuardFactory.resolveCaps(null);
         assertEquals(0, new BigDecimal("0.34").compareTo(caps.get(EgalimRegime.FOOD_34)));
         assertEquals(0, new BigDecimal("0.40").compareTo(caps.get(EgalimRegime.DPH_40)));
@@ -922,6 +1054,7 @@ public class EgalimGuardFactoryTest {
      */
     @Test
     void testResolveCaps_OverrideWhenReferentialSilent() {
+        clearCeilings();
         Map<EgalimRegime, BigDecimal> caps =
                 EgalimGuardFactory.resolveCaps(capsNode("{\"FOOD_34\":0.30}"));
         assertEquals(0, new BigDecimal("0.30").compareTo(caps.get(EgalimRegime.FOOD_34)));
@@ -934,6 +1067,7 @@ public class EgalimGuardFactoryTest {
      */
     @Test
     void testResolveCaps_ExplicitNullOverrideIgnored() {
+        clearCeilings();
         Map<EgalimRegime, BigDecimal> caps =
                 EgalimGuardFactory.resolveCaps(capsNode("{\"FOOD_34\":null}"));
         assertEquals(0, new BigDecimal("0.34").compareTo(caps.get(EgalimRegime.FOOD_34)));
@@ -946,7 +1080,7 @@ public class EgalimGuardFactoryTest {
      */
     @Test
     void testResolveCaps_ReferentialBeatsOverrideAndEnum() {
-        seedCeiling("FOOD_34", "0.36");
+        setCeiling("FOOD_34", "0.36");
         Map<EgalimRegime, BigDecimal> caps =
                 EgalimGuardFactory.resolveCaps(capsNode("{\"FOOD_34\":0.30}"));
         assertEquals(0, new BigDecimal("0.36").compareTo(caps.get(EgalimRegime.FOOD_34)));
@@ -960,7 +1094,7 @@ public class EgalimGuardFactoryTest {
      */
     @Test
     void testResolveCaps_ReferentialWithoutCeilingReleasesTheRegime() {
-        seedCeiling("FOOD_34", null);
+        setCeiling("FOOD_34", null);
         Map<EgalimRegime, BigDecimal> caps =
                 EgalimGuardFactory.resolveCaps(capsNode("{\"FOOD_34\":0.30}"));
         assertNull(caps.get(EgalimRegime.FOOD_34));
@@ -973,7 +1107,7 @@ public class EgalimGuardFactoryTest {
      */
     @Test
     void testResolveCaps_ReferentialCanCapAnExemptRegime() {
-        seedCeiling("EXEMPT", "0.50");
+        setCeiling("EXEMPT", "0.50");
         Map<EgalimRegime, BigDecimal> caps = EgalimGuardFactory.resolveCaps(null);
         assertEquals(0, new BigDecimal("0.50").compareTo(caps.get(EgalimRegime.EXEMPT)));
     }
@@ -986,7 +1120,7 @@ public class EgalimGuardFactoryTest {
     @Test
     void testApply_AdministeredCeilingDrivesTheCorrection() {
         setUpDatabase();
-        seedCeiling("FOOD_34", "0.30");
+        setCeiling("FOOD_34", "0.30");
         seedProduct("FOOD", "10.00", EgalimRegime.FOOD_34);
         BasketEvaluation evaluation = evaluationOf(line("L1", "FOOD", 1));
         StubOffer offer = new StubOffer(valued("L1", "FOOD", "10.00"));
@@ -1006,7 +1140,7 @@ public class EgalimGuardFactoryTest {
     @Test
     void testApply_ReleasedRegimeIsNeverCorrected() {
         setUpDatabase();
-        seedCeiling("FOOD_34", null);
+        setCeiling("FOOD_34", null);
         seedProduct("FOOD", "10.00", EgalimRegime.FOOD_34);
         BasketEvaluation evaluation = evaluationOf(line("L1", "FOOD", 1));
         StubOffer offer = new StubOffer(valued("L1", "FOOD", "10.00"));

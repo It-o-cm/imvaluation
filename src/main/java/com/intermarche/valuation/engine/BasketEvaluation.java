@@ -149,6 +149,19 @@ public class BasketEvaluation {
             Collections.newSetFromMap(new IdentityHashMap<>());
 
     /**
+     * The shared display-valuation context, set only for a {@code POST /display-valuation}
+     * mini-basket (spec-valorisation-affichage-ecommerce §2bis); {@code null} for a normal
+     * {@code /valuation}, which therefore stays byte-for-byte unchanged.
+     * <p>
+     * When present, {@link EngineTrait#getOffers} serves the offers the context resolved ONCE for
+     * the whole call instead of re-querying the database per product, and it filters out the
+     * basket-dependent and ticket-level offers that must not shape a one-unit displayed price.
+     * Ignored in the JSON response: it is engine wiring, not part of the till contract.
+     */
+    @JsonIgnore
+    private transient DisplayContext displayContext;
+
+    /**
      * Constructs a new BasketEvaluation.
      * <p>
      * Initializes the evaluation with the provided basket and empty collections.
@@ -521,6 +534,27 @@ public class BasketEvaluation {
     @JsonIgnore
     public Set<StoreGroup> getStoreGroups() {
         return storeGroups;
+    }
+
+    /**
+     * Returns the shared display-valuation context, or {@code null} for a normal {@code /valuation}
+     * (spec-valorisation-affichage-ecommerce §2bis).
+     *
+     * @return the display context, or {@code null}.
+     */
+    @JsonIgnore
+    public DisplayContext getDisplayContext() {
+        return displayContext;
+    }
+
+    /**
+     * Attaches the shared display-valuation context to this mini-basket evaluation. Called by the
+     * engine only on the display path; left {@code null} for a normal basket.
+     *
+     * @param displayContext the shared context resolved once for the whole call.
+     */
+    public void setDisplayContext(DisplayContext displayContext) {
+        this.displayContext = displayContext;
     }
 
     /**

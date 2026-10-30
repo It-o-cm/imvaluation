@@ -181,6 +181,7 @@ class UserUiResourceTest {
     @Test
     void listWithAdminValidSortAscendingReachesTemplate() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         SecurityContext ctx = context("admin", true);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             stubQuery(panache, List.of(realUser("bob", "ADMIN", true)), 2L, 1);
@@ -199,6 +200,7 @@ class UserUiResourceTest {
     @Test
     void listWithInvalidSortDescendingNonAdminReachesTemplate() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         SecurityContext ctx = contextNoPrincipal(false);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             stubQuery(panache, List.of(), 0L, 0);
@@ -215,6 +217,7 @@ class UserUiResourceTest {
     @Test
     void listWithNullContextBlankFiltersReachesTemplate() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             stubQuery(panache, List.of(), 0L, 0);
             assertThrows(UnsatisfiedLinkError.class,
@@ -229,6 +232,7 @@ class UserUiResourceTest {
     @Test
     void listWithRoleFilterOnlyReachesTemplate() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         SecurityContext ctx = context("admin", true);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             stubQuery(panache, List.of(realUser("bob", "MANAGER", true)), 1L, 1);
@@ -248,6 +252,7 @@ class UserUiResourceTest {
     @Test
     void createReachesTemplate() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         assertThrows(UnsatisfiedLinkError.class, resource::create);
     }
 
@@ -262,6 +267,7 @@ class UserUiResourceTest {
     @Test
     void editMissingAccountReturnsNotFound() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(7L)).thenReturn(null);
             Response response = resource.edit(7L);
@@ -276,6 +282,7 @@ class UserUiResourceTest {
     @Test
     void editExistingAccountReachesTemplate() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(3L)).thenReturn(realUser("bob", "MANAGER", true));
             assertThrows(UnsatisfiedLinkError.class, () -> resource.edit(3L));
@@ -294,9 +301,10 @@ class UserUiResourceTest {
     @Test
     void saveWithNullUsernameRendersError() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save(null, "goodpass1", "Bob", null, null));
+                    () -> resource.save(null, "goodpass1", "Bob", null, null, null, null, null, null));
         }
     }
 
@@ -308,9 +316,10 @@ class UserUiResourceTest {
     @Test
     void saveWithBlankUsernameRendersError() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("   ", "goodpass1", "Bob", List.of("ADMIN"), "on"));
+                    () -> resource.save("   ", "goodpass1", "Bob", List.of("ADMIN"), null, null, null, "on", null));
         }
     }
 
@@ -321,10 +330,11 @@ class UserUiResourceTest {
     @Test
     void saveWithDuplicateUsernameRendersError() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.count(anyString(), any(Object[].class))).thenReturn(1L);
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("bob", "goodpass1", "Bob", List.of("ADMIN"), "on"));
+                    () -> resource.save("bob", "goodpass1", "Bob", List.of("ADMIN"), null, null, null, "on", null));
         }
     }
 
@@ -335,10 +345,11 @@ class UserUiResourceTest {
     @Test
     void saveWithWeakPasswordRendersError() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.count(anyString(), any(Object[].class))).thenReturn(0L);
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("bob", "short", "Bob", List.of("ADMIN"), "on"));
+                    () -> resource.save("bob", "short", "Bob", List.of("ADMIN"), null, null, null, "on", null));
         }
     }
 
@@ -350,10 +361,11 @@ class UserUiResourceTest {
     @Test
     void saveWithNoRolesRendersError() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.count(anyString(), any(Object[].class))).thenReturn(0L);
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.save("bob", "goodpass1", "Bob", Arrays.asList(null, "SUPERUSER"), "on"));
+                    () -> resource.save("bob", "goodpass1", "Bob", Arrays.asList(null, "SUPERUSER"), null, null, null, "on", null));
         }
     }
 
@@ -365,11 +377,12 @@ class UserUiResourceTest {
     @Test
     void saveValidAccountPersistsAndRedirects() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class);
              MockedConstruction<AppUser> construction = mockConstruction(AppUser.class,
                      (user, ctx) -> when(user.getRoleSet()).thenReturn(Set.of("ADMIN")))) {
             panache.when(() -> PanacheEntityBase.count(anyString(), any(Object[].class))).thenReturn(0L);
-            Response response = resource.save("bob", "goodpass1", "Bob", List.of("ADMIN"), "on");
+            Response response = resource.save("bob", "goodpass1", "Bob", List.of("ADMIN"), null, null, null, "on", null);
             assertEquals(303, response.getStatus());
             assertEquals("/ui/users", response.getLocation().getPath());
             assertTrue(response.getLocation().getQuery().contains("noticeOk=true"));
@@ -393,9 +406,10 @@ class UserUiResourceTest {
     @Test
     void updateMissingAccountReturnsNotFound() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(9L)).thenReturn(null);
-            Response response = resource.update(9L, "goodpass1", "Bob", List.of("ADMIN"), "on", null);
+            Response response = resource.update(9L, "goodpass1", "Bob", List.of("ADMIN"), null, null, null, "on", null, null);
             assertEquals(404, response.getStatus());
             assertEquals("User 9 not found", response.getEntity());
         }
@@ -409,10 +423,11 @@ class UserUiResourceTest {
     @Test
     void updateWithNoRolesRendersError() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(1L)).thenReturn(realUser("bob", "MANAGER", true));
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.update(1L, null, "Bob", null, "on", null));
+                    () -> resource.update(1L, null, "Bob", null, null, null, null, "on", null, null));
         }
     }
 
@@ -424,10 +439,11 @@ class UserUiResourceTest {
     @Test
     void updateWithWeakPasswordRendersError() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(1L)).thenReturn(realUser("bob", "ADMIN", true));
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.update(1L, "short", "Bob", List.of("ADMIN"), "on", null));
+                    () -> resource.update(1L, "short", "Bob", List.of("ADMIN"), null, null, null, "on", null, null));
         }
     }
 
@@ -439,12 +455,13 @@ class UserUiResourceTest {
     @Test
     void updateDemotingLastAdminRendersError() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class);
              MockedStatic<AppUser> users = mockStatic(AppUser.class)) {
             panache.when(() -> PanacheEntityBase.findById(1L)).thenReturn(realUser("admin", "ADMIN", true));
             users.when(AppUser::countActiveAdmins).thenReturn(1L);
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.update(1L, null, "Admin", List.of("MANAGER"), "on", null));
+                    () -> resource.update(1L, null, "Admin", List.of("MANAGER"), null, null, null, "on", null, null));
         }
     }
 
@@ -456,12 +473,13 @@ class UserUiResourceTest {
     @Test
     void updateDisablingLastAdminRendersError() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class);
              MockedStatic<AppUser> users = mockStatic(AppUser.class)) {
             panache.when(() -> PanacheEntityBase.findById(1L)).thenReturn(realUser("admin", "ADMIN", true));
             users.when(AppUser::countActiveAdmins).thenReturn(1L);
             assertThrows(UnsatisfiedLinkError.class,
-                    () -> resource.update(1L, null, "Admin", List.of("ADMIN"), null, null));
+                    () -> resource.update(1L, null, "Admin", List.of("ADMIN"), null, null, null, null, null, null));
         }
     }
 
@@ -473,12 +491,13 @@ class UserUiResourceTest {
     @Test
     void updateDemotingNonLastAdminSucceeds() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         AppUser user = realUser("admin", "ADMIN", true);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class);
              MockedStatic<AppUser> users = mockStatic(AppUser.class)) {
             panache.when(() -> PanacheEntityBase.findById(1L)).thenReturn(user);
             users.when(AppUser::countActiveAdmins).thenReturn(2L);
-            Response response = resource.update(1L, "newgoodpass1", "Admin", List.of("MANAGER"), "on", null);
+            Response response = resource.update(1L, "newgoodpass1", "Admin", List.of("MANAGER"), null, null, null, "on", null, null);
             assertEquals(303, response.getStatus());
             assertEquals("/ui/users", response.getLocation().getPath());
             assertTrue(response.getLocation().getQuery().contains("noticeOk=true"));
@@ -496,10 +515,11 @@ class UserUiResourceTest {
     @Test
     void updateDemotingInactiveAdminSucceeds() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         AppUser user = realUser("admin", "ADMIN", false);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(1L)).thenReturn(user);
-            Response response = resource.update(1L, null, "Admin", List.of("MANAGER"), null, null);
+            Response response = resource.update(1L, null, "Admin", List.of("MANAGER"), null, null, null, null, null, null);
             assertEquals(303, response.getStatus());
             assertEquals(Set.of("MANAGER"), user.getRoleSet());
             assertFalse(user.mustChangePassword);
@@ -515,10 +535,11 @@ class UserUiResourceTest {
     @Test
     void updateDisablingNonAdminSucceeds() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         AppUser user = realUser("bob", "MANAGER", true);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(1L)).thenReturn(user);
-            Response response = resource.update(1L, "  ", "Bob", List.of("MANAGER"), null, null);
+            Response response = resource.update(1L, "  ", "Bob", List.of("MANAGER"), null, null, null, null, null, null);
             assertEquals(303, response.getStatus());
             assertFalse(user.active);
             assertNull(user.password);
@@ -533,10 +554,11 @@ class UserUiResourceTest {
     @Test
     void updateKeepingAdminActiveSucceeds() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         AppUser user = realUser("admin", "ADMIN", true);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(1L)).thenReturn(user);
-            Response response = resource.update(1L, null, "Admin", List.of("ADMIN", "MANAGER"), "on", null);
+            Response response = resource.update(1L, null, "Admin", List.of("ADMIN", "MANAGER"), null, null, null, "on", null, null);
             assertEquals(303, response.getStatus());
             assertTrue(user.getRoleSet().containsAll(Set.of("ADMIN", "MANAGER")));
         }
@@ -553,6 +575,7 @@ class UserUiResourceTest {
     @Test
     void deleteMissingAccountRedirectsWithFailure() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(4L)).thenReturn(null);
             Response response = resource.delete(4L, context("admin", true));
@@ -568,6 +591,7 @@ class UserUiResourceTest {
     @Test
     void deleteOwnAccountRedirectsWithFailure() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         AppUser user = mockUser("alice", true);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(4L)).thenReturn(user);
@@ -586,6 +610,7 @@ class UserUiResourceTest {
     @Test
     void deleteLastAdminRedirectsWithFailure() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         AppUser user = mockUser("admin", true);
         when(user.hasRole(AppUser.ROLE_ADMIN)).thenReturn(true);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class);
@@ -607,6 +632,7 @@ class UserUiResourceTest {
     @Test
     void deleteRegularAccountSucceeds() {
         UserUiResource resource = new UserUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         AppUser user = mockUser("bob", false);
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.findById(4L)).thenReturn(user);

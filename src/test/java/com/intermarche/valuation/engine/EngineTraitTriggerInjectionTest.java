@@ -186,4 +186,75 @@ public class EngineTraitTriggerInjectionTest {
         assertThrows(IllegalArgumentException.class,
                 () -> accepts("{ " + BASE + ", \"mystery\": 1 }"));
     }
+
+    /**
+     * Tests that the injected {@code compliance}, {@code accountingCode} and {@code printMode}
+     * blocks are accepted despite the schema's {@code additionalProperties: false}
+     * (spec-divers-offre §2, §3).
+     */
+    @Test
+    void testComplianceAndPassthroughAccepted() {
+        String spec = "{ " + BASE + ", "
+                + "\"compliance\": { \"egalimExempt\": true, \"srpExempt\": true }, "
+                + "\"accountingCode\": \"VENTIL-42\", \"printMode\": \"FOOTER\" }";
+        assertTrue(accepts(spec));
+    }
+
+    /**
+     * Tests that both print modes validate.
+     */
+    @Test
+    void testPrintModeBothValuesAccepted() {
+        assertTrue(accepts("{ " + BASE + ", \"printMode\": \"LINE\" }"));
+        assertTrue(accepts("{ " + BASE + ", \"printMode\": \"FOOTER\" }"));
+    }
+
+    /**
+     * Tests that an out-of-enum print mode is rejected by the injected schema (spec-divers-offre §3).
+     */
+    @Test
+    void testPrintModeEnumRejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> accepts("{ " + BASE + ", \"printMode\": \"BANNER\" }"));
+    }
+
+    /**
+     * Tests that an unknown property inside the {@code compliance} block is rejected
+     * ({@code additionalProperties: false} on the fragment).
+     */
+    @Test
+    void testComplianceUnknownFieldRejected() {
+        assertThrows(IllegalArgumentException.class,
+                () -> accepts("{ " + BASE + ", \"compliance\": { \"mystery\": true } }"));
+    }
+
+    /**
+     * Tests that a TIME_WINDOW condition validates through the injected condition schema
+     * (spec-divers-offre §1), with and without the optional {@code days}.
+     */
+    @Test
+    void testTimeWindowConditionAccepted() {
+        assertTrue(accepts("{ " + BASE + ", \"trigger\": { \"conditions\": [ "
+                + "{ \"kind\": \"TIME_WINDOW\", \"days\": [\"MONDAY\", \"FRIDAY\"], "
+                + "\"from\": \"17:00\", \"to\": \"19:00\" } ] } }"));
+        assertTrue(accepts("{ " + BASE + ", \"trigger\": { \"conditions\": [ "
+                + "{ \"kind\": \"TIME_WINDOW\", \"from\": \"22:00\", \"to\": \"02:00\" } ] } }"));
+    }
+
+    /**
+     * Tests that an unknown weekday and a malformed time are rejected by the injected schema.
+     */
+    @Test
+    void testTimeWindowSchemaRejections() {
+        assertThrows(IllegalArgumentException.class,
+                () -> accepts("{ " + BASE + ", \"trigger\": { \"conditions\": [ "
+                        + "{ \"kind\": \"TIME_WINDOW\", \"days\": [\"FUNDAY\"], "
+                        + "\"from\": \"17:00\", \"to\": \"19:00\" } ] } }"));
+        assertThrows(IllegalArgumentException.class,
+                () -> accepts("{ " + BASE + ", \"trigger\": { \"conditions\": [ "
+                        + "{ \"kind\": \"TIME_WINDOW\", \"from\": \"25:00\", \"to\": \"19:00\" } ] } }"));
+        assertThrows(IllegalArgumentException.class,
+                () -> accepts("{ " + BASE + ", \"trigger\": { \"conditions\": [ "
+                        + "{ \"kind\": \"TIME_WINDOW\", \"from\": \"17:00\" } ] } }"));
+    }
 }

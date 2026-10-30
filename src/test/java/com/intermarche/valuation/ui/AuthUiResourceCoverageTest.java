@@ -133,7 +133,7 @@ public class AuthUiResourceCoverageTest {
     void testLogin_errorTrueShowsMessage() {
         given().when().get("/ui/login?error=true")
                 .then().statusCode(200).contentType(ContentType.HTML)
-                .body(containsString("Invalid username or password."));
+                .body(containsString("mot de passe invalide."));
     }
 
     /**
@@ -145,7 +145,7 @@ public class AuthUiResourceCoverageTest {
         given().queryParam("error", "whatever").queryParam("notice", "Signed out")
                 .when().get("/ui/login")
                 .then().statusCode(200).contentType(ContentType.HTML)
-                .body(org.hamcrest.Matchers.not(containsString("Invalid username or password.")));
+                .body(org.hamcrest.Matchers.not(containsString("mot de passe invalide.")));
     }
 
     // --------------------------------------------------
@@ -356,7 +356,7 @@ public class AuthUiResourceCoverageTest {
                 .formParam("confirmation", "BrandNew123")
                 .when().post("/ui/password")
                 .then().statusCode(200)
-                .body(containsString("The current password is incorrect."));
+                .body(containsString("Le mot de passe actuel est incorrect."));
     }
 
     /**
@@ -384,7 +384,7 @@ public class AuthUiResourceCoverageTest {
                 .formParam("confirmation", "Different123")
                 .when().post("/ui/password")
                 .then().statusCode(200)
-                .body(containsString("The two passwords do not match."));
+                .body(containsString("Les deux mots de passe ne correspondent pas."));
     }
 
     /**
@@ -398,7 +398,7 @@ public class AuthUiResourceCoverageTest {
                 .formParam("confirmation", "Current1234")
                 .when().post("/ui/password")
                 .then().statusCode(200)
-                .body(containsString("The new password must differ from the current one."));
+                .body(containsString("doit être différent de"));
     }
 
     /**

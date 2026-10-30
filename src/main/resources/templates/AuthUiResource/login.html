@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{inject:i18n.lang}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Sign in &mdash; Valuation admin</title>
+    <title>{inject:i18n.get('auth.login.pageTitle')}</title>
     <link rel="stylesheet" href="/ui/base.css">
     <link rel="stylesheet" href="/ui/auth.css">
 </head>
@@ -23,20 +23,20 @@
 
     <form class="login-form" method="post" action="/j_security_check">
         <label class="field">
-            <span class="field-label">Username</span>
+            <span class="field-label">{inject:i18n.get('auth.login.username')}</span>
             <input type="text" name="j_username" autocomplete="username" required autofocus>
         </label>
 
         <label class="field">
-            <span class="field-label">Password</span>
+            <span class="field-label">{inject:i18n.get('auth.login.password')}</span>
             <input type="password" name="j_password" autocomplete="current-password" required>
         </label>
 
-        <button class="btn btn-primary login-submit" type="submit">Sign in</button>
+        <button class="btn btn-primary login-submit" type="submit">{inject:i18n.get('auth.login.submit')}</button>
     </form>
 
     <p class="field-hint" style="margin-top:14px;text-align:center">
-        <a href="/ui/forgot">Forgot password?</a>
+        <a href="/ui/forgot">{inject:i18n.get('auth.login.forgot')}</a>
     </p>
 </main>
 </body>

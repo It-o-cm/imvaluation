@@ -1,24 +1,24 @@
 {#include ui/layout}
 
-{#title}Valuation {trace.id}{/title}
+{#title}{inject:i18n.get('valuations.detail.heading')} {trace.id}{/title}
 
 {#body}
 <div class="page-head">
     <div>
-        <h1>Valuation</h1>
+        <h1>{inject:i18n.get('valuations.detail.heading')}</h1>
         <p class="page-sub">{trace.createdAt} &middot; {trace.summary}</p>
     </div>
     <div class="page-actions">
-        <a class="btn" href="/ui/valuations/new?replay={trace.id}">Replay</a>
-        <a class="btn btn-ghost" href="/ui/valuations">Back to list</a>
+        <a class="btn" href="/ui/valuations/new?replay={trace.id}">{inject:i18n.get('valuations.action.replay')}</a>
+        <a class="btn btn-ghost" href="/ui/valuations">{inject:i18n.get('valuations.action.backToList')}</a>
     </div>
 </div>
 
 <section class="card">
     <div class="meta-grid">
         <div class="meta-item">
-            <span class="meta-label">Status</span>
-            {#if trace.success}<span class="badge badge-ok">Success</span>
+            <span class="meta-label">{inject:i18n.get('valuations.col.status')}</span>
+            {#if trace.success}<span class="badge badge-ok">{inject:i18n.get('valuations.status.success')}</span>
             {#else}<span class="badge badge-error">{trace.status}</span>{/if}
         </div>
         <div class="meta-item">
@@ -26,11 +26,11 @@
             <span class="meta-value">{trace.httpStatus}</span>
         </div>
         <div class="meta-item">
-            <span class="meta-label">Duration</span>
+            <span class="meta-label">{inject:i18n.get('valuations.detail.duration')}</span>
             <span class="meta-value">{#if trace.durationMs}{trace.durationMs} ms{#else}&mdash;{/if}</span>
         </div>
         <div class="meta-item">
-            <span class="meta-label">Total incl. tax</span>
+            <span class="meta-label">{inject:i18n.get('valuations.detail.totalInclTax')}</span>
             <span class="meta-value">{#if trace.totalIncludingTax}{trace.totalIncludingTax} &euro;{#else}&mdash;{/if}</span>
         </div>
     </div>
@@ -43,9 +43,9 @@
 <div class="payload-grid">
     <section class="card">
         <div class="card-title-row">
-            <h2 class="card-title">Request</h2>
-            <div class="view-toggle" role="tablist" aria-label="Request view">
-                <button type="button" class="view-tab is-active" data-view="friendly" data-target="request">Readable</button>
+            <h2 class="card-title">{inject:i18n.get('valuations.detail.request')}</h2>
+            <div class="view-toggle" role="tablist" aria-label="{inject:i18n.get('valuations.view.requestAria')}">
+                <button type="button" class="view-tab is-active" data-view="friendly" data-target="request">{inject:i18n.get('valuations.view.readable')}</button>
                 <button type="button" class="view-tab" data-view="json" data-target="request">JSON</button>
             </div>
         </div>
@@ -55,19 +55,21 @@
 
     <section class="card">
         <div class="card-title-row">
-            <h2 class="card-title">Response</h2>
+            <h2 class="card-title">{inject:i18n.get('valuations.detail.response')}</h2>
             {#if trace.responsePayload}
-            <div class="view-toggle" role="tablist" aria-label="Response view">
-                <button type="button" class="view-tab is-active" data-view="friendly" data-target="response">Readable</button>
+            <div class="view-toggle" role="tablist" aria-label="{inject:i18n.get('valuations.view.responseAria')}">
+                <button type="button" class="view-tab is-active" data-view="friendly" data-target="response">{inject:i18n.get('valuations.view.readable')}</button>
+                <button type="button" class="view-tab" data-view="receipt" data-target="response">{inject:i18n.get('valuations.view.receipt')}</button>
                 <button type="button" class="view-tab" data-view="json" data-target="response">JSON</button>
             </div>
             {/if}
         </div>
         {#if trace.responsePayload}
         <div class="view-friendly" data-panel="response-friendly"></div>
+        <div class="view-friendly is-hidden" data-panel="response-receipt"></div>
         <pre class="payload is-hidden" data-panel="response-json" data-role="response-src">{trace.responsePayload}</pre>
         {#else}
-        <p class="placeholder-note">No response was produced.</p>
+        <p class="placeholder-note">{inject:i18n.get('valuations.detail.noResponse')}</p>
         {/if}
     </section>
 </div>

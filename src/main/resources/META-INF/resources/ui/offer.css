@@ -28,6 +28,53 @@
 
 .json-editor textarea:focus { outline: none; border-color: var(--im-red); }
 
+/*
+ * The third case of the unified targeting field: neither an EAN list nor a parseable
+ * condition. The grammar refuses the content and the input carries the refusal.
+ */
+.targeting-wrap { position: relative; }
+
+.targeting-input.is-invalid,
+.targeting-input.is-invalid:focus {
+    border-color: var(--im-red);
+    outline: none;
+}
+
+/* ---------- Natural-language drafting assistant ---------- */
+
+/*
+ * The assistant card sits above the specification; its prompt is a plain sentence, so the
+ * field borrows the JSON editor's comfortable box but keeps the interface font.
+ */
+#ai-prompt {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--im-line);
+    border-radius: 6px;
+    background: #fbfcfd;
+    font: inherit;
+    line-height: 1.55;
+    resize: vertical;
+}
+
+#ai-prompt:focus { outline: none; border-color: var(--im-red); }
+
+.offer-ai .form-actions { justify-content: flex-start; }
+
+/*
+ * While dictating, the button stays lit red so the state is visible without looking at
+ * the microphone indicator.
+ */
+.offer-ai #ai-voice.is-active {
+    background: var(--im-red);
+    border-color: var(--im-red);
+    color: #fff;
+}
+
+.offer-ai #ai-result { margin-top: 10px; }
+
+.offer-ai #ai-result p { margin: 6px 0 0; }
+
 
 /* ---------- Repeaters ---------- */
 

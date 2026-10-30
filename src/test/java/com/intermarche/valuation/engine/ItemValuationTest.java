@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -228,5 +229,43 @@ public class ItemValuationTest {
         assertEquals(new BigDecimal("41.67"), highItem.amount.amountExcludingTax);
         BigDecimal sumTtc = lowItem.amount.amountIncludingTax.add(highItem.amount.amountIncludingTax);
         assertEquals(new BigDecimal("100.01"), sumTtc);
+    }
+
+    /**
+     * The catalog name of the product resolved on the slice is carried as the label of every
+     * valued line, whether the slice is its own line (null source lines) or is split over its
+     * source lines (digital sheet DG-01-01-01).
+     */
+    @Test
+    void testDistribute_labelFromResolvedProduct() {
+        Store store = mock(Store.class);
+        Product named = new Product();
+        named.name = "Lait UHT 1L";
+        Basket.Item own = slice(store, "L0", "E0", new BigDecimal("10.00"), RATE_20, null);
+        own.product = named;
+        Basket.Item split = slice(store, "L1", "E1", new BigDecimal("10.00"), RATE_20,
+                List.of(new Basket.Item.SourceLine("L1", BigDecimal.ONE),
+                        new Basket.Item.SourceLine("L2", BigDecimal.ONE)));
+        split.product = named;
+        List<BasketEvaluation.Item> result =
+                ItemValuation.distribute(offer("20.00"), List.of(own, split), store);
+        assertEquals(3, result.size());
+        assertEquals("Lait UHT 1L", result.get(0).label);
+        assertEquals("Lait UHT 1L", result.get(1).label);
+        assertEquals("Lait UHT 1L", result.get(2).label);
+    }
+
+    /**
+     * A slice whose product was never resolved (an unknown article on its pushed price) yields
+     * valued lines without label.
+     */
+    @Test
+    void testDistribute_noLabelWithoutResolvedProduct() {
+        Store store = mock(Store.class);
+        Basket.Item own = slice(store, "L0", "E0", new BigDecimal("10.00"), RATE_20, null);
+        List<BasketEvaluation.Item> result =
+                ItemValuation.distribute(offer("10.00"), List.of(own), store);
+        assertEquals(1, result.size());
+        assertNull(result.get(0).label);
     }
 }

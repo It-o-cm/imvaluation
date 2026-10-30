@@ -107,6 +107,17 @@ class GroupEIT {
         assertTrue(body.contains("\"createdCount\":1"), "Product seed must create exactly one row: " + body);
     }
 
+    /**
+     * Seeds VAT regime 1 (20%) through {@code /vat-rates/import} so a price naming a rate resolves
+     * its regime: since the EGALIM/VAT chantier {@code PriceCsvResource.resolveRegime} rejects a rate
+     * the referential does not carry ("Unknown VAT rate ...: no regime in the referential"). The
+     * regime NUMBER is the upsert key, so a re-seed is a no-op update. Rate {@code 0.2000} matches the
+     * tests' {@code 0.20} by numeric value.
+     */
+    private void seedVatRates() {
+        importCsv("/vat-rates/import", "VAT_NUMBER|RATE|LABEL\n1|0.2000|Taux normal\n");
+    }
+
     // --------------------------------------------------
     // E1 — Stores: upsert by code, optional coordinates, mandatory name
     // --------------------------------------------------
@@ -164,14 +175,15 @@ class GroupEIT {
     // --------------------------------------------------
 
     /**
-     * E2 — additive store linking. A group first imported with two stores keeps BOTH after a second
-     * import that lists only one of them: the importer only ever adds store links, it never clears
-     * them (the strategy opposite to families and offers). The name is changed on the second import
-     * so the checksum differs and the update path re-attaches the managed group; the surviving link
-     * to the dropped store is found by predicate, never by index.
+     * E2 — replace store linking (A4). A group first imported with two stores keeps ONLY the store
+     * still listed after a second import that lists one of them: the importer now REPLACES the store
+     * links to exactly the requested set ({@code StoreGroupCsvResource.replaceStores} clears then
+     * re-adds — A4 replace semantics, rapport-remediation-imvaluation.md §"Step 6" A4), the strategy
+     * that also makes the checksum member-inclusive. The name is changed on the second import so the
+     * checksum differs and the update path runs; membership is asserted by predicate, never by index.
      */
     @Test
-    void e2_additiveStoreLinkingNeverRemoves() {
+    void e2_replaceStoreLinkingDropsMissing() {
         seedStore("E2SA", "E2 Store A");
         seedStore("E2SB", "E2 Store B");
         String created = importCsv("/store-groups/import",
@@ -185,10 +197,10 @@ class GroupEIT {
         QuarkusTransaction.requiringNew().run(() -> {
             StoreGroup group = StoreGroup.findByCode("E2GRP");
             assertNotNull(group, "The group must exist");
-            assertEquals(2, group.stores.size(), "The amputated import must not remove any store link");
+            assertEquals(1, group.stores.size(), "A4 replace semantics: the amputated import keeps only the listed store");
             assertTrue(group.stores.stream().anyMatch(s -> "E2SA".equals(s.code)), "Store A must remain linked");
-            assertTrue(group.stores.stream().anyMatch(s -> "E2SB".equals(s.code)),
-                    "Store B must remain linked despite being dropped from the second import");
+            assertFalse(group.stores.stream().anyMatch(s -> "E2SB".equals(s.code)),
+                    "Store B must have been dropped by the replace-semantics second import (A4)");
         });
     }
 
@@ -356,7 +368,11 @@ class GroupEIT {
     /**
      * E4 — self-reference guard. A family listing itself among its sub-families fails with the literal
      * {@code Family '<code>' cannot contain itself.} — the guard that store-groups deliberately lack
-     * (contrast E2). The family is created first, then re-imported referencing its own code.
+     * (contrast E2). The family is created first, then re-imported referencing its own code. The
+     * DESCRIPTION is changed on the re-import ({@code Desc} → {@code Desc2}) so the checksum differs:
+     * the family checksum excludes children ({@code ProductFamilyCsvResource.computeIncomingChecksum}
+     * hashes code/description/flags only), so a subfamily-only re-import would be a silent no-op and
+     * never reach {@code linkSubFamilies} where the self-reference guard fires.
      */
     @Test
     void e4_selfReferenceRejected() {
@@ -366,7 +382,7 @@ class GroupEIT {
         assertTrue(created.contains("\"createdCount\":1"), "The family must be created first: " + created);
         String looped = importCsv("/product-families/import",
                 "CODE|DESCRIPTION|FLAGS|PRODUCT_EANS|SUBFAMILY_CODES\n"
-                        + "E4SELF|Desc|||E4SELF\n");
+                        + "E4SELF|Desc2|||E4SELF\n");
         assertTrue(looped.contains("Family 'E4SELF' cannot contain itself."),
                 "The self-reference guard text must appear verbatim: " + looped);
     }
@@ -428,6 +444,7 @@ class GroupEIT {
      */
     @Test
     void e6_endDateChangeUpdatesInPlace() {
+        seedVatRates();
         seedProduct("E6PEND", "E6 Product End");
         seedStore("E6SEND", "E6 Store End");
         String created = importCsv("/prices/import",
@@ -455,6 +472,7 @@ class GroupEIT {
      */
     @Test
     void e6_priorityChangeCreatesAdditionalPrice() {
+        seedVatRates();
         seedProduct("E6PPRIO", "E6 Product Prio");
         seedStore("E6SPRIO", "E6 Store Prio");
         importCsv("/prices/import",
@@ -525,24 +543,28 @@ class GroupEIT {
     }
 
     /**
-     * E6 — non-ISO start date is silently nulled. An unparseable {@code startDateTime} is logged (WARN)
-     * and stored as {@code null}, which also shifts the composite key: the price is still created, and
-     * the persisted start date is {@code null}.
+     * E6 — a present-but-unparseable start date rejects the line (H6b). Since the imports-hardening
+     * chantier {@code ImporterCsvResource.safeParseDateTime} throws on a present date it cannot parse
+     * ("Invalid date in column 'START_DATE': ... (expected YYYY-MM-DDTHH:MM:SS)") instead of silently
+     * collapsing it to {@code null} — a null would open a validity window or shift the price's natural
+     * key without any error (rapport-remediation-imvaluation.md §"Step 6" H6b). The row is rejected
+     * (createdCount 0) with the ISO date-format message, and no price is written. The date error fires
+     * before VAT resolution, so no VAT regime seed is needed.
      */
     @Test
-    void e6_nonIsoStartDateNulled() {
+    void e6_nonIsoStartDateRejected() {
         seedProduct("E6PDATE", "E6 Product Date");
         seedStore("E6SDATE", "E6 Store Date");
         String body = importCsv("/prices/import",
                 "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
                         + "E6PDATE|E6SDATE|10.00|12.00|0.20|DEFAULT|1|31/12/2025|2025-12-31T00:00:00\n");
-        assertTrue(body.contains("\"createdCount\":1"),
-                "A non-ISO start date must not block the creation: " + body);
-        QuarkusTransaction.requiringNew().run(() -> {
-            Price price = Price.find("product.ean = ?1 and store.code = ?2", "E6PDATE", "E6SDATE").firstResult();
-            assertNotNull(price, "The price must exist");
-            assertNull(price.startDateTime, "The unparseable start date must be stored as null");
-        });
+        assertTrue(body.contains("\"createdCount\":0"),
+                "A present-but-unparseable start date must reject the line (H6b): " + body);
+        assertTrue(body.contains("Invalid date in column 'START_DATE': '31/12/2025'"),
+                "The line must carry the ISO date-format rejection message: " + body);
+        QuarkusTransaction.requiringNew().run(() ->
+                assertNull(Price.find("product.ean = ?1 and store.code = ?2", "E6PDATE", "E6SDATE").firstResult(),
+                        "The rejected price must not exist"));
     }
 
     // --------------------------------------------------
@@ -682,6 +704,145 @@ class GroupEIT {
             assertTrue(offer.stores.stream().anyMatch(s -> "E7RA".equals(s.code)), "Only store RA must remain linked");
             assertFalse(offer.stores.stream().anyMatch(s -> "E7RB".equals(s.code)),
                     "Store RB must have been dropped by the replacement");
+        });
+    }
+
+    // --------------------------------------------------
+    // E8 — EGALIM_REGIMES (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * E8 — the {@code EGALIM_REGIMES} feed: {@code CODE|LABEL|CAP_RATE}, upsert by code. An
+     * {@code EXEMPT} regime with an EMPTY cap is accepted (uncapped); a {@code CAP_RATE} above 1
+     * is rejected with the fraction message; a strict re-import is a no-op; re-delivering the same
+     * code with a changed cap is one update.
+     */
+    @Test
+    void e8_egalimRegimesImport() {
+        String created = importCsv("/egalim-regimes/import",
+                "CODE|LABEL|CAP_RATE\nE8_FOOD|Food 34|0.3400\nE8_EXEMPT|Exempt|\n");
+        assertTrue(created.contains("\"createdCount\":2"), "Both regimes are created: " + created);
+        String bad = importCsv("/egalim-regimes/import", "CODE|LABEL|CAP_RATE\nE8_BAD|Bad|1.5\n");
+        assertTrue(bad.contains("EGAlim cap '1.5' for regime E8_BAD is not a fraction between 0 and 1."),
+                "A cap above 1 is rejected: " + bad);
+        String noop = importCsv("/egalim-regimes/import",
+                "CODE|LABEL|CAP_RATE\nE8_FOOD|Food 34|0.3400\nE8_EXEMPT|Exempt|\n");
+        assertTrue(noop.contains("\"createdCount\":0") && noop.contains("\"updatedCount\":0"),
+                "A strict re-import is a no-op: " + noop);
+        String upsert = importCsv("/egalim-regimes/import", "CODE|LABEL|CAP_RATE\nE8_FOOD|Food 30|0.3000\n");
+        assertTrue(upsert.contains("\"createdCount\":0") && upsert.contains("\"updatedCount\":1"),
+                "Re-delivering a code with a changed cap is one update: " + upsert);
+    }
+
+    // --------------------------------------------------
+    // E9 — PRODUCTS EGALIM_REGIME column (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * E9 — the products' {@code EGALIM_REGIME} column: a valid value is stored (case-insensitive),
+     * an absent column fails open to {@code EXEMPT}, and an unknown value rejects the line with the
+     * dedicated message.
+     */
+    @Test
+    void e9_productsEgalimRegimeColumn() {
+        importCsv("/products/import",
+                "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE|EGALIM_REGIME\n"
+                        + "3309000000091|E9 Food|d|B|||UNIT|pc|true|food_34\n");
+        QuarkusTransaction.requiringNew().run(() -> assertEquals("FOOD_34",
+                Product.findByEan("3309000000091").egalimRegime.name(), "A lower-case regime is parsed"));
+        seedProduct("3309000000092", "E9 Default");
+        QuarkusTransaction.requiringNew().run(() -> assertEquals("EXEMPT",
+                Product.findByEan("3309000000092").egalimRegime.name(), "An absent column fails open to EXEMPT"));
+        String bad = importCsv("/products/import",
+                "EAN|NAME|DESCRIPTION|BRAND|REFERENCE_WEIGHT|REFERENCE_VOLUME|PRODUCT_TYPE|UNIT_NAME|ACTIVE|EGALIM_REGIME\n"
+                        + "3309000000093|E9 Bad|d|B|||UNIT|pc|true|BOGUS\n");
+        assertTrue(bad.contains(
+                "Invalid EGAlim regime in column 'EGALIM_REGIME': 'BOGUS' (expected FOOD_34, DPH_40 or EXEMPT)"),
+                "An unknown regime rejects the line: " + bad);
+    }
+
+    // --------------------------------------------------
+    // E10 — PRICES SRP_FLOOR usage (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * E10 — the {@code SRP_FLOOR} price usage is accepted like any other; an unknown usage token
+     * is rejected with the mandatory-usage message.
+     */
+    @Test
+    void e10_pricesSrpFloorUsage() {
+        seedStore("E10S", "E10 Store");
+        seedProduct("3309000000101", "E10 Product");
+        seedVatRates();
+        String ok = importCsv("/prices/import",
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
+                        + "3309000000101|E10S|2.00|2.40|0.2000|SRP_FLOOR|0|2026-01-12T00:00:00|\n");
+        assertTrue(ok.contains("\"createdCount\":1"), "An SRP_FLOOR price is accepted: " + ok);
+        String bad = importCsv("/prices/import",
+                "EAN|STORE_CODE|PRICE_EXCL_TAX|PRICE_INCL_TAX|VAT_RATE|PRICE_USAGE|PRIORITY|START_DATE|END_DATE\n"
+                        + "3309000000101|E10S|2.00|2.40|0.2000|BOGUS|0|2026-01-12T00:00:00|\n");
+        assertTrue(bad.contains("PriceUsage is mandatory"), "An unknown price usage is rejected: " + bad);
+    }
+
+    // --------------------------------------------------
+    // E11 — BUDGET_GROUPS (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * E11 — the {@code BUDGET_GROUPS} feed: nominal creation with an optional period, a group with
+     * BOTH ceilings empty accepted (a bare regrouping), and checksum idempotence.
+     */
+    @Test
+    void e11_budgetGroupsImport() {
+        String created = importCsv("/budget-groups/import",
+                "CODE|VALID_FROM|VALID_TO|MAX_AMOUNT|MAX_APPLICATIONS|PER_STORE\n"
+                        + "E11_CAP|2026-01-01T00:00:00|2026-12-31T23:59:59|10.00|3|false\n"
+                        + "E11_OPEN|||||false\n");
+        assertTrue(created.contains("\"createdCount\":2"),
+                "Both groups create, including the envelope-less one: " + created);
+        String noop = importCsv("/budget-groups/import",
+                "CODE|VALID_FROM|VALID_TO|MAX_AMOUNT|MAX_APPLICATIONS|PER_STORE\n"
+                        + "E11_CAP|2026-01-01T00:00:00|2026-12-31T23:59:59|10.00|3|false\n"
+                        + "E11_OPEN|||||false\n");
+        assertTrue(noop.contains("\"createdCount\":0") && noop.contains("\"updatedCount\":0"),
+                "A strict re-import is a no-op: " + noop);
+    }
+
+    // --------------------------------------------------
+    // E12 — OFFERS new columns (extension 27/09)
+    // --------------------------------------------------
+
+    /**
+     * E12 — a pre-extension five-column OFFERS file still imports unchanged, an unknown
+     * {@code BUDGET_GROUP_CODE} rejects the line, and (spec-ciblage-saisie §3) an unknown
+     * {@code EXCLUDED_STORE_CODES} code rejects the line too, while a valid exclusion is accepted
+     * and linked.
+     */
+    @Test
+    void e12_offersNewColumns() {
+        seedStore("E12S", "E12 Store");
+        seedStore("E12X", "E12 Excluded Store");
+        String legacy = importCsv("/offers/import",
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES\nE12_LEGACY|MEAL_VOUCHER|{}|E12S|\n");
+        assertTrue(legacy.contains("\"createdCount\":1"), "A five-column OFFERS file still imports: " + legacy);
+        String badGroup = importCsv("/offers/import",
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES|VALID_FROM|VALID_TO|ACTIVE|BUDGET_GROUP_CODE\n"
+                        + "E12_BADGRP|MEAL_VOUCHER|{}|E12S||||true|NOPE\n");
+        assertTrue(badGroup.contains("BudgetGroup code 'NOPE' not found."),
+                "An unknown budget group code rejects the line: " + badGroup);
+        String badExcluded = importCsv("/offers/import",
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES|EXCLUDED_STORE_CODES\n"
+                        + "E12_BADEXCL|MEAL_VOUCHER|{}|E12S||ZZZZ\n");
+        assertTrue(badExcluded.contains("Excluded store code 'ZZZZ' not found."),
+                "An unknown excluded store code rejects the line: " + badExcluded);
+        String okExcluded = importCsv("/offers/import",
+                "CODE|TYPE|SPECIFICATION|STORE_CODES|STORE_GROUP_CODES|EXCLUDED_STORE_CODES\n"
+                        + "E12_EXCL|MEAL_VOUCHER|{}|E12S||E12X\n");
+        assertTrue(okExcluded.contains("\"createdCount\":1"), "A valid exclusion is accepted: " + okExcluded);
+        QuarkusTransaction.requiringNew().run(() -> {
+            Offer offer = Offer.findByCode("E12_EXCL");
+            assertNotNull(offer, "The offer with a valid exclusion exists");
+            assertTrue(offer.getExcludedStoreCodes().contains("E12X"), "The excluded store is linked");
         });
     }
 }

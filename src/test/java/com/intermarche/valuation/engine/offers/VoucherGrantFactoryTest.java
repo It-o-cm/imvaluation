@@ -329,6 +329,145 @@ public class VoucherGrantFactoryTest {
     }
 
     /**
+     * §4 case 1 — {@code maxPerTicket 10}, raw computation 14: the attribution is clipped down
+     * to 10 points and the clip is traced (raw 14, granted 10), never refused in block.
+     */
+    @Test
+    void testApply_Accrual_MaxPerTicket_ClipsAndTraces() {
+        setUpDatabase();
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"unit\": \"POINTS\", \"accrual\": { \"maxPerTicket\": 10 }, "
+                + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
+        Collection<AdvantageApplication> grants = applyOn(spec, 140.00);
+        assertEquals(1, grants.size());
+        InstrumentGrantFactory.InstrumentGrantApplication grant =
+                (InstrumentGrantFactory.InstrumentGrantApplication) grants.iterator().next();
+        assertEquals(new BigDecimal("10"), grant.getGrant().amount());
+        InstrumentGrantFactory.AccrualTrace trace = grant.getAccrual();
+        assertNotNull(trace);
+        assertEquals(Integer.valueOf(10), trace.maxPerTicket());
+        assertEquals(new BigDecimal("14"), trace.rawAmount());
+        assertEquals(new BigDecimal("10"), trace.grantedAmount());
+        assertNull(trace.rawBaseAmount());
+        assertNull(trace.cappedBaseAmount());
+        assertNull(trace.maxTicketAmountBase());
+    }
+
+    /**
+     * §4 case 2 — {@code maxTicketAmountBase 100} on a 250€ ticket: the attribution is computed
+     * as for a 100€ ticket (10% → 10.00€) and the base clip is traced (raw 250, capped 100).
+     */
+    @Test
+    void testApply_Accrual_MaxTicketAmountBase_CapsBaseAndTraces() {
+        setUpDatabase();
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"accrual\": { \"maxTicketAmountBase\": 100.0 }, "
+                + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
+        Collection<AdvantageApplication> grants = applyOn(spec, 250.00);
+        assertEquals(1, grants.size());
+        InstrumentGrantFactory.InstrumentGrantApplication grant =
+                (InstrumentGrantFactory.InstrumentGrantApplication) grants.iterator().next();
+        assertEquals(new BigDecimal("10.00"), grant.getGrant().amount());
+        InstrumentGrantFactory.AccrualTrace trace = grant.getAccrual();
+        assertNotNull(trace);
+        assertEquals(new BigDecimal("250.00"), trace.rawBaseAmount());
+        assertEquals(new BigDecimal("100.00"), trace.cappedBaseAmount());
+        assertEquals(new BigDecimal("10.00"), trace.grantedAmount());
+        assertNull(trace.maxPerTicket());
+    }
+
+    /**
+     * §4 case 2 — the base cap also drives the VAT_AMOUNT award: a 250€ ticket at 20% capped to
+     * 100€ grants the VAT of 100€ (16.67€), not the VAT of 250€.
+     */
+    @Test
+    void testApply_Accrual_MaxTicketAmountBase_ScalesVatAward() {
+        setUpDatabase();
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"accrual\": { \"maxTicketAmountBase\": 100.0 }, "
+                + "\"tiers\": [ { \"threshold\": 0.0, \"award\": { \"type\": \"VAT_AMOUNT\" } } ] }";
+        Collection<AdvantageApplication> grants = applyOn(spec, 250.00);
+        InstrumentGrantFactory.InstrumentGrantApplication grant =
+                (InstrumentGrantFactory.InstrumentGrantApplication) grants.iterator().next();
+        assertEquals(new BigDecimal("16.67"), grant.getGrant().amount());
+    }
+
+    /**
+     * §4 case 4 — caps absent: the attribution is the current behaviour to the cent (10% of 250€
+     * = 25.00€) and no accrual trace is emitted, so the response is bit-for-bit identical.
+     */
+    @Test
+    void testApply_Accrual_Absent_BitForBitAndNoTrace() {
+        setUpDatabase();
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
+        Collection<AdvantageApplication> grants = applyOn(spec, 250.00);
+        InstrumentGrantFactory.InstrumentGrantApplication grant =
+                (InstrumentGrantFactory.InstrumentGrantApplication) grants.iterator().next();
+        assertEquals(new BigDecimal("25.00"), grant.getGrant().amount());
+        assertNull(grant.getAccrual());
+    }
+
+    /**
+     * §4 case 4 — caps present but not binding: a 140€ ticket under a 10-point cap grants its raw
+     * 14 points untouched, and no clip means no trace (identical to an uncapped grant).
+     */
+    @Test
+    void testApply_Accrual_PresentNotBinding_NoTrace() {
+        setUpDatabase();
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"unit\": \"POINTS\", \"accrual\": { \"maxPerTicket\": 100, \"maxTicketAmountBase\": 1000.0 }, "
+                + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
+        Collection<AdvantageApplication> grants = applyOn(spec, 140.00);
+        InstrumentGrantFactory.InstrumentGrantApplication grant =
+                (InstrumentGrantFactory.InstrumentGrantApplication) grants.iterator().next();
+        assertEquals(new BigDecimal("14"), grant.getGrant().amount());
+        assertNull(grant.getAccrual());
+    }
+
+    /**
+     * Tests the VIGNETTES attribution unit: a 55€ ticket with a 10€ step and a 1-per-step award
+     * attributes 5 whole vignettes (the outgoing attribution mechanic, spec §2).
+     */
+    @Test
+    void testApply_Vignettes_Unit_AttributesWholeVignettes() {
+        setUpDatabase();
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"PER_MULTIPLE\", "
+                + "\"unit\": \"VIGNETTES\", "
+                + "\"every\": { \"step\": 10.0, \"award\": { \"type\": \"AMOUNT\", \"value\": 1 } } }";
+        Collection<AdvantageApplication> grants = applyOn(spec, 55.00);
+        InstrumentGrantFactory.InstrumentGrantApplication grant =
+                (InstrumentGrantFactory.InstrumentGrantApplication) grants.iterator().next();
+        assertEquals(new BigDecimal("5"), grant.getGrant().amount());
+        assertEquals("VIGNETTES", grant.getGrant().unit());
+    }
+
+    /**
+     * §4 case 6 — determinism: applying the same clipped grant 50 times yields the very same
+     * amount and the very same trace every time; the applier is pure and holds no state.
+     */
+    @Test
+    void testApply_Accrual_Deterministic_FiftyRuns() {
+        setUpDatabase();
+        String spec = "{ \"scope\": \"TICKET\", \"metric\": \"AMOUNT\", \"mode\": \"HIGHEST_REACHED\", "
+                + "\"unit\": \"POINTS\", \"accrual\": { \"maxPerTicket\": 10, \"maxTicketAmountBase\": 200.0 }, "
+                + "\"tiers\": [ { \"threshold\": 50.0, \"award\": { \"type\": \"PERCENTAGE\", \"value\": 10.0 } } ] }";
+        DomainUtils.createAndPersistOffer("VG_DET", store, "VOUCHER_GRANT", spec);
+        BasketEvaluation evaluation = newEvaluation();
+        Product product = new Product();
+        product.ean = "1000000000001";
+        evaluation.getOffers().add(new ProductApplication(product, 1.0, 250.00));
+        AdvantageApplier applier = factory.buildAppliers(evaluation).iterator().next();
+        for (int run = 0; run < 50; run++) {
+            InstrumentGrantFactory.InstrumentGrantApplication grant =
+                    (InstrumentGrantFactory.InstrumentGrantApplication) applier.apply(evaluation).iterator().next();
+            assertEquals(new BigDecimal("10"), grant.getGrant().amount());
+            assertEquals(new BigDecimal("20"), grant.getAccrual().rawAmount());
+            assertEquals(new BigDecimal("200.00"), grant.getAccrual().cappedBaseAmount());
+        }
+    }
+
+    /**
      * Tests that an absent usage block leaves the grant usage null and drops it from the
      * serialized JSON (the record is annotated NON_NULL).
      *

@@ -108,6 +108,12 @@ public class ValuationUiResource {
     ValuationResource valuationResource;
 
     /**
+     * Localised interface labels for the screen notices (spec-exploitation §1).
+     */
+    @Inject
+    com.intermarche.valuation.i18n.Messages messages;
+
+    /**
      * Mapper used to parse the submitted basket and pretty-print the evaluation.
      */
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -274,7 +280,7 @@ public class ValuationUiResource {
             // recreated database). Send the user back to the list with a plain explanation
             // rather than a dead-end error page.
             java.net.URI target = jakarta.ws.rs.core.UriBuilder.fromPath(BASE_PATH)
-                    .queryParam("notice", "Valuation " + id + " no longer exists.")
+                    .queryParam("notice", messages.format("valuations.notice.gone", id))
                     .queryParam("noticeOk", false)
                     .build();
             return Response.seeOther(target).build();
@@ -324,7 +330,7 @@ public class ValuationUiResource {
         LOGGER.debug("Entering method submitTest");
         if (requestJson == null || requestJson.isBlank()) {
             return Response.ok(Templates.test(HtmlSafeJson.forScript(schemasJson()), HtmlSafeJson.forScript("{}"), null,
-                    "The basket is empty.")).build();
+                    messages.get("valuations.error.emptyBasket"))).build();
         }
         try {
             Basket basket = MAPPER.readValue(requestJson, Basket.class);
@@ -333,7 +339,7 @@ public class ValuationUiResource {
                     .writeValueAsString(result.getEntity());
             return Response.ok(Templates.test(HtmlSafeJson.forScript(schemasJson()), HtmlSafeJson.forScript(requestJson), response, null)).build();
         } catch (WebApplicationException e) {
-            String message = e.getMessage() == null ? "The valuation was refused." : e.getMessage();
+            String message = e.getMessage() == null ? messages.get("valuations.error.refused") : e.getMessage();
             return Response.ok(Templates.test(HtmlSafeJson.forScript(schemasJson()), HtmlSafeJson.forScript(requestJson), null,
                     "HTTP " + e.getResponse().getStatus() + " \u2014 " + message)).build();
         } catch (Exception e) {
@@ -364,12 +370,12 @@ public class ValuationUiResource {
                                  @FormParam("retentionDays") int retentionDays) {
         LOGGER.debug("Entering method updateConfig");
         if (retentionDays < 1) {
-            return redirectWithNotice("The retention must be at least one day.", false);
+            return redirectWithNotice(messages.get("valuations.notice.retentionMin"), false);
         }
         ValuationTraceConfig config = ValuationTraceConfig.current();
         config.enabled = enabled != null;
         config.retentionDays = retentionDays;
-        return redirectWithNotice("Tracing configuration updated.", true);
+        return redirectWithNotice(messages.get("valuations.notice.configUpdated"), true);
     }
 
     /**
@@ -383,7 +389,7 @@ public class ValuationUiResource {
     @Produces(MediaType.TEXT_HTML)
     public Response purge() {
         long deleted = traceService.purgeAll();
-        return redirectWithNotice(deleted + " trace(s) deleted.", true);
+        return redirectWithNotice(messages.format("valuations.notice.purged", deleted), true);
     }
 
     // --------------------------------------------------

@@ -63,16 +63,22 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 class GroupDIT {
 
     /**
-     * The seven import endpoints in the mandated referential order, shared by D9.
+     * The ten ADMIN-guarded import endpoints in the mandated referential order, shared by D9. The
+     * EGALIM/VAT and budget chantiers added {@code /vat-rates/import}, {@code /egalim-regimes/import}
+     * and {@code /budget-groups/import}; all carry {@code @RolesAllowed("ADMIN")}, so D9 asserts the
+     * MANAGER refusal on every one.
      */
     private static final String[] IMPORT_ENDPOINTS = {
+            "/vat-rates/import",
             "/stores/import",
             "/store-groups/import",
             "/products/import",
             "/product-families/import",
             "/product-category-storages/import",
             "/prices/import",
-            "/offers/import"
+            "/offers/import",
+            "/egalim-regimes/import",
+            "/budget-groups/import"
     };
 
     /**
@@ -145,9 +151,10 @@ class GroupDIT {
 
     /**
      * D2 — cell count. A line with fewer cells than the header is collected into
-     * {@code errors} as {@code Line N ignored (fewer cells than the header): <line>} while the
-     * import still answers 200; a line carrying extra columns is accepted without any noise and
-     * is counted as created.
+     * {@code errors} as {@code Line N ignored (fewer cells than the header: <got> < <expected>)}
+     * while the import still answers 200; a line carrying extra columns is accepted without any
+     * noise and is counted as created. The raw payload line is no longer embedded in the message
+     * (rapport-remediation-imvaluation.md §3): the counts replace it.
      */
     @Test
     void d2_notEnoughColumnsCollectedExtraAccepted() {
@@ -160,7 +167,7 @@ class GroupDIT {
                 .when().post("/stores/import")
                 .then().statusCode(200)
                 .body(containsString("\"createdCount\":1"))
-                .body(containsString("Line 3 ignored (fewer cells than the header): D2SHORT|only three"));
+                .body(containsString("Line 3 ignored (fewer cells than the header: 2 < 7)"));
     }
 
     // --------------------------------------------------
@@ -168,11 +175,11 @@ class GroupDIT {
     // --------------------------------------------------
 
     /**
-     * D3 — malformed JSON contract. When the response carries errors, the body joins the
-     * messages with {@code ","} and closes with {@code "]} but omits the opening quote of the
-     * first message, so it reads {@code "errors":[msg1","msg2"]}. The assertions are purely
-     * textual: the absence of the well-formed {@code ["} prefix, the {@code ","} join between
-     * the two messages, and the closing {@code "]}} are pinned as the de-facto contract.
+     * D3 — well-formed error JSON contract. The former de-facto contract (a malformed
+     * {@code "errors":[msg1","msg2"]} missing the first opening quote) was fixed: {@code buildAnswer}
+     * now JSON-escapes every message and prepends its opening quote (report H7), so the body reads
+     * {@code "errors":["msg1","msg2"]}. Raw payload lines are no longer embedded (report §3): the
+     * messages carry the cell counts, not the offending text.
      */
     @Test
     void d3_malformedErrorJsonContract() {
@@ -184,10 +191,13 @@ class GroupDIT {
                 .body(csv)
                 .when().post("/stores/import")
                 .then().statusCode(200)
-                .body(containsString("\"errors\":[\"Line 2 ignored (fewer cells than the header): firstbad"))
-                .body(containsString("firstbad\",\"Line 3 ignored (fewer cells than the header): secondbad|x"))
-                .body(containsString("secondbad|x\"]}"))
-                .body(not(containsString("\"errors\":[\"")));
+                // Well-formed JSON now (report H7): the opening quote of the first message is present.
+                .body(containsString("\"errors\":[\"Line 2 ignored (fewer cells than the header: 1 < 7)\","
+                        + "\"Line 3 ignored (fewer cells than the header: 2 < 7)\"]}"))
+                .body(containsString("\"errors\":[\""))
+                // Raw payload lines are no longer embedded in the messages (report §3).
+                .body(not(containsString("firstbad")))
+                .body(not(containsString("secondbad")));
     }
 
     // --------------------------------------------------

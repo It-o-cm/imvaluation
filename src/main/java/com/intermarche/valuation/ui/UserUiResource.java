@@ -1,6 +1,10 @@
 package com.intermarche.valuation.ui;
 
 import com.intermarche.valuation.domain.AppUser;
+import com.intermarche.valuation.domain.Store;
+import com.intermarche.valuation.domain.StoreGroup;
+import com.intermarche.valuation.i18n.Messages;
+import jakarta.inject.Inject;
 import io.quarkus.qute.CheckedTemplate;
 import io.quarkus.qute.TemplateInstance;
 import io.smallrye.common.annotation.RunOnVirtualThread;
@@ -54,6 +58,19 @@ public class UserUiResource {
     private static final Logger LOGGER = Logger.getLogger(UserUiResource.class);
 
     /**
+     * Registry exposing every configurable offer type, offered as allowed-offer-type candidates.
+     */
+    @Inject
+    OfferSchemaRegistry schemaRegistry;
+
+    /**
+     * Interface message bundle, for the localised notices and validation messages shown on the
+     * screens (spec-exploitation §1).
+     */
+    @Inject
+    Messages messages;
+
+    /**
      * Number of accounts displayed per page.
      */
     private static final int PAGE_SIZE = 25;
@@ -99,12 +116,17 @@ public class UserUiResource {
         /**
          * Renders the user creation or edition form.
          *
-         * @param user     The account being edited, or null when creating.
-         * @param allRoles Every role the application recognises.
-         * @param error    An error message to display, may be null.
+         * @param user            The account being edited, or null when creating.
+         * @param allRoles        Every role the application recognises.
+         * @param storeCandidates Every store and store-group code, for the store-scope checkboxes.
+         * @param typeCandidates  Every offer type, for the allowed-offer-types checkboxes.
+         * @param menuKeys        Every menu key, for the hidden-menus checkboxes.
+         * @param error           An error message to display, may be null.
          * @return The template instance to render.
          */
-        public static native TemplateInstance form(AppUser user, List<String> allRoles, String error);
+        public static native TemplateInstance form(AppUser user, List<String> allRoles,
+                                                   List<String> storeCandidates, List<String> typeCandidates,
+                                                   List<String> menuKeys, String error);
     }
 
     // --------------------------------------------------
@@ -192,7 +214,8 @@ public class UserUiResource {
         LOGGER.debug("Entering method create");
         AppUser user = new AppUser();
         user.active = true;
-        return Templates.form(user, AppUser.ALL_ROLES, null);
+        return Templates.form(user, AppUser.ALL_ROLES, storeCandidates(), typeCandidates(),
+                AppUser.MENU_KEYS, null);
     }
 
     /**
@@ -211,7 +234,8 @@ public class UserUiResource {
             LOGGER.error("User with id " + id + " not found");
             return Response.status(Response.Status.NOT_FOUND).entity("User " + id + " not found").build();
         }
-        return Response.ok(Templates.form(user, AppUser.ALL_ROLES, null)).build();
+        return Response.ok(Templates.form(user, AppUser.ALL_ROLES, storeCandidates(), typeCandidates(),
+                AppUser.MENU_KEYS, null)).build();
     }
 
     // --------------------------------------------------
@@ -237,24 +261,33 @@ public class UserUiResource {
                          @FormParam("password") String password,
                          @FormParam("displayName") String displayName,
                          @FormParam("roles") List<String> roles,
-                         @FormParam("active") String active) {
+                         @FormParam("storeScope") List<String> storeScope,
+                         @FormParam("allowedOfferTypes") List<String> allowedOfferTypes,
+                         @FormParam("hiddenMenus") List<String> hiddenMenus,
+                         @FormParam("active") String active,
+                         @FormParam("locale") String locale) {
         LOGGER.debug("Entering method save for username: " + username);
         AppUser user = new AppUser();
         user.username = username == null ? null : username.trim();
         user.displayName = displayName;
         user.active = active != null;
+        user.locale = (locale == null || locale.isBlank()) ? null : locale.trim();
         user.setRoleSet(sanitizeRoles(roles));
+        user.setStoreScopeSet(sanitizeStoreScope(storeScope));
+        user.setAllowedOfferTypeSet(sanitizeOfferTypes(allowedOfferTypes));
+        user.setHiddenMenuSet(sanitizeHiddenMenus(hiddenMenus));
 
         String error = validateNew(user, password);
         if (error != null) {
-            return Response.ok(Templates.form(user, AppUser.ALL_ROLES, error)).build();
+            return Response.ok(Templates.form(user, AppUser.ALL_ROLES, storeCandidates(),
+                    typeCandidates(), AppUser.MENU_KEYS, error)).build();
         }
         user.setPassword(password);
         // The creator knows this password, so its owner must replace it on first sign-in.
         user.mustChangePassword = true;
         user.persist();
         LOGGER.debug("Exiting method save. Created ID: " + user.id);
-        return redirectWithNotice("Account '" + user.username + "' created.", true);
+        return redirectWithNotice(messages.format("users.notice.created", user.username), true);
     }
 
     /**
@@ -280,7 +313,11 @@ public class UserUiResource {
                            @FormParam("password") String password,
                            @FormParam("displayName") String displayName,
                            @FormParam("roles") List<String> roles,
+                           @FormParam("storeScope") List<String> storeScope,
+                           @FormParam("allowedOfferTypes") List<String> allowedOfferTypes,
+                           @FormParam("hiddenMenus") List<String> hiddenMenus,
                            @FormParam("active") String active,
+                           @FormParam("locale") String locale,
                            @Context SecurityContext securityContext) {
         LOGGER.debug("Entering method update for id: " + id);
         AppUser user = AppUser.findById(id);
@@ -289,21 +326,34 @@ public class UserUiResource {
             return Response.status(Response.Status.NOT_FOUND).entity("User " + id + " not found").build();
         }
         Set<String> newRoles = sanitizeRoles(roles);
+        Set<String> newScope = sanitizeStoreScope(storeScope);
+        Set<String> newTypes = sanitizeOfferTypes(allowedOfferTypes);
+        Set<String> newMenus = sanitizeHiddenMenus(hiddenMenus);
         boolean nowActive = active != null;
 
         String error = validateUpdate(user, newRoles, nowActive, password);
+        // §5: an administrator restricting their own account may narrow it, never widen it.
+        if (error == null && user.username != null
+                && user.username.equals(currentUsername(securityContext))) {
+            error = selfPerimeterError(user, newScope, newTypes, newMenus);
+        }
         if (error != null) {
-            return Response.ok(Templates.form(user, AppUser.ALL_ROLES, error)).build();
+            return Response.ok(Templates.form(user, AppUser.ALL_ROLES, storeCandidates(),
+                    typeCandidates(), AppUser.MENU_KEYS, error)).build();
         }
         user.displayName = displayName;
         user.active = nowActive;
+        user.locale = (locale == null || locale.isBlank()) ? null : locale.trim();
         user.setRoleSet(newRoles);
+        user.setStoreScopeSet(newScope);
+        user.setAllowedOfferTypeSet(newTypes);
+        user.setHiddenMenuSet(newMenus);
         if (password != null && !password.isBlank()) {
             user.setPassword(password);
             user.mustChangePassword = true;
         }
         LOGGER.debug("Exiting method update");
-        return redirectWithNotice("Account '" + user.username + "' updated.", true);
+        return redirectWithNotice(messages.format("users.notice.updated", user.username), true);
     }
 
     /**
@@ -321,18 +371,18 @@ public class UserUiResource {
         LOGGER.debug("Entering method delete for id: " + id);
         AppUser user = AppUser.findById(id);
         if (user == null) {
-            return redirectWithNotice("Account not found.", false);
+            return redirectWithNotice(messages.get("users.notice.notFound"), false);
         }
         if (user.username.equals(currentUsername(securityContext))) {
-            return redirectWithNotice("You cannot delete your own account.", false);
+            return redirectWithNotice(messages.get("users.error.cannotDeleteSelf"), false);
         }
         if (isLastActiveAdmin(user)) {
-            return redirectWithNotice("The last administrator cannot be deleted.", false);
+            return redirectWithNotice(messages.get("users.error.lastAdminDelete"), false);
         }
         String name = user.username;
         user.delete();
         LOGGER.debug("Exiting method delete");
-        return redirectWithNotice("Account '" + name + "' deleted.", true);
+        return redirectWithNotice(messages.format("users.notice.deleted", name), true);
     }
 
     // --------------------------------------------------
@@ -348,17 +398,17 @@ public class UserUiResource {
      */
     private String validateNew(AppUser user, String password) {
         if (user.username == null || user.username.isBlank()) {
-            return "The username is mandatory.";
+            return messages.get("users.error.usernameMandatory");
         }
         if (AppUser.count("username", user.username) > 0) {
-            return "An account named '" + user.username + "' already exists.";
+            return messages.format("users.error.alreadyExists", user.username);
         }
         String policyError = AppUser.validatePassword(password);
         if (policyError != null) {
             return policyError;
         }
         if (user.getRoleSet().isEmpty()) {
-            return "At least one role must be granted.";
+            return messages.get("users.error.roleMandatory");
         }
         return null;
     }
@@ -377,7 +427,7 @@ public class UserUiResource {
      */
     private String validateUpdate(AppUser user, Set<String> newRoles, boolean nowActive, String password) {
         if (newRoles.isEmpty()) {
-            return "At least one role must be granted.";
+            return messages.get("users.error.roleMandatory");
         }
         if (password != null && !password.isBlank()) {
             String policyError = AppUser.validatePassword(password);
@@ -388,7 +438,7 @@ public class UserUiResource {
         boolean losesAdmin = user.hasRole(AppUser.ROLE_ADMIN) && !newRoles.contains(AppUser.ROLE_ADMIN);
         boolean losesAccess = user.active && !nowActive;
         if ((losesAdmin || losesAccess) && isLastActiveAdmin(user)) {
-            return "This is the last administrator: keep the role and the account enabled.";
+            return messages.get("users.error.lastAdminKeep");
         }
         return null;
     }
@@ -423,6 +473,130 @@ public class UserUiResource {
             }
         }
         return sanitized;
+    }
+
+    /**
+     * Sanitizes submitted store/group codes: trimmed and de-duplicated. No allow-list is applied —
+     * an unrecognised code can only ever NARROW the perimeter (it matches no real store), never grant
+     * access, so validating it against the catalog is unnecessary and would couple this to the DB.
+     *
+     * @param submitted the submitted codes, may be null.
+     * @return the store and store-group codes, never null.
+     */
+    private Set<String> sanitizeStoreScope(List<String> submitted) {
+        return trimmed(submitted);
+    }
+
+    /**
+     * Sanitizes submitted offer types: trimmed and de-duplicated (an unknown type only restricts).
+     *
+     * @param submitted the submitted types, may be null.
+     * @return the offer types, never null.
+     */
+    private Set<String> sanitizeOfferTypes(List<String> submitted) {
+        return trimmed(submitted);
+    }
+
+    /**
+     * Keeps only the submitted values that are known menu keys — an unknown key would hide no real
+     * screen, but the small closed set is worth pinning.
+     *
+     * @param submitted the submitted keys, may be null.
+     * @return the recognised menu keys, never null.
+     */
+    private Set<String> sanitizeHiddenMenus(List<String> submitted) {
+        Set<String> sanitized = new HashSet<>();
+        if (submitted == null) {
+            return sanitized;
+        }
+        for (String value : submitted) {
+            if (value != null && AppUser.MENU_KEYS.contains(value.trim())) {
+                sanitized.add(value.trim());
+            }
+        }
+        return sanitized;
+    }
+
+    /**
+     * Trims and de-duplicates submitted values, dropping blanks.
+     *
+     * @param submitted the submitted values, may be null.
+     * @return the trimmed values, never null.
+     */
+    private Set<String> trimmed(List<String> submitted) {
+        Set<String> sanitized = new java.util.LinkedHashSet<>();
+        if (submitted == null) {
+            return sanitized;
+        }
+        for (String value : submitted) {
+            if (value != null && !value.trim().isEmpty()) {
+                sanitized.add(value.trim());
+            }
+        }
+        return sanitized;
+    }
+
+    /**
+     * Returns every store and store-group code, the candidates for the store-scope checkboxes.
+     * <p>
+     * Yields an empty list when no persistence context is available (a plain-unit invocation with no
+     * enhanced Panache): the form then offers no checkbox, which is only ever the case off the real
+     * server, where a request-scoped session is always present.
+     *
+     * @return the store then store-group codes, alphabetically.
+     */
+    private List<String> storeCandidates() {
+        Set<String> codes = new java.util.TreeSet<>();
+        try {
+            for (Store store : Store.<Store>listAll()) {
+                codes.add(store.code);
+            }
+            for (StoreGroup group : StoreGroup.<StoreGroup>listAll()) {
+                codes.add(group.code);
+            }
+        } catch (RuntimeException e) {
+            LOGGER.debug("No catalog available to list store-scope candidates: " + e.getMessage());
+        }
+        return new ArrayList<>(codes);
+    }
+
+    /**
+     * Returns every configurable offer type, the candidates for the allowed-offer-types checkboxes.
+     *
+     * @return the offer types, alphabetically; empty when the registry is unavailable.
+     */
+    private List<String> typeCandidates() {
+        if (schemaRegistry == null) {
+            return new ArrayList<>();
+        }
+        return new ArrayList<>(new java.util.TreeSet<>(schemaRegistry.getKnownTypes()));
+    }
+
+    /**
+     * Detects a self-widening of the perimeter (spec §5): an administrator editing their own account
+     * may narrow it but never loosen it — the store scope and allowed types may only shrink (once
+     * set), and a menu hidden from oneself may not be revealed.
+     *
+     * @param existing the account as currently stored (the editor's own).
+     * @param newScope the submitted store scope.
+     * @param newTypes the submitted allowed offer types.
+     * @param newMenus the submitted hidden menus.
+     * @return an error message when the change widens the perimeter, {@code null} otherwise.
+     */
+    private String selfPerimeterError(AppUser existing, Set<String> newScope,
+                                      Set<String> newTypes, Set<String> newMenus) {
+        Set<String> oldScope = existing.getStoreScopeSet();
+        if (!oldScope.isEmpty() && (newScope.isEmpty() || !oldScope.containsAll(newScope))) {
+            return messages.get("users.error.widenStore");
+        }
+        Set<String> oldTypes = existing.getAllowedOfferTypeSet();
+        if (!oldTypes.isEmpty() && (newTypes.isEmpty() || !oldTypes.containsAll(newTypes))) {
+            return messages.get("users.error.widenTypes");
+        }
+        if (!newMenus.containsAll(existing.getHiddenMenuSet())) {
+            return messages.get("users.error.revealMenu");
+        }
+        return null;
     }
 
     // --------------------------------------------------

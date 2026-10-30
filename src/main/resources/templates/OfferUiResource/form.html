@@ -1,14 +1,14 @@
 {#include ui/layout}
 
-{#title}{#if offer.id}Edit offer {offer.code}{#else}New offer{/if}{/title}
+{#title}{#if offer.id}{inject:i18n.format('offers.form.titleEdit', offer.code)}{#else}{inject:i18n.get('offers.form.titleNew')}{/if}{/title}
 
 {#body}
 <div class="page-head">
     <div>
-        <h1>{#if offer.id}Edit offer{#else}New offer{/if}</h1>
-        <p class="page-sub">{#if offer.id}{offer.code}{#else}The form adapts to the selected offer type{/if}</p>
+        <h1>{#if offer.id}{inject:i18n.get('offers.form.headingEdit')}{#else}{inject:i18n.get('offers.form.headingNew')}{/if}</h1>
+        <p class="page-sub">{#if offer.id}{offer.code}{#else}{inject:i18n.get('offers.form.subNew')}{/if}</p>
     </div>
-    <a class="btn btn-ghost" href="/ui/offers">Back to list</a>
+    <a class="btn btn-ghost" href="/ui/offers">{inject:i18n.get('offers.form.back')}</a>
 </div>
 
 {#if error}
@@ -17,80 +17,98 @@
 
 <form id="offer-form" class="stacked-form" method="post"
       action="{#if offer.id}/ui/offers/{offer.id}{#else}/ui/offers/new{/if}">
+    {#csrf /}
 
     <section class="card">
-        <h2 class="card-title">Identity</h2>
+        <h2 class="card-title">{inject:i18n.get('offers.form.section.identity')}</h2>
         <div class="field-grid">
             <label class="field">
-                <span class="field-label">Code <em>*</em></span>
+                <span class="field-label">{inject:i18n.get('offers.form.code')} <em>*</em></span>
                 {#if offer.id}
                 <input type="text" value="{offer.code}" disabled>
                 {#else}
                 <input type="text" name="code" value="{offer.code ?: ''}" required
                        maxlength="50" placeholder="PROMO_SUMMER_2026">
                 {/if}
-                <span class="field-hint">Unique business key, cannot be changed afterwards.</span>
+                <span class="field-hint">{inject:i18n.get('offers.form.codeHint')}</span>
             </label>
 
             <label class="field">
-                <span class="field-label">Type <em>*</em></span>
+                <span class="field-label">{inject:i18n.get('offers.form.type')} <em>*</em></span>
                 <select id="offer-type" name="type" required>
-                    <option value="">&mdash; select a type &mdash;</option>
+                    <option value="">{inject:i18n.get('offers.form.selectType')}</option>
                     {#for type in types}
                     <option value="{type}" {#if type == offer.type}selected{/if}>{type}</option>
                     {/for}
                     {#if offer.type && !types.contains(offer.type)}
-                    <option value="{offer.type}" selected>{offer.type} (no schema)</option>
+                    <option value="{offer.type}" selected>{inject:i18n.format('offers.form.typeNoSchema', offer.type)}</option>
                     {/if}
                 </select>
-                <span class="field-hint">Drives the specification form below.</span>
+                <span class="field-hint">{inject:i18n.get('offers.form.typeHint')}</span>
             </label>
         </div>
     </section>
 
     <section class="card">
-        <h2 class="card-title">Targets</h2>
-        <p class="card-sub">At least one store or one store group is required.</p>
+        <h2 class="card-title">{inject:i18n.get('offers.form.section.targets')}</h2>
+        <p class="card-sub">{inject:i18n.get('offers.form.targetsSub')}</p>
         <div class="field-grid">
             <div class="field">
-                <span class="field-label">Stores</span>
+                <span class="field-label">{inject:i18n.get('offers.form.stores')}</span>
                 <div data-widget="store-code" data-name="storeCodes" data-value="{storeCodes}"></div>
             </div>
             <div class="field">
-                <span class="field-label">Store groups</span>
+                <span class="field-label">{inject:i18n.get('offers.form.storeGroups')}</span>
                 <div data-widget="store-group-code" data-name="storeGroupCodes" data-value="{storeGroupCodes}"></div>
             </div>
         </div>
     </section>
 
     <section class="card">
-        <h2 class="card-title">Activation</h2>
-        <p class="card-sub">The engine only evaluates active offers inside their validity window; blank bounds leave the window open.</p>
+        <h2 class="card-title">{inject:i18n.get('offers.form.section.activation')}</h2>
+        <p class="card-sub">{inject:i18n.get('offers.form.activationSub')}</p>
         <div class="field-grid">
             <label class="field field-checkbox">
                 <input type="checkbox" name="active" value="true" {#if offer.active}checked{/if}>
-                <span class="field-label">Active</span>
-                <span class="field-hint">An inactive offer is kept but never applied.</span>
+                <span class="field-label">{inject:i18n.get('offers.form.active')}</span>
+                <span class="field-hint">{inject:i18n.get('offers.form.activeHint')}</span>
             </label>
             <label class="field">
-                <span class="field-label">Valid from</span>
+                <span class="field-label">{inject:i18n.get('offers.form.validFrom')}</span>
                 <input type="datetime-local" name="validFrom" value="{offer.validFrom ?: ''}">
-                <span class="field-hint">Inclusive; blank means no start bound.</span>
+                <span class="field-hint">{inject:i18n.get('offers.form.validFromHint')}</span>
             </label>
             <label class="field">
-                <span class="field-label">Valid to</span>
+                <span class="field-label">{inject:i18n.get('offers.form.validTo')}</span>
                 <input type="datetime-local" name="validTo" value="{offer.validTo ?: ''}">
-                <span class="field-hint">Exclusive; blank means no end bound.</span>
+                <span class="field-hint">{inject:i18n.get('offers.form.validToHint')}</span>
             </label>
         </div>
     </section>
 
+    {#if aiAvailable}
+    <section class="card offer-ai">
+        <div class="card-title-row">
+            <h2 class="card-title">{inject:i18n.get('offers.ai.title')}</h2>
+        </div>
+        <p class="card-sub">{inject:i18n.get('offers.ai.sub')}</p>
+        <textarea id="ai-prompt" rows="3" maxlength="2000"
+                  placeholder="{inject:i18n.get('offers.ai.placeholder')}"></textarea>
+        <div class="form-actions">
+            <button type="button" class="btn" id="ai-generate">{inject:i18n.get('offers.ai.action')}</button>
+            <button type="button" class="btn" id="ai-voice">{inject:i18n.get('offers.ai.voice')}</button>
+        </div>
+        <p class="field-hint">{inject:i18n.get('offers.ai.hint')}</p>
+        <div id="ai-result" class="is-hidden" aria-live="polite"></div>
+    </section>
+    {/if}
+
     <section class="card">
         <div class="card-title-row">
-            <h2 class="card-title">Specification</h2>
+            <h2 class="card-title">{inject:i18n.get('offers.form.section.specification')}</h2>
             <div class="mode-switch">
-                <button type="button" class="btn btn-small is-active" data-mode="form">Form</button>
-                <button type="button" class="btn btn-small" data-mode="json">JSON</button>
+                <button type="button" class="btn btn-small is-active" data-mode="form">{inject:i18n.get('offers.form.modeForm')}</button>
+                <button type="button" class="btn btn-small" data-mode="json">{inject:i18n.get('offers.form.modeJson')}</button>
             </div>
         </div>
 
@@ -98,7 +116,7 @@
 
         <div id="json-editor" class="json-editor is-hidden">
             <textarea id="specification-raw" spellcheck="false" rows="16"></textarea>
-            <p class="field-hint">Edits are synchronised with the form when switching back.</p>
+            <p class="field-hint">{inject:i18n.get('offers.form.jsonHint')}</p>
         </div>
 
         <div id="spec-errors" class="spec-errors is-hidden"></div>
@@ -107,12 +125,13 @@
     </section>
 
     <div class="form-actions">
-        <button class="btn btn-primary" type="submit">{#if offer.id}Save changes{#else}Create offer{/if}</button>
-        <a class="btn btn-ghost" href="/ui/offers">Cancel</a>
+        <button class="btn btn-primary" type="submit">{#if offer.id}{inject:i18n.get('offers.form.saveChanges')}{#else}{inject:i18n.get('offers.form.create')}{/if}</button>
+        <a class="btn btn-ghost" href="/ui/offers">{inject:i18n.get('offers.form.cancel')}</a>
     </div>
 </form>
 
 <script id="offer-schemas" type="application/json">{schemasJson.raw}</script>
 <script id="offer-specification" type="application/json">{specificationJson.raw}</script>
 <script src="/ui/schema-form.js"></script>
+<script src="/ui/offer-ai.js"></script>
 {/body}

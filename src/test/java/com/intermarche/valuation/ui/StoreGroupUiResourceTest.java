@@ -77,6 +77,19 @@ import static org.mockito.Mockito.when;
 class StoreGroupUiResourceTest {
 
     /**
+     * Builds a resource with the i18n bean wired, since a directly-constructed resource has no CDI
+     * injection and the French default bundle resolves without a container.
+     *
+     * @return a ready-to-use resource.
+     */
+    private StoreGroupUiResource newResource() {
+        StoreGroupUiResource resource = new StoreGroupUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
+        return resource;
+    }
+
+
+    /**
      * Builds a store group carrying the given code and a default name, with empty relation sets.
      *
      * @param code The group code.
@@ -165,7 +178,7 @@ class StoreGroupUiResourceTest {
         StoreGroup g2 = group("G2");
         SecurityContext context = mock(SecurityContext.class);
         when(context.isUserInRole(AppUser.ROLE_ADMIN)).thenReturn(true);
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             panache.when(() -> PanacheEntityBase.list("order by code"))
                     .thenReturn(List.of(g1, g2), List.of(storeWithCity("ST1", "Lyon"), store("ST2")));
@@ -181,7 +194,7 @@ class StoreGroupUiResourceTest {
     void workbenchAsNonAdminReachesTemplate() {
         SecurityContext context = mock(SecurityContext.class);
         when(context.isUserInRole(AppUser.ROLE_ADMIN)).thenReturn(false);
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             assertThrows(UnsatisfiedLinkError.class, () -> resource.workbench(context));
         }
@@ -193,7 +206,7 @@ class StoreGroupUiResourceTest {
      */
     @Test
     void workbenchWithNullContextReachesTemplate() {
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         try (MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             assertThrows(UnsatisfiedLinkError.class, () -> resource.workbench(null));
         }
@@ -209,9 +222,9 @@ class StoreGroupUiResourceTest {
      */
     @Test
     void saveWithNullPayloadReturnsBadRequest() {
-        Response response = new StoreGroupUiResource().save(null);
+        Response response = newResource().save(null);
         assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), response.getStatus());
-        assertEquals(Map.of("error", "Nothing to save."), response.getEntity());
+        assertEquals(Map.of("error", "Rien à enregistrer."), response.getEntity());
     }
 
     /**
@@ -221,9 +234,9 @@ class StoreGroupUiResourceTest {
     @Test
     void saveWithNullGroupsReturnsBadRequest() {
         StoreGroupUiResource.HierarchyPayload payload = new StoreGroupUiResource.HierarchyPayload();
-        Response response = new StoreGroupUiResource().save(payload);
+        Response response = newResource().save(payload);
         assertEquals(Response.Status.BAD_REQUEST.getStatusCode(), response.getStatus());
-        assertEquals(Map.of("error", "Nothing to save."), response.getEntity());
+        assertEquals(Map.of("error", "Rien à enregistrer."), response.getEntity());
     }
 
     /**
@@ -231,11 +244,11 @@ class StoreGroupUiResourceTest {
      */
     @Test
     void saveWithNullCodeIsRejected() {
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         StoreGroupUiResource.HierarchyPayload payload = hierarchy(payload(null, "N", null, null));
         StoreGroupUiResource.RejectedHierarchyException error = assertThrows(
                 StoreGroupUiResource.RejectedHierarchyException.class, () -> resource.save(payload));
-        assertEquals("A group is missing its code.", error.getMessage());
+        assertEquals("Un groupe n'a pas de code.", error.getMessage());
     }
 
     /**
@@ -244,11 +257,11 @@ class StoreGroupUiResourceTest {
      */
     @Test
     void saveWithBlankCodeIsRejected() {
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         StoreGroupUiResource.HierarchyPayload payload = hierarchy(payload("   ", "N", null, null));
         StoreGroupUiResource.RejectedHierarchyException error = assertThrows(
                 StoreGroupUiResource.RejectedHierarchyException.class, () -> resource.save(payload));
-        assertEquals("A group is missing its code.", error.getMessage());
+        assertEquals("Un groupe n'a pas de code.", error.getMessage());
     }
 
     // --------------------------------------------------
@@ -267,7 +280,7 @@ class StoreGroupUiResourceTest {
         StoreGroup existingB = group("B");
         StoreGroup existingC = group("C");
         Store s1 = store("S1");
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         StoreGroupUiResource.HierarchyPayload payload = hierarchy(
                 payload("A", null, List.of("S1"), List.of("B")),
                 payload(" B ", "  ", null, null),
@@ -316,7 +329,7 @@ class StoreGroupUiResourceTest {
         stray2.storeGroups = new HashSet<>();
         StoreGroup parent = mock(StoreGroup.class);
         parent.storeGroups = new HashSet<>(Set.of(stray1));
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         StoreGroupUiResource.HierarchyPayload payload = hierarchy(payload("A", "A", null, null));
         try (MockedStatic<StoreGroup> groups = mockStatic(StoreGroup.class);
              MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
@@ -343,7 +356,7 @@ class StoreGroupUiResourceTest {
     @Test
     void saveWithUnknownStoreIsRejected() {
         StoreGroup existingA = group("A");
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         StoreGroupUiResource.HierarchyPayload payload = hierarchy(payload("A", "A", List.of("SX"), null));
         try (MockedStatic<StoreGroup> groups = mockStatic(StoreGroup.class);
              MockedStatic<Store> stores = mockStatic(Store.class);
@@ -352,7 +365,7 @@ class StoreGroupUiResourceTest {
             stores.when(() -> Store.findByCode("SX")).thenReturn(null);
             StoreGroupUiResource.RejectedHierarchyException error = assertThrows(
                     StoreGroupUiResource.RejectedHierarchyException.class, () -> resource.save(payload));
-            assertEquals("Unknown store code: SX", error.getMessage());
+            assertEquals("Code magasin inconnu : SX", error.getMessage());
         }
     }
 
@@ -363,14 +376,14 @@ class StoreGroupUiResourceTest {
     @Test
     void saveWithUnknownChildIsRejected() {
         StoreGroup existingA = group("A");
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         StoreGroupUiResource.HierarchyPayload payload = hierarchy(payload("A", "A", null, List.of("ZZ")));
         try (MockedStatic<StoreGroup> groups = mockStatic(StoreGroup.class);
              MockedStatic<PanacheEntityBase> panache = mockStatic(PanacheEntityBase.class)) {
             groups.when(() -> StoreGroup.findByCode("A")).thenReturn(existingA);
             StoreGroupUiResource.RejectedHierarchyException error = assertThrows(
                     StoreGroupUiResource.RejectedHierarchyException.class, () -> resource.save(payload));
-            assertEquals("Unknown group code: ZZ", error.getMessage());
+            assertEquals("Code groupe inconnu : ZZ", error.getMessage());
         }
     }
 
@@ -383,7 +396,7 @@ class StoreGroupUiResourceTest {
     void saveWithCycleIsRejected() {
         StoreGroup existingA = group("A");
         StoreGroup existingB = group("B");
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         StoreGroupUiResource.HierarchyPayload payload = hierarchy(
                 payload("A", "A", null, List.of("B")),
                 payload("B", "B", null, List.of("A")));
@@ -393,7 +406,7 @@ class StoreGroupUiResourceTest {
             groups.when(() -> StoreGroup.findByCode("B")).thenReturn(existingB);
             StoreGroupUiResource.RejectedHierarchyException error = assertThrows(
                     StoreGroupUiResource.RejectedHierarchyException.class, () -> resource.save(payload));
-            assertEquals("Group 'A' ends up containing itself.", error.getMessage());
+            assertEquals("Le groupe « A » finit par se contenir lui-même.", error.getMessage());
         }
     }
 
@@ -408,7 +421,7 @@ class StoreGroupUiResourceTest {
         StoreGroup existingB = group("B");
         StoreGroup existingC = group("C");
         StoreGroup existingD = group("D");
-        StoreGroupUiResource resource = new StoreGroupUiResource();
+        StoreGroupUiResource resource = newResource();
         StoreGroupUiResource.HierarchyPayload payload = hierarchy(
                 payload("A", "A", null, List.of("B", "C")),
                 payload("B", "B", null, List.of("D")),

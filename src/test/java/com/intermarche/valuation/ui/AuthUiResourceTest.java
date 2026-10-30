@@ -104,6 +104,7 @@ public class AuthUiResourceTest {
     @Test
     void testLoginWithoutErrorTakesNullMessageArm() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         assertThrows(UnsatisfiedLinkError.class, () -> resource.login(null, "Signed out."));
     }
 
@@ -114,6 +115,7 @@ public class AuthUiResourceTest {
     @Test
     void testLoginWithErrorTakesInvalidCredentialsArm() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         assertThrows(UnsatisfiedLinkError.class, () -> resource.login("true", null));
     }
 
@@ -124,11 +126,11 @@ public class AuthUiResourceTest {
      */
     @Test
     void testLoginErrorMessageOnlyForExactTrue() {
-        assertEquals("Invalid username or password.", AuthUiResource.loginErrorMessage("true"));
-        assertNull(AuthUiResource.loginErrorMessage(null));
-        assertNull(AuthUiResource.loginErrorMessage(""));
-        assertNull(AuthUiResource.loginErrorMessage("false"));
-        assertNull(AuthUiResource.loginErrorMessage("TRUE"));
+        assertEquals("auth.error.invalidCredentials", AuthUiResource.loginErrorMessageKey("true"));
+        assertNull(AuthUiResource.loginErrorMessageKey(null));
+        assertNull(AuthUiResource.loginErrorMessageKey(""));
+        assertNull(AuthUiResource.loginErrorMessageKey("false"));
+        assertNull(AuthUiResource.loginErrorMessageKey("TRUE"));
     }
 
     // --------------------------------------------------
@@ -142,6 +144,7 @@ public class AuthUiResourceTest {
     @Test
     void testLogoutClearsCookieAndRedirects() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = authenticatedIdentity("alice");
         Response response = resource.logout();
         assertEquals(Response.Status.SEE_OTHER.getStatusCode(), response.getStatus());
@@ -164,6 +167,7 @@ public class AuthUiResourceTest {
     @Test
     void testPasswordFormRedirectsWhenIdentityNull() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = null;
         Response response = resource.passwordForm();
         assertEquals(Response.Status.SEE_OTHER.getStatusCode(), response.getStatus());
@@ -177,6 +181,7 @@ public class AuthUiResourceTest {
     @Test
     void testPasswordFormRedirectsWhenAnonymous() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = anonymousIdentity();
         Response response = resource.passwordForm();
         assertEquals(Response.Status.SEE_OTHER.getStatusCode(), response.getStatus());
@@ -190,6 +195,7 @@ public class AuthUiResourceTest {
     @Test
     void testPasswordFormRedirectsWhenUserNotFound() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = authenticatedIdentity("ghost");
         try (MockedStatic<AppUser> users = mockStatic(AppUser.class)) {
             users.when(() -> AppUser.findByUsername("ghost")).thenReturn(null);
@@ -206,6 +212,7 @@ public class AuthUiResourceTest {
     @Test
     void testPasswordFormRendersForSignedInUser() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = authenticatedIdentity("alice");
         AppUser user = account("alice", true);
         try (MockedStatic<AppUser> users = mockStatic(AppUser.class)) {
@@ -225,6 +232,7 @@ public class AuthUiResourceTest {
     @Test
     void testChangePasswordRedirectsWhenPrincipalNull() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = nullPrincipalIdentity();
         Response response = resource.changePassword("cur", "newpass123", "newpass123");
         assertEquals(Response.Status.SEE_OTHER.getStatusCode(), response.getStatus());
@@ -238,6 +246,7 @@ public class AuthUiResourceTest {
     @Test
     void testChangePasswordRejectsWrongCurrentPassword() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = authenticatedIdentity("alice");
         AppUser user = account("alice", false);
         when(user.matchesPassword("wrongpass")).thenReturn(false);
@@ -255,6 +264,7 @@ public class AuthUiResourceTest {
     @Test
     void testChangePasswordRejectsPolicyViolation() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = authenticatedIdentity("alice");
         AppUser user = account("alice", false);
         when(user.matchesPassword("oldpass123")).thenReturn(true);
@@ -273,6 +283,7 @@ public class AuthUiResourceTest {
     @Test
     void testChangePasswordRejectsConfirmationMismatch() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = authenticatedIdentity("alice");
         AppUser user = account("alice", false);
         when(user.matchesPassword("oldpass123")).thenReturn(true);
@@ -291,6 +302,7 @@ public class AuthUiResourceTest {
     @Test
     void testChangePasswordRejectsUnchangedPassword() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = authenticatedIdentity("alice");
         AppUser user = account("alice", false);
         when(user.matchesPassword("oldpass123")).thenReturn(true);
@@ -311,6 +323,7 @@ public class AuthUiResourceTest {
     @Test
     void testChangePasswordForcedSucceeds() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = authenticatedIdentity("alice");
         AppUser user = account("alice", true);
         when(user.matchesPassword("brandnew123")).thenReturn(false);
@@ -333,6 +346,7 @@ public class AuthUiResourceTest {
     @Test
     void testChangePasswordVoluntarySucceeds() {
         AuthUiResource resource = new AuthUiResource();
+        resource.messages = new com.intermarche.valuation.i18n.Messages();
         resource.identity = authenticatedIdentity("alice");
         AppUser user = account("alice", false);
         when(user.matchesPassword("oldpass123")).thenReturn(true);
