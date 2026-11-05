@@ -1,0 +1,58 @@
+[
+  {
+    "customerCode": "CUST-0001",
+    "storeCode": "0101",
+    "createdAt": "2026-10-14T09:12:00",
+    "deliveryMode": "IN_STORE",
+    "closed": true,
+    "items": [
+      { "lineId": "001", "produceEan": "3300000000001", "quantity": 2.0 },
+      { "lineId": "002", "produceEan": "3300000000002", "quantity": 2.0 },
+      { "lineId": "003", "produceEan": "3300000000004", "quantity": 1.0 },
+      { "lineId": "004", "produceEan": "3300000000022", "quantity": 4.0 }
+    ]
+  },
+  {
+    "customerCode": "CUST-0002",
+    "storeCode": "0101",
+    "createdAt": "2026-10-14T17:45:00",
+    "deliveryMode": "HOME_DELIVERY",
+    "deliveryAddress": {
+      "streetLine1": "3 Rue de la Gare",
+      "postalCode": "59000",
+      "city": "Lille",
+      "country": "France",
+      "latitude": 50.64,
+      "longitude": 3.05
+    },
+    "closed": true,
+    "items": [
+      { "lineId": "001", "produceEan": "3300000000006", "quantity": 2.0 },
+      { "lineId": "002", "produceEan": "3300000000007", "quantity": 6.0 },
+      { "lineId": "003", "produceEan": "3300000000031", "quantity": 1.0 }
+    ]
+  },
+  {
+    "customerCode": "CUST-0003",
+    "storeCode": "0102",
+    "createdAt": "2026-10-15T11:20:00",
+    "deliveryMode": "PICKUP",
+    "closed": true,
+    "items": [
+      { "lineId": "001", "produceEan": "3300000000006", "quantity": 1.0 },
+      { "lineId": "002", "produceEan": "3300000000009", "quantity": 2.0 }
+    ]
+  },
+  {
+    "customerCode": "CUST-0004",
+    "storeCode": "0101",
+    "createdAt": "2026-10-15T12:30:00",
+    "deliveryMode": "IN_STORE",
+    "closed": true,
+    "vignettes": { "3300000000031": 5 },
+    "items": [
+      { "lineId": "001", "produceEan": "3300000000031", "quantity": 1.0 },
+      { "lineId": "002", "produceEan": "3300000000032", "quantity": 1.0 }
+    ]
+  }
+]

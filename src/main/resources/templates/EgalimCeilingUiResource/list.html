@@ -1,0 +1,43 @@
+{#include ui/layout}
+
+{#title}{inject:i18n.get('egalim.title')}{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>{inject:i18n.get('egalim.title')}</h1>
+        <p class="page-sub">{view.summary}</p>
+    </div>
+</div>
+
+<p class="card-sub">{inject:i18n.get('egalim.intro')}</p>
+
+{#if view.rows.isEmpty()}
+<div class="empty-state">
+    <p>{inject:i18n.get('egalim.empty')}</p>
+    <p class="empty-hint">{inject:i18n.get('egalim.emptyHint')}</p>
+</div>
+{#else}
+<table class="data-table">
+    <thead>
+    <tr>
+        <th>{inject:i18n.get('egalim.col.code')}</th>
+        <th>{inject:i18n.get('egalim.col.label')}</th>
+        <th>{inject:i18n.get('egalim.col.ceiling')}</th>
+        <th>{inject:i18n.get('egalim.col.updated')}</th>
+    </tr>
+    </thead>
+    <tbody>
+    {#for ceiling in view.rows}
+    <tr>
+        <td class="link-strong">{ceiling.regimeCode}</td>
+        <td>{ceiling.label}</td>
+        <td class="col-muted">{#if ceiling.capped}{ceiling.capFormatted} %{#else}&mdash;{/if}</td>
+        <td class="col-muted">{ceiling.updatedAt ?: '—'}</td>
+    </tr>
+    {/for}
+    </tbody>
+</table>
+{/if}
+{/body}
+{/include}

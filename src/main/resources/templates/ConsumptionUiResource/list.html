@@ -1,0 +1,84 @@
+{#include ui/layout}
+
+{#title}{inject:i18n.get('consumptions.title')}{/title}
+
+{#body}
+<div class="page-head">
+    <div>
+        <h1>{inject:i18n.get('consumptions.title')}</h1>
+        <p class="page-sub">{inject:i18n.get('consumptions.subtitle')}</p>
+    </div>
+    <div class="page-actions">
+        {#if hasRange}
+        <a class="btn" href="{csvUrl}">{inject:i18n.get('consumptions.action.downloadCsv')}</a>
+        <a class="btn" href="{jsonUrl}">JSON</a>
+        {/if}
+    </div>
+</div>
+
+<form class="filter-bar" method="get" action="/ui/consumptions">
+    <label class="filter-field">
+        <span class="filter-label">{inject:i18n.get('consumptions.filter.from')}</span>
+        <input type="date" name="from" value="{view.filter('from')}" required>
+    </label>
+    <label class="filter-field">
+        <span class="filter-label">{inject:i18n.get('consumptions.filter.to')}</span>
+        <input type="date" name="to" value="{view.filter('to')}" required>
+    </label>
+    <label class="filter-field">
+        <span class="filter-label">{inject:i18n.get('consumptions.filter.store')}</span>
+        <input type="search" name="storeCode" placeholder="{inject:i18n.get('consumptions.filter.storePlaceholder')}" value="{view.filter('storeCode')}">
+    </label>
+    <label class="filter-field">
+        <span class="filter-label">{inject:i18n.get('consumptions.filter.offer')}</span>
+        <input type="search" name="offerCode" placeholder="{inject:i18n.get('consumptions.filter.offerPlaceholder')}" value="{view.filter('offerCode')}">
+    </label>
+    <label class="filter-field">
+        <span class="filter-label">{inject:i18n.get('consumptions.filter.budgetGroup')}</span>
+        <input type="search" name="budgetGroupCode" placeholder="{inject:i18n.get('consumptions.filter.groupPlaceholder')}" value="{view.filter('budgetGroupCode')}">
+    </label>
+    <div class="filter-actions">
+        <button class="btn btn-primary" type="submit">{inject:i18n.get('consumptions.action.filter')}</button>
+        {#if view.filtered}
+        <a class="btn btn-ghost" href="/ui/consumptions">{inject:i18n.get('consumptions.action.reset')}</a>
+        {/if}
+    </div>
+</form>
+
+{#if !hasRange}
+<div class="empty-state">
+    <p>{inject:i18n.get('consumptions.empty.selectPeriod')}</p>
+    <p class="empty-hint">{inject:i18n.get('consumptions.empty.boundsRequired')}</p>
+</div>
+{#else}
+{#if view.rows.isEmpty()}
+<div class="empty-state">
+    <p>{inject:i18n.get('consumptions.empty.noData')}</p>
+</div>
+{#else}
+<table class="data-table">
+    <thead>
+    <tr>
+        <th>{inject:i18n.get('consumptions.col.offer')}</th>
+        <th>{inject:i18n.get('consumptions.col.type')}</th>
+        <th>{inject:i18n.get('consumptions.col.budgetGroup')}</th>
+        <th>{inject:i18n.get('consumptions.col.amount')}</th>
+        <th>{inject:i18n.get('consumptions.col.tickets')}</th>
+    </tr>
+    </thead>
+    <tbody>
+    {#for row in view.rows}
+    <tr>
+        <td class="link-strong">{row.offerCode}</td>
+        <td>{row.offerType ?: '—'}</td>
+        <td class="col-muted">{row.budgetGroupCode ?: '—'}</td>
+        <td>{row.amount} &euro;</td>
+        <td class="col-muted">{row.ticketCount}</td>
+    </tr>
+    {/for}
+    </tbody>
+</table>
+{/if}
+{/if}
+{/body}
+{/include}
